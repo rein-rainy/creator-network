@@ -1,0 +1,1008 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creator Network</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600&display=swap');
+
+/* ── design tokens ── */
+:root {
+  --bg:        rgb(25,25,25);
+  --bg2:       rgb(38,38,38);
+  --bg3:       rgb(52,52,52);
+  --bg-glass:  rgba(25,25,25,0.90);
+  --border:    rgba(99,99,102,0.40);
+  --border-hi: rgba(142,142,147,0.50);
+  --text:      #f5f5f7;
+  --text-2:    rgb(142,142,147);
+  --text-dim:  rgb(99,99,102);
+  --text-dimmer: rgb(72,72,74);
+  --accent:    rgb(0,145,255);
+  --accent2:   rgb(255,159,10);
+  --accent-red: rgb(255,69,58);
+  --card-bg:   rgb(38,38,38);
+  --card-border: rgba(99,99,102,0.35);
+  --node-dir:  rgb(0,145,255);
+  --node-art:  rgb(100,210,255);
+  --link-dir:  rgb(0,145,255);
+  --link-art:  rgb(100,210,255);
+  --topbar-h:  52px;
+  --r-sm: 8px; --r: 12px; --r-lg: 16px; --r-xl: 20px;
+  --sans: 'Noto Sans JP', -apple-system, 'Helvetica Neue', sans-serif;
+}
+[data-theme="light"] {
+  --bg:        rgb(242,242,247);
+  --bg2:       #ffffff;
+  --bg3:       rgb(229,229,234);
+  --bg-glass:  rgba(242,242,247,0.92);
+  --border:    rgba(72,72,74,0.18);
+  --border-hi: rgba(72,72,74,0.28);
+  --text:      rgb(28,28,30);
+  --text-2:    rgb(72,72,74);
+  --text-dim:  rgb(99,99,102);
+  --text-dimmer: rgb(142,142,147);
+  --accent:    rgb(0,122,255);
+  --accent2:   rgb(255,149,0);
+  --accent-red: rgb(255,59,48);
+  --card-bg:   #ffffff;
+  --card-border: rgba(72,72,74,0.12);
+  --node-dir:  rgb(0,122,255);
+  --node-art:  rgb(0,190,255);
+  --link-dir:  rgb(0,122,255);
+  --link-art:  rgb(0,190,255);
+}
+
+/* ── reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--sans); overflow: hidden;
+  height: 100vh; width: 100vw;
+  -webkit-font-smoothing: antialiased;
+  transition: background .3s, color .3s;
+}
+
+#bg-grid {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: radial-gradient(circle, var(--border) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+/* ── topbar ── */
+#topbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--topbar-h); z-index: 300;
+  background: var(--bg-glass);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 16px; gap: 10px;
+}
+.logo { font-size: 15px; font-weight: 600; letter-spacing: -.3px; color: var(--text); white-space: nowrap; flex-shrink: 0; }
+.logo-dot { color: var(--accent); }
+.sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+
+#search-box {
+  width: 180px; flex-shrink: 0;
+  background: var(--bg3); border: 1.5px solid transparent;
+  color: var(--text); padding: 6px 12px 6px 32px;
+  font-family: var(--sans); font-size: 13px;
+  border-radius: var(--r-sm); outline: none;
+  transition: border-color .2s, background .2s;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' fill='none' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='8' stroke='%23636366' stroke-width='2'/%3E%3Cpath d='M21 21l-4.35-4.35' stroke='%23636366' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: 10px center;
+}
+#search-box:focus { border-color: var(--accent); background-color: var(--bg2); }
+#search-box::placeholder { color: var(--text-dim); }
+
+.filter-scroller { display: flex; gap: 5px; flex: 1; overflow-x: auto; min-width: 0; }
+.filter-scroller::-webkit-scrollbar { display: none; }
+
+.fbtn {
+  background: var(--bg3); border: none; color: var(--text-2); padding: 5px 12px;
+  font-family: var(--sans); font-size: 12px; font-weight: 500;
+  border-radius: 100px; cursor: pointer; white-space: nowrap;
+  transition: all .18s; letter-spacing: -.1px;
+}
+.fbtn:hover { background: var(--border-hi); color: var(--text); }
+.fbtn.active { background: var(--accent); color: rgb(28,28,30); font-weight: 600; }
+
+.topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; }
+
+.tog-wrap {
+  display: flex; align-items: center; gap: 7px;
+  font-family: var(--sans); font-size: 12px; font-weight: 500; color: var(--text-2);
+  cursor: pointer; user-select: none; white-space: nowrap;
+}
+.tog {
+  width: 34px; height: 20px; background: var(--bg3);
+  border-radius: 100px; position: relative; transition: background .2s; flex-shrink: 0;
+}
+.tog::after {
+  content: ''; position: absolute; left: 2px; top: 2px;
+  width: 16px; height: 16px; background: #fff; border-radius: 50%;
+  transition: transform .22s cubic-bezier(.4,0,.2,1); box-shadow: 0 1px 4px rgba(0,0,0,.3);
+}
+.tog-wrap.on .tog { background: var(--accent); }
+.tog-wrap.on .tog::after { transform: translateX(14px); }
+
+.icon-btn {
+  width: 32px; height: 32px; background: var(--bg3); border: none;
+  border-radius: var(--r-sm); color: var(--text-2); font-size: 15px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .18s;
+}
+.icon-btn:hover { background: var(--border-hi); color: var(--text); }
+.icon-btn:active { transform: scale(.94); }
+
+/* ── canvas ── */
+#canvas { position: fixed; top: var(--topbar-h); left: 0; width: 100vw; height: calc(100vh - var(--topbar-h)); display: block; }
+
+/* ── legend / stats ── */
+#legend {
+  position: fixed; bottom: 16px; left: 16px; z-index: 100;
+  background: var(--bg-glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border); border-radius: var(--r);
+  padding: 10px 14px; font-size: 11px; font-weight: 500; color: var(--text-2); line-height: 2;
+}
+.leg  { display: flex; align-items: center; gap: 8px; }
+.ldot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.lline { width: 18px; height: 2px; flex-shrink: 0; border-radius: 1px; }
+
+#stats {
+  position: fixed; bottom: 16px; right: 16px; z-index: 100;
+  font-size: 11px; font-weight: 500; color: var(--text-dim); text-align: right; line-height: 1.9;
+  background: var(--bg-glass); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border); border-radius: var(--r); padding: 8px 12px;
+}
+
+/* ── shared animation ── */
+@keyframes slideIn { from { opacity:0; transform:translateY(-8px) scale(.97); } to { opacity:1; transform:none; } }
+
+/* ── info panel ── */
+#info-panel {
+  position: fixed; top: calc(var(--topbar-h) + 12px); right: 14px; width: 300px; z-index: 200;
+  background: var(--bg-glass); backdrop-filter: saturate(180%) blur(24px); -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  display: none; max-height: calc(100vh - 90px); overflow-y: auto;
+  animation: slideIn .22s cubic-bezier(.4,0,.2,1);
+}
+#info-panel.visible { display: block; }
+#info-panel::-webkit-scrollbar { width: 4px; }
+#info-panel::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+.ph {
+  padding: 14px 14px 12px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 10px;
+}
+.ph-type { font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 3px; opacity: .7; }
+.ph-name { font-size: 14px; font-weight: 600; line-height: 1.35; }
+.ph-close {
+  background: var(--bg3); border: none; color: var(--text-dim);
+  cursor: pointer; width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: all .15s; padding: 0; font-size: 12px;
+}
+.ph-close:hover { background: var(--border-hi); color: var(--text); }
+.ps-title {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-dim); padding: 10px 14px 6px; border-bottom: 1px solid var(--border);
+}
+.pw-item {
+  display: flex; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border);
+  cursor: pointer; text-decoration: none; color: inherit; transition: background .15s;
+}
+.pw-item:hover { background: var(--bg3); }
+.pw-thumb { width: 72px; height: 44px; object-fit: cover; flex-shrink: 0; background: var(--bg3); border-radius: var(--r-sm); }
+.pw-ph    { width: 72px; height: 44px; flex-shrink: 0; background: var(--bg3); border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; font-size: 18px; color: var(--text-dim); }
+.pw-title { font-size: 12px; font-weight: 500; line-height: 1.35; color: var(--text); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-bottom: 3px; }
+.pw-cat   { font-size: 11px; color: var(--text-dim); }
+
+/* ── work cards ── */
+.wcard {
+  width: 100%; background: var(--card-bg); border: 1.5px solid var(--card-border);
+  display: flex; flex-direction: column; cursor: pointer; overflow: hidden;
+  transition: border-color .15s; font-family: var(--sans); border-radius: var(--r); box-sizing: border-box;
+}
+.wcard:hover   { border-color: var(--accent); }
+.wcard.hl-dir  { border: 2px solid var(--node-dir); }
+.wcard.hl-art  { border: 2px solid var(--node-art); }
+.wcard.hl-both { border: 2px solid var(--node-dir); }
+.wcard.dim     { opacity: .08; pointer-events: none; }
+.wc-img { width: 100%; height: 76px; object-fit: cover; flex-shrink: 0; display: block; }
+.wc-ph  { width: 100%; height: 76px; flex-shrink: 0; background: var(--bg3); display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--text-dimmer); }
+.wc-bd  { padding: 6px 8px 7px; display: flex; flex-direction: column; }
+.wc-tt  { font-size: 10px; font-weight: 500; line-height: 1.3; color: var(--text); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-bottom: 5px; flex-shrink: 0; }
+.wc-tags { display: flex; flex-wrap: wrap; gap: 3px; padding-bottom: 2px; }
+.wc-tag  { font-size: 9px; font-weight: 500; padding: 2px 6px; background: var(--bg3); border-radius: 100px; color: #fff; white-space: nowrap; flex-shrink: 0; }
+[data-theme="light"] .wc-tag { color: var(--text-dim); }
+
+/* ── person nodes ── */
+g.nd { transition: opacity .18s; }
+.pnode-label {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 600; text-align: center; word-break: break-all;
+  line-height: 1.2; padding: 6px; border-radius: 50%; pointer-events: none;
+}
+.pnode-label.dir { color: var(--node-dir); }
+.pnode-label.art { color: var(--node-art); }
+
+/* ── context menu ── */
+@keyframes ctxAppear { from { opacity:0; transform:scale(.95); } }
+#ctx-menu {
+  position: fixed; z-index: 9000;
+  background: var(--bg-glass); backdrop-filter: saturate(180%) blur(24px); -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--border); border-radius: var(--r);
+  min-width: 200px; display: none; overflow: hidden;
+  animation: ctxAppear .15s cubic-bezier(.4,0,.2,1);
+}
+.ctx-item {
+  padding: 10px 16px; font-size: 13px; font-weight: 500; color: var(--text);
+  cursor: pointer; border-bottom: 1px solid var(--border);
+  transition: background .1s; display: flex; align-items: center; gap: 10px;
+}
+.ctx-item:last-child { border-bottom: none; }
+.ctx-item:hover { background: var(--bg3); }
+.ctx-sep { height: 1px; background: var(--border); }
+
+/* ── hidden panel ── */
+#hidden-panel {
+  position: fixed; top: calc(var(--topbar-h) + 12px); left: 14px; width: 272px; z-index: 200;
+  background: var(--bg-glass); backdrop-filter: saturate(180%) blur(24px); -webkit-backdrop-filter: saturate(180%) blur(24px);
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  display: none; max-height: calc(100vh - 90px); overflow-y: auto;
+  animation: slideIn .22s cubic-bezier(.4,0,.2,1);
+}
+#hidden-panel.visible { display: block; }
+#hidden-panel::-webkit-scrollbar { width: 4px; }
+#hidden-panel::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+.hp-header { padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.hp-title  { font-size: 13px; font-weight: 600; color: var(--text); }
+.hp-btn    { font-size: 12px; font-weight: 500; padding: 4px 10px; border: none; background: var(--bg3); color: var(--text-2); cursor: pointer; transition: all .15s; border-radius: var(--r-sm); }
+.hp-btn:hover { background: var(--border-hi); color: var(--text); }
+.hp-item   { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--border); gap: 10px; }
+.hp-item-label { font-size: 12px; font-weight: 500; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hp-item-type  { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 100px; background: var(--bg3); color: var(--text-dim); flex-shrink: 0; }
+.hp-restore    { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 14px; padding: 0; flex-shrink: 0; transition: color .15s; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; border-radius: 50%; }
+.hp-restore:hover { color: var(--accent); background: var(--bg3); }
+
+/* ── filter modal ── */
+#filter-modal {
+  position: fixed; inset: 0; z-index: 7000;
+  background: rgba(0,0,0,.5); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center;
+}
+#filter-modal.visible { display: flex; }
+.fm-box {
+  background: var(--bg2); border: 1px solid var(--border);
+  padding: 24px 24px 20px; width: 520px; max-width: 92vw; max-height: 80vh;
+  position: relative; border-radius: var(--r-xl);
+  animation: slideIn .25s cubic-bezier(.4,0,.2,1);
+  display: flex; flex-direction: column;
+}
+.fm-title  { font-size: 17px; font-weight: 700; color: var(--text); margin-bottom: 16px; }
+.fm-tabs   { display: flex; gap: 6px; margin-bottom: 14px; }
+.fm-tab    { padding: 6px 14px; border: none; border-radius: 100px; font-size: 13px; font-weight: 500; cursor: pointer; background: var(--bg3); color: var(--text-2); transition: all .15s; }
+.fm-tab.active { background: var(--accent); color: #fff; }
+.fm-search { width: 100%; background: var(--bg3); border: 1.5px solid transparent; color: var(--text); padding: 8px 12px; font-size: 13px; border-radius: var(--r-sm); outline: none; transition: border-color .2s; margin-bottom: 10px; font-family: var(--sans); }
+.fm-search:focus { border-color: var(--accent); }
+.fm-list   { flex: 1; overflow-y: auto; min-height: 0; max-height: 340px; display: flex; flex-direction: column; gap: 2px; }
+.fm-list::-webkit-scrollbar { width: 4px; }
+.fm-list::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+.fm-item   { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-radius: var(--r-sm); cursor: pointer; transition: background .12s; gap: 10px; }
+.fm-item:hover { background: var(--bg3); }
+.fm-item-label { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fm-item-sub   { font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.fm-toggle { width: 38px; height: 22px; background: var(--bg3); border-radius: 100px; position: relative; transition: background .2s; flex-shrink: 0; cursor: pointer; border: none; outline: none; }
+.fm-toggle::after { content: ''; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: transform .22s cubic-bezier(.4,0,.2,1); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+.fm-toggle.on { background: var(--accent); }
+.fm-toggle.on::after { transform: translateX(16px); }
+.fm-footer { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid var(--border); margin-top: 10px; }
+.fm-count  { font-size: 12px; color: var(--text-dim); }
+.fm-close-btn { padding: 8px 20px; background: var(--accent); color: #fff; border: none; border-radius: var(--r-sm); font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .15s; }
+.fm-close-btn:hover { opacity: .85; }
+.fm-close  { position: absolute; top: 14px; right: 14px; background: var(--bg3); border: none; color: var(--text-dim); cursor: pointer; width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; transition: all .15s; }
+.fm-close:hover { background: var(--border-hi); color: var(--text); }
+
+/* ── Notion sync button ── */
+#notion-sync-btn {
+  display: flex; align-items: center; gap: 6px; padding: 5px 13px;
+  background: rgba(0,145,255,0.15); border: 1.5px solid var(--accent);
+  color: var(--accent); font-family: var(--sans); font-size: 12px; font-weight: 600;
+  border-radius: 100px; cursor: pointer; transition: all .18s; white-space: nowrap;
+}
+#notion-sync-btn:hover  { background: var(--accent); color: #fff; }
+#notion-sync-btn:active { transform: scale(.95); }
+#notion-sync-btn.loading { opacity: .6; pointer-events: none; }
+#notion-sync-btn .nsb-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+#notion-sync-btn.loading .nsb-dot { animation: nsbPulse .9s ease-in-out infinite; }
+@keyframes nsbPulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.3; transform:scale(.7); } }
+
+/* ── toast ── */
+#notion-toast {
+  position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); z-index: 9999;
+  padding: 10px 20px; background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r);
+  font-size: 13px; font-weight: 500; color: var(--text);
+  box-shadow: 0 4px 24px rgba(0,0,0,.35); display: none; white-space: nowrap;
+  animation: slideIn .2s cubic-bezier(.4,0,.2,1);
+}
+#notion-toast.show { display: block; }
+#notion-toast.ok  { border-color: var(--accent);     color: var(--accent); }
+#notion-toast.err { border-color: var(--accent-red); color: var(--accent-red); }
+</style>
+</head>
+<body data-theme="dark">
+
+<div id="bg-grid"></div>
+
+<div id="topbar">
+  <div class="logo">Creator<span class="logo-dot">·</span>Net</div>
+  <div class="sep"></div>
+  <input type="text" id="search-box" placeholder="検索...">
+  <div class="filter-scroller" id="filter-row"></div>
+  <div class="topbar-right">
+    <div class="sep"></div>
+    <label class="tog-wrap" id="depth-tog" title="関連人物の別作品も展開">
+      <div class="tog"></div><span>2次展開</span>
+    </label>
+    <div class="sep"></div>
+    <button class="icon-btn" id="filter-modal-btn" title="表示フィルター" style="font-size:16px;display:none">⊞</button>
+    <button class="icon-btn" id="theme-btn" title="ダーク/ライト切替">◐</button>
+    <button class="icon-btn" id="hidden-btn" title="非表示リスト">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/>
+      </svg>
+    </button>
+    <button id="notion-sync-btn" title="Notionから自動取得"><span class="nsb-dot"></span><span>更新</span></button>
+  </div>
+</div>
+
+<div id="ctx-menu">
+  <div class="ctx-item" id="ctx-hide">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+    このノードを非表示
+  </div>
+  <div class="ctx-item" id="ctx-hide-connected">🔗 関連作品ごと非表示</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-open">▶ YouTubeで開く</div>
+</div>
+
+<div id="hidden-panel">
+  <div class="hp-header">
+    <div class="hp-title">非表示リスト <span id="hp-count"></span></div>
+    <div><button class="hp-btn" id="hp-restore-all">すべて復元</button></div>
+  </div>
+  <div id="hp-list"></div>
+</div>
+
+<div id="filter-modal">
+  <div class="fm-box">
+    <button class="fm-close" id="fm-close">✕</button>
+    <div class="fm-title">表示フィルター</div>
+    <div class="fm-tabs">
+      <button class="fm-tab active" id="fm-tab-work">作品</button>
+      <button class="fm-tab" id="fm-tab-director">Creator</button>
+      <button class="fm-tab" id="fm-tab-artist">Artist</button>
+    </div>
+    <input class="fm-search" id="fm-search" type="text" placeholder="名前で絞り込み...">
+    <div class="fm-list" id="fm-list"></div>
+    <div class="fm-footer">
+      <span class="fm-count" id="fm-count"></span>
+      <button class="fm-close-btn" id="fm-done">完了</button>
+    </div>
+  </div>
+</div>
+
+<div id="notion-toast"></div>
+<input type="file" id="fi0" accept=".csv" style="display:none">
+<svg id="canvas"></svg>
+
+<div id="legend">
+  <div class="leg"><div class="ldot" style="background:var(--node-dir)"></div>Creator</div>
+  <div class="leg"><div class="ldot" style="background:var(--node-art)"></div>Artist</div>
+  <div class="leg"><div class="lline" style="background:var(--link-dir)"></div>制作</div>
+  <div class="leg"><div class="lline" style="background:var(--link-art);height:1px"></div>出演</div>
+</div>
+
+<div id="stats"></div>
+
+<div id="info-panel">
+  <div class="ph">
+    <div>
+      <div class="ph-type" id="pt"></div>
+      <div class="ph-name" id="pn"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+      <button class="ph-close" id="pc-hide" title="このノードを非表示" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/>
+        </svg>
+      </button>
+      <button class="ph-close" id="pc">✕</button>
+    </div>
+  </div>
+  <div id="pc2"></div>
+</div>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════
+   CONSTANTS
+═══════════════════════════════════════════ */
+const CW = 158, CH = 148;
+const DR = 30, AR = 22;
+const HIDDEN_KEY = 'creator_network_hidden_labels';
+
+/* ═══════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════ */
+let AN = [], AL = [];
+let aFilter = 'ALL', sq = '', depth2 = false;
+let showDir = true, showArt = true;
+let hiddenIds = new Set();
+let selId = null, hovId = null;
+let sim = null, gDimRect = null;
+
+/* ═══════════════════════════════════════════
+   UTILS
+═══════════════════════════════════════════ */
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const lid = x => (typeof x === 'object' ? x.id : x);
+
+function parseCSVLine(line) {
+  const res = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { if (q && line[i+1] === '"') { cur += '"'; i++; } else q = !q; }
+    else if (c === ',' && !q) { res.push(cur); cur = ''; }
+    else cur += c;
+  }
+  return [...res, cur];
+}
+
+function parseCSV(text) {
+  const lines = text.split('\n').filter(l => l.trim());
+  const hdr = parseCSVLine(lines[0]).map(h => h.replace(/^\uFEFF/, '').trim());
+  return lines.slice(1).map(l => {
+    const v = parseCSVLine(l), o = {};
+    hdr.forEach((h, i) => o[h] = (v[i] || '').trim());
+    return o;
+  });
+}
+
+function xname(s) { if (!s) return null; const m = s.match(/^(.+?)\s*\(https?:/); return m ? m[1].trim() : s.trim(); }
+function xnames(s) { return s ? s.split(',').map(p => xname(p.trim())).filter(Boolean) : []; }
+function ytid(url) { if (!url) return null; const m = url.match(/[?&]v=([^&\s]+)/) || url.match(/youtu\.be\/([^?]+)/); return m ? m[1] : null; }
+function thumbUrl(url) { const id = ytid(url); return id ? `https://img.youtube.com/vi/${id}/mqdefault.jpg` : null; }
+
+/* ═══════════════════════════════════════════
+   GRAPH BUILD
+═══════════════════════════════════════════ */
+function buildGraph(rows) {
+  const nm = new Map(), links = [];
+  function ensure(id, type, label, extra = {}) {
+    if (!nm.has(id)) nm.set(id, { id, type, label, ...extra, works: [] });
+    return nm.get(id);
+  }
+  rows.forEach((row, i) => {
+    const title = (row['Title'] || '').trim(); if (!title) return;
+    const url = row['URL'] || '';
+    const cats = (row['Category'] || '').split(',').map(c => c.trim()).filter(Boolean);
+    const th = thumbUrl(url);
+    const wid = `w${i}`;
+    ensure(wid, 'work', title, { url, th, cats });
+    xnames(row['Director / Creator'] || '').forEach(d => {
+      const did = `d_${d}`; ensure(did, 'director', d); nm.get(did).works.push(wid);
+      links.push({ source: did, target: wid, ltype: 'dir' });
+    });
+    xnames(row['Artist'] || '').forEach(a => {
+      const aid = `a_${a}`; ensure(aid, 'artist', a); nm.get(aid).works.push(wid);
+      links.push({ source: aid, target: wid, ltype: 'art' });
+    });
+  });
+  return { nodes: [...nm.values()], links };
+}
+
+/* ═══════════════════════════════════════════
+   FILTER
+═══════════════════════════════════════════ */
+function visibleNodeIds() {
+  return new Set(AN.filter(n => {
+    if (hiddenIds.has(n.id)) return false;
+    if (n.type === 'director') return showDir;
+    if (n.type === 'artist')   return showArt;
+    return true;
+  }).map(n => n.id));
+}
+
+function filteredData() {
+  const vids = visibleNodeIds();
+  let nodes = AN.filter(n => vids.has(n.id));
+  let links = AL.filter(l => vids.has(lid(l.source)) && vids.has(lid(l.target)));
+
+  if (aFilter !== 'ALL') {
+    const wids = new Set(nodes.filter(n => n.type === 'work' && n.cats.includes(aFilter)).map(n => n.id));
+    const keep = new Set();
+    links.forEach(l => { const s = lid(l.source), t = lid(l.target); if (wids.has(s) || wids.has(t)) { keep.add(s); keep.add(t); } });
+    nodes = nodes.filter(n => keep.has(n.id));
+    links = links.filter(l => keep.has(lid(l.source)) && keep.has(lid(l.target)));
+  }
+
+  if (sq) {
+    const q = sq.toLowerCase();
+    const direct = new Set(nodes.filter(n => n.label.toLowerCase().includes(q)).map(n => n.id));
+    const exp = new Set(direct);
+    links.forEach(l => { const s = lid(l.source), t = lid(l.target); if (direct.has(s)) exp.add(t); if (direct.has(t)) exp.add(s); });
+    nodes = nodes.filter(n => exp.has(n.id));
+    links = links.filter(l => exp.has(lid(l.source)) && exp.has(lid(l.target)));
+  }
+
+  return { nodes, links };
+}
+
+/* ═══════════════════════════════════════════
+   HIGHLIGHT
+═══════════════════════════════════════════ */
+function hlSet(nodeId) {
+  if (!nodeId) return null;
+  const vids = visibleNodeIds();
+  const visLinks = AL.filter(l => vids.has(lid(l.source)) && vids.has(lid(l.target)));
+  const ns = new Set([nodeId]), ls = new Set();
+
+  visLinks.forEach(l => {
+    const s = lid(l.source), t = lid(l.target);
+    if (s === nodeId || t === nodeId) { ns.add(s); ns.add(t); ls.add(l); }
+  });
+
+  if (depth2) {
+    [...ns].filter(id => id !== nodeId).forEach(nid => {
+      visLinks.forEach(l => {
+        const s = lid(l.source), t = lid(l.target);
+        if (s === nid || t === nid) { ns.add(s); ns.add(t); ls.add(l); }
+      });
+    });
+  }
+
+  return { ns, ls };
+}
+
+function applyHL(activeId, mode) {
+  const hl = activeId ? hlSet(activeId) : null;
+
+  if (gDimRect) gDimRect.attr('fill-opacity', !hl ? 0 : mode === 'click' ? .88 : .75);
+
+  document.querySelectorAll('.wcard').forEach(el => {
+    const id = el.dataset.id;
+    el.classList.remove('hl-dir', 'hl-art', 'hl-both', 'dim');
+    if (!hl) return;
+    if (!hl.ns.has(id)) { el.classList.add('dim'); return; }
+    let d = false, a = false;
+    AL.forEach(l => { const s = lid(l.source), t = lid(l.target); if ((s===id||t===id) && hl.ls.has(l)) { if (l.ltype==='dir') d=true; else a=true; } });
+    el.classList.add(d && a ? 'hl-both' : d ? 'hl-dir' : 'hl-art');
+  });
+
+  d3.selectAll('g.nd').each(function(d) {
+    if (d.type === 'work') return;
+    d3.select(this).style('opacity', !hl || hl.ns.has(d.id) ? 1 : 0.08);
+  });
+
+  d3.selectAll('line.lp').each(function(d) {
+    const active = !hl || hl.ls.has(d);
+    d3.select(this)
+      .attr('stroke-opacity', active ? 1 : 0.04)
+      .attr('stroke-width', active && hl ? (d.ltype==='dir' ? 2.8 : 2.0) : (d.ltype==='dir' ? 1.8 : 1.0));
+  });
+}
+
+/* ═══════════════════════════════════════════
+   DRAW
+═══════════════════════════════════════════ */
+function draw(nodes, links) {
+  const W = window.innerWidth, H = window.innerHeight - 48;
+  d3.select('#canvas').selectAll('*').remove();
+  gDimRect = null;
+
+  const svg = d3.select('#canvas').attr('width', W).attr('height', H);
+  const g = svg.append('g');
+
+  svg.call(d3.zoom().scaleExtent([0.04, 4]).on('zoom', e => g.attr('transform', e.transform)));
+  svg.on('click', e => {
+    if (e.target.tagName === 'svg' || e.target.tagName === 'SVG') {
+      selId = null; hovId = null; applyHL(null, null);
+      document.getElementById('info-panel').classList.remove('visible');
+    }
+  });
+
+  const dimColor = document.body.dataset.theme === 'light' ? '#f2f2f7' : 'rgb(25,25,25)';
+  gDimRect = g.append('rect').attr('x',-99999).attr('y',-99999).attr('width',199999).attr('height',199999)
+    .attr('fill', dimColor).attr('fill-opacity', 0).attr('pointer-events', 'none')
+    .style('transition', 'fill-opacity .18s');
+
+  const gL = g.append('g').attr('class', 'layer-links');
+  const gN = g.append('g').attr('class', 'layer-nodes');
+
+  const lpSel = gL.selectAll('line.lp').data(links).join('line')
+    .attr('class', 'lp')
+    .attr('stroke', d => d.ltype === 'dir' ? 'var(--link-dir)' : 'var(--link-art)')
+    .attr('stroke-width', d => d.ltype === 'dir' ? 1.8 : 1)
+    .attr('stroke-opacity', 0.45);
+
+  const nSel = gN.selectAll('g.nd').data(nodes, d => d.id).join('g').attr('class', 'nd')
+    .call(d3.drag()
+      .on('start', (e, d) => { if (!e.active) sim.alphaTarget(.3).restart(); d.fx = d.x; d.fy = d.y; })
+      .on('drag',  (e, d) => { d.fx = e.x; d.fy = e.y; })
+      .on('end',   (e, d) => { if (!e.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+    )
+    .on('mouseenter', (e, d) => { if (selId) return; hovId = d.id; applyHL(hovId, 'hover'); })
+    .on('mouseleave', (e, d) => { if (selId) return; hovId = null; applyHL(null, null); })
+    .on('click', (e, d) => {
+      e.stopPropagation(); hovId = null;
+      if (selId === d.id) { selId = null; applyHL(null, null); document.getElementById('info-panel').classList.remove('visible'); }
+      else { selId = d.id; applyHL(selId, 'click'); showPanel(d); }
+    })
+    .on('contextmenu', (e, d) => showCtx(e, d));
+
+  nSel.each(function(d) {
+    const grp = d3.select(this);
+    if (d.type === 'work') {
+      const fo = grp.append('foreignObject').attr('width', CW).attr('height', CH).attr('x', -CW/2).attr('y', -CH/2);
+      const card = fo.append('xhtml:div').attr('class', 'wcard').attr('data-id', d.id);
+      if (d.th) {
+        card.append('xhtml:img').attr('class', 'wc-img').attr('src', d.th)
+          .on('error', function() { d3.select(this).remove(); card.insert('xhtml:div', ':first-child').attr('class', 'wc-ph').text('🎬'); });
+      } else {
+        card.append('xhtml:div').attr('class', 'wc-ph').text('🎬');
+      }
+      const bd = card.append('xhtml:div').attr('class', 'wc-bd');
+      bd.append('xhtml:div').attr('class', 'wc-tt').text(d.label);
+      const tgs = bd.append('xhtml:div').attr('class', 'wc-tags');
+      (d.cats || []).slice(0, 3).forEach(c => tgs.append('xhtml:span').attr('class', 'wc-tag').text(c));
+    } else {
+      const r = d.type === 'director' ? DR : AR;
+      const col = d.type === 'director' ? 'var(--node-dir)' : 'var(--node-art)';
+      grp.append('circle').attr('r', r-1).attr('fill', 'var(--bg2)');
+      grp.append('circle').attr('class', 'pring').attr('r', r-1).attr('fill', 'none')
+        .attr('stroke', col).attr('stroke-width', d.type === 'director' ? 2 : 1.5)
+        .attr('stroke-opacity', 0.7).datum(d);
+      const fo = grp.append('foreignObject').attr('width', r*2).attr('height', r*2).attr('x', -r).attr('y', -r);
+      fo.append('xhtml:div').attr('class', `pnode-label ${d.type === 'director' ? 'dir' : 'art'}`)
+        .attr('data-id', d.id).text(d.label.length > 13 ? d.label.slice(0,11) + '…' : d.label);
+    }
+  });
+
+  if (sim) sim.stop();
+  sim = d3.forceSimulation(nodes)
+    .force('link',    d3.forceLink(links).id(d => d.id).distance(d => d.ltype === 'dir' ? 220 : 260).strength(.5))
+    .force('charge',  d3.forceManyBody().strength(-700))
+    .force('center',  d3.forceCenter(W/2, H/2))
+    .force('collide', d3.forceCollide(d => d.type === 'work' ? Math.sqrt((CW/2)**2 + (CH/2)**2) + 18 : (d.type === 'director' ? DR : AR) + 14))
+    .alphaDecay(.015)
+    .on('tick', () => {
+      lpSel.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+           .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+      nSel.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+
+  if (selId)      applyHL(selId, 'click');
+  else if (hovId) applyHL(hovId, 'hover');
+
+  const dirs = nodes.filter(n => n.type === 'director').length;
+  const arts = nodes.filter(n => n.type === 'artist').length;
+  const wks  = nodes.filter(n => n.type === 'work').length;
+  document.getElementById('stats').innerHTML = `${dirs} creators<br>${arts} artists<br>${wks} works`;
+}
+
+/* ═══════════════════════════════════════════
+   INFO PANEL
+═══════════════════════════════════════════ */
+function showPanel(d) {
+  const col = d.type === 'director' ? 'var(--node-dir)' : d.type === 'artist' ? 'var(--node-art)' : 'var(--accent2)';
+  const lbl = d.type === 'director' ? 'CREATOR' : d.type === 'artist' ? 'ARTIST' : 'WORK';
+  document.getElementById('pt').textContent = lbl;
+  document.getElementById('pt').style.color = col;
+  document.getElementById('pn').textContent = d.label;
+
+  const hideBtn = document.getElementById('pc-hide');
+  if (d.type === 'work') {
+    hideBtn.style.display = 'none';
+  } else {
+    hideBtn.style.display = 'flex';
+    hideBtn.onclick = () => {
+      hiddenIds.add(d.id); updateHiddenUI(); refresh();
+      document.getElementById('info-panel').classList.remove('visible');
+      selId = null;
+    };
+  }
+
+  let html = '';
+  if (d.type === 'work') {
+    if (d.th) html += `<img style="width:100%;height:130px;object-fit:cover;border-bottom:1px solid var(--border);display:block" src="${esc(d.th)}" onerror="this.style.display='none'">`;
+    html += `<div style="padding:9px 12px">`;
+    html += (d.cats || []).map(c => `<span class="wc-tag" style="margin-right:3px;margin-bottom:3px;display:inline-block">${esc(c)}</span>`).join('');
+    if (d.url) html += `<a href="${esc(d.url)}" target="_blank" style="display:block;margin-top:9px;color:var(--accent);font-size:9px;text-decoration:none">▶ YouTubeで見る →</a>`;
+    html += `</div>`;
+  } else {
+    const works = (d.works || []).map(wid => AN.find(n => n.id === wid)).filter(Boolean);
+    const sl = d.type === 'director' ? `制作作品 (${works.length})` : `出演作品 (${works.length})`;
+    html += `<div class="ps-title">${esc(sl)}</div>`;
+    works.forEach(w => {
+      html += `<a class="pw-item" ${w.url ? `href="${esc(w.url)}" target="_blank"` : ''}>`;
+      if (w.th) html += `<img class="pw-thumb" src="${esc(w.th)}" onerror="this.style.display='none'">`;
+      html += `<div class="pw-ph" style="${w.th ? 'display:none' : ''}">🎬</div>`;
+      html += `<div><div class="pw-title">${esc(w.label)}</div><div class="pw-cat">${(w.cats||[]).join(', ')}</div></div></a>`;
+    });
+  }
+  document.getElementById('pc2').innerHTML = html;
+  document.getElementById('info-panel').classList.add('visible');
+}
+
+/* ═══════════════════════════════════════════
+   FILTER BUTTONS
+═══════════════════════════════════════════ */
+function makeFilter() {
+  const cats = new Set();
+  AN.filter(n => n.type === 'work').forEach(n => (n.cats || []).forEach(c => cats.add(c)));
+  const fr = document.getElementById('filter-row');
+  fr.innerHTML = '';
+  const mkBtn = (label, active = false) => {
+    const b = document.createElement('button');
+    b.className = 'fbtn' + (active ? ' active' : '');
+    b.textContent = label;
+    b.onclick = () => { document.querySelectorAll('.fbtn').forEach(x => x.classList.remove('active')); b.classList.add('active'); aFilter = label; refresh(); };
+    return b;
+  };
+  fr.appendChild(mkBtn('ALL', true));
+  [...cats].sort().forEach(c => fr.appendChild(mkBtn(c)));
+}
+
+/* ═══════════════════════════════════════════
+   REFRESH / INIT
+═══════════════════════════════════════════ */
+function refresh() {
+  const { nodes, links } = filteredData();
+  selId = null; hovId = null;
+  document.getElementById('info-panel').classList.remove('visible');
+  draw(nodes, links);
+}
+
+function init(rows) {
+  const data = buildGraph(rows);
+  AN = data.nodes; AL = data.links;
+  loadHiddenState();
+  makeFilter();
+  refresh();
+  updateHiddenUI();
+}
+
+/* ═══════════════════════════════════════════
+   HIDDEN STATE PERSISTENCE
+═══════════════════════════════════════════ */
+function saveHiddenState() {
+  const labels = [...hiddenIds].map(id => AN.find(n => n.id === id)?.label).filter(Boolean);
+  localStorage.setItem(HIDDEN_KEY, JSON.stringify(labels));
+}
+
+function loadHiddenState() {
+  try {
+    const saved = localStorage.getItem(HIDDEN_KEY);
+    if (!saved) return;
+    const labels = new Set(JSON.parse(saved));
+    hiddenIds.clear();
+    AN.forEach(n => { if (labels.has(n.label)) hiddenIds.add(n.id); });
+  } catch (e) { /* ignore */ }
+}
+
+/* ═══════════════════════════════════════════
+   HIDDEN PANEL UI
+═══════════════════════════════════════════ */
+function updateHiddenUI() {
+  document.getElementById('hp-count').textContent = `(${hiddenIds.size})`;
+  const list = document.getElementById('hp-list');
+  if (!list) return;
+  list.innerHTML = '';
+  [...hiddenIds].forEach(id => {
+    const node = AN.find(n => n.id === id);
+    if (!node) return;
+    const typeLabel = node.type === 'director' ? 'CREATOR' : node.type === 'artist' ? 'ART' : 'WORK';
+    const row = document.createElement('div');
+    row.className = 'hp-item';
+    row.innerHTML = `
+      <span class="hp-item-type">${typeLabel}</span>
+      <span class="hp-item-label" title="${esc(node.label)}">${esc(node.label)}</span>
+      <button class="hp-restore" data-id="${esc(id)}" title="復元">↩</button>`;
+    row.querySelector('.hp-restore').addEventListener('click', () => {
+      hiddenIds.delete(id); updateHiddenUI(); refresh();
+      if (hiddenIds.size === 0) document.getElementById('hidden-panel').classList.remove('visible');
+    });
+    list.appendChild(row);
+  });
+  saveHiddenState();
+}
+
+/* ═══════════════════════════════════════════
+   CONTEXT MENU
+═══════════════════════════════════════════ */
+let ctxTarget = null;
+const ctxMenu = document.getElementById('ctx-menu');
+
+function showCtx(e, d) {
+  e.preventDefault(); e.stopPropagation();
+  ctxTarget = d;
+  document.getElementById('ctx-open').style.display = (d.type === 'work' && d.url) ? 'flex' : 'none';
+  ctxMenu.style.display = 'block';
+  ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
+  ctxMenu.style.top  = Math.min(e.clientY, window.innerHeight - 150) + 'px';
+}
+function hideCtx() { ctxMenu.style.display = 'none'; ctxTarget = null; }
+
+document.addEventListener('click', hideCtx);
+document.addEventListener('contextmenu', hideCtx);
+ctxMenu.addEventListener('click', e => e.stopPropagation());
+
+document.getElementById('ctx-hide').addEventListener('click', () => {
+  if (!ctxTarget) return;
+  hiddenIds.add(ctxTarget.id); updateHiddenUI(); refresh(); hideCtx();
+});
+document.getElementById('ctx-hide-connected').addEventListener('click', () => {
+  if (!ctxTarget) return;
+  hiddenIds.add(ctxTarget.id);
+  AL.forEach(l => { const s = lid(l.source), t = lid(l.target); if (s === ctxTarget.id) hiddenIds.add(t); if (t === ctxTarget.id) hiddenIds.add(s); });
+  updateHiddenUI(); refresh(); hideCtx();
+});
+document.getElementById('ctx-open').addEventListener('click', () => {
+  if (ctxTarget?.url) window.open(ctxTarget.url, '_blank'); hideCtx();
+});
+
+/* ═══════════════════════════════════════════
+   FILTER MODAL
+═══════════════════════════════════════════ */
+let fmCurrentTab = 'work';
+
+function openFilterModal()  { document.getElementById('filter-modal').classList.add('visible'); document.getElementById('fm-search').value = ''; renderFmList(); }
+function closeFilterModal() { document.getElementById('filter-modal').classList.remove('visible'); refresh(); }
+
+function renderFmList() {
+  const tab = fmCurrentTab;
+  const q = document.getElementById('fm-search').value.trim().toLowerCase();
+  const list = document.getElementById('fm-list');
+  list.innerHTML = '';
+
+  let nodes = AN.filter(n => n.type === tab);
+  if (tab !== 'work') nodes = nodes.filter(n => hiddenIds.has(n.id));
+  if (q) nodes = nodes.filter(n => n.label.toLowerCase().includes(q));
+  nodes.sort((a, b) => a.label.localeCompare(b.label, 'ja'));
+
+  if (nodes.length === 0 && tab !== 'work') {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'padding:24px 12px;text-align:center;color:var(--text-dim);font-size:13px';
+    empty.textContent = '非表示のノードはありません';
+    list.appendChild(empty);
+    document.getElementById('fm-count').textContent = `${AN.filter(n => n.type===tab).length}件すべて表示中`;
+    return;
+  }
+
+  nodes.forEach(node => {
+    const isVisible = !hiddenIds.has(node.id);
+    const subText = tab === 'work' ? (node.cats || []).join(', ') : `${(node.works||[]).length} 作品`;
+    const item = document.createElement('div');
+    item.className = 'fm-item';
+    item.innerHTML = `
+      <div class="fm-item-label" title="${esc(node.label)}">${esc(node.label)}</div>
+      ${subText ? `<div class="fm-item-sub">${esc(subText)}</div>` : ''}
+      <button class="fm-toggle ${isVisible ? 'on' : ''}" data-id="${esc(node.id)}" title="${isVisible ? '非表示にする' : '表示する'}"></button>`;
+    item.querySelector('.fm-toggle').addEventListener('click', function(e) {
+      e.stopPropagation();
+      const id = this.dataset.id;
+      if (hiddenIds.has(id)) { hiddenIds.delete(id); this.classList.add('on'); }
+      else { hiddenIds.add(id); this.classList.remove('on'); }
+      updateHiddenUI();
+      if (tab !== 'work') renderFmList();
+    });
+    list.appendChild(item);
+  });
+
+  const total = AN.filter(n => n.type === tab).length;
+  const hidden = AN.filter(n => n.type === tab && hiddenIds.has(n.id)).length;
+  document.getElementById('fm-count').textContent = hidden > 0 ? `${hidden}件非表示` : `${total}件すべて表示中`;
+}
+
+document.getElementById('filter-modal-btn').addEventListener('click', openFilterModal);
+document.getElementById('fm-close').addEventListener('click', closeFilterModal);
+document.getElementById('fm-done').addEventListener('click', closeFilterModal);
+document.getElementById('filter-modal').addEventListener('click', e => { if (e.target === document.getElementById('filter-modal')) closeFilterModal(); });
+['work', 'director', 'artist'].forEach(tab => {
+  document.getElementById(`fm-tab-${tab}`).addEventListener('click', () => {
+    fmCurrentTab = tab;
+    document.querySelectorAll('.fm-tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(`fm-tab-${tab}`).classList.add('active');
+    renderFmList();
+  });
+});
+document.getElementById('fm-search').addEventListener('input', renderFmList);
+
+/* ═══════════════════════════════════════════
+   TOPBAR EVENTS
+═══════════════════════════════════════════ */
+document.getElementById('search-box').addEventListener('input', e => { sq = e.target.value.trim(); refresh(); });
+
+document.getElementById('pc').addEventListener('click', () => {
+  document.getElementById('info-panel').classList.remove('visible');
+  selId = null; hovId = null; applyHL(null, null);
+});
+
+document.getElementById('depth-tog').addEventListener('click', () => {
+  depth2 = !depth2;
+  document.getElementById('depth-tog').classList.toggle('on', depth2);
+  if (selId) applyHL(selId, 'click'); else if (hovId) applyHL(hovId, 'hover');
+});
+
+document.getElementById('theme-btn').addEventListener('click', () => {
+  const dark = document.body.dataset.theme === 'dark';
+  document.body.dataset.theme = dark ? 'light' : 'dark';
+  document.getElementById('theme-btn').textContent = dark ? '◑' : '◐';
+});
+
+document.getElementById('hidden-btn').addEventListener('click', () => {
+  document.getElementById('hidden-panel').classList.toggle('visible');
+});
+
+document.getElementById('hp-restore-all').addEventListener('click', () => {
+  hiddenIds.clear(); updateHiddenUI(); refresh();
+  document.getElementById('hidden-panel').classList.remove('visible');
+});
+
+document.getElementById('fi0').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const r = new FileReader(); r.onload = ev => init(parseCSV(ev.target.result)); r.readAsText(f, 'UTF-8');
+});
+
+window.addEventListener('resize', () => { if (AN.length) { const { nodes, links } = filteredData(); draw(nodes, links); } });
+
+/* ═══════════════════════════════════════════
+   NOTION SYNC
+═══════════════════════════════════════════ */
+const NOTION_TOKEN   = process.env.NOTION_TOKEN;
+const NOTION_DB_ID = '18860905b37f80358899e51e4e514f92';
+
+function showToast(msg, type = 'ok', duration = 3200) {
+  const el = document.getElementById('notion-toast');
+  el.textContent = msg; el.className = 'show ' + type; el.style.display = 'block';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.display = 'none'; el.className = ''; }, duration);
+}
+
+async function fetchFromNotionAPI() {
+  const btn = document.getElementById('notion-sync-btn');
+  const label = btn.querySelector('span:last-child');
+  btn.classList.add('loading'); label.textContent = '取得中…';
+  try {
+    const r = await fetch('/notion-data', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}), signal: AbortSignal.timeout(60000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (data.error) throw new Error(data.error);
+    if (!data.results?.length) throw new Error('データが0件です');
+    init(data.results);
+    localStorage.setItem('notion_last_sync', new Date().toLocaleString('ja-JP'));
+    showToast(`✓ Notionから ${data.count} 件取得しました`, 'ok');
+  } catch (e) {
+    console.error('[Notion]', e);
+    const msg = (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'))
+      ? 'CORSエラー: server.js をご利用ください' : `✗ ${e.message}`;
+    showToast(msg, 'err', 6000);
+  } finally {
+    btn.classList.remove('loading'); label.textContent = '更新';
+  }
+}
+
+document.getElementById('notion-sync-btn').addEventListener('click', fetchFromNotionAPI);
+window.addEventListener('load', fetchFromNotionAPI);
+</script>
+</body>
+</html>
