@@ -675,100 +675,17 @@ function draw(nodes, links) {
   });
 
   if (sim) sim.stop();
-
-  /* ── 1. 次数マップ ── */
-  const degreeMap = {};
-  links.forEach(l => {
-    const sid = typeof l.source === 'object' ? l.source.id : l.source;
-    const tid = typeof l.target === 'object' ? l.target.id : l.target;
-    degreeMap[sid] = (degreeMap[sid] || 0) + 1;
-    degreeMap[tid] = (degreeMap[tid] || 0) + 1;
-  });
-
-  /* ── 2. カテゴリクラスタ中心を円形に配置 ── */
-  const allCats = [...new Set(nodes.filter(n => n.type === 'work').flatMap(n => n.cats || []))].sort();
-  const nCats = allCats.length || 1;
-  const clusterR = Math.min(W, H) * 3.6; // 画面の360%半径で円形配置
-  const catCenter = {};
-  allCats.forEach((c, i) => {
-    const angle = (i / nCats) * 2 * Math.PI - Math.PI / 2;
-    catCenter[c] = { x: W / 2 + clusterR * Math.cos(angle), y: H / 2 + clusterR * Math.sin(angle) };
-  });
-
-  /* ── 3. 作品ノードの初期位置 = 主カテゴリの中心付近にジッター配置 ── */
-  const workById = Object.fromEntries(nodes.filter(n => n.type === 'work').map(n => [n.id, n]));
-  nodes.filter(n => n.type === 'work').forEach((d, i) => {
-    const primaryCat = (d.cats || [])[0];
-    const center = primaryCat ? catCenter[primaryCat] : { x: W / 2, y: H / 2 };
-    const spread = 900;
-    const a = Math.random() * 2 * Math.PI, r = Math.random() * spread;
-    d.x = center.x + r * Math.cos(a);
-    d.y = center.y + r * Math.sin(a);
-  });
-
-  /* ── 4. 人物ノードの初期位置 = 自分の作品群のカテゴリ重心 ── */
-  nodes.filter(d => d.type !== 'work').forEach((d, i) => {
-    const vec = {};
-    (d.works || []).forEach(wid => {
-      const w = workById[wid];
-      (w?.cats || []).forEach(c => { vec[c] = (vec[c] || 0) + 1; });
-    });
-    const total = Object.values(vec).reduce((s, v) => s + v, 0) || 0;
-    if (total === 0) {
-      // 作品なし → 円周上に均等配置
-      const angle = (i / nodes.filter(n => n.type !== 'work').length) * 2 * Math.PI;
-      d.x = W / 2 + clusterR * 0.6 * Math.cos(angle);
-      d.y = H / 2 + clusterR * 0.6 * Math.sin(angle);
-    } else {
-      // カテゴリ加重重心
-      let cx = 0, cy = 0;
-      Object.entries(vec).forEach(([c, cnt]) => {
-        const cc = catCenter[c] || { x: W / 2, y: H / 2 };
-        cx += cc.x * (cnt / total);
-        cy += cc.y * (cnt / total);
-      });
-      // 中心から少し外にオフセット（作品群の中心に被らないように）
-      const dx = cx - W / 2, dy = cy - H / 2;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-      const personOffset = 60;
-      d.x = cx + (dx / dist) * personOffset + (Math.random() - 0.5) * 40;
-      d.y = cy + (dy / dist) * personOffset + (Math.random() - 0.5) * 40;
-    }
-  });
-
-  /* ── 5. カテゴリクラスタ引力（カスタムforce） ── */
-  // 作品ノードを主カテゴリ中心に引き寄せる
-  const clusterStrength = 0.12;
-  function forceCluster(alpha) {
-    nodes.forEach(d => {
-      if (d.type !== 'work') return;
-      const primaryCat = (d.cats || [])[0];
-      if (!primaryCat || !catCenter[primaryCat]) return;
-      const cc = catCenter[primaryCat];
-      d.vx += (cc.x - d.x) * clusterStrength * alpha;
-      d.vy += (cc.y - d.y) * clusterStrength * alpha;
-    });
-  }
-
   sim = d3.forceSimulation(nodes)
-    .force('link',    d3.forceLink(links).id(d => d.id)
-      .distance(d => d.ltype === 'dir' ? 160 : 190)
-      .strength(d => d.ltype === 'dir' ? 0.7 : 0.5))
-    .force('charge',  d3.forceManyBody().strength(d => d.type === 'work' ? -300 : -500))
-    .force('center',  d3.forceCenter(W/2, H/2).strength(0.04))
-    .force('collide', d3.forceCollide(d => d.type === 'work'
-      ? Math.sqrt((CW/2)**2 + (CH/2)**2) + 12
-      : (d.type === 'director' ? DR : AR) + 10))
-    .force('cluster', forceCluster)
-    .alphaDecay(.012)
+    .force('link',    d3.forceLink(links).id(d => d.id).distance(d => d.ltype === 'dir' ? 220 : 260).strength(.5))
+    .force('charge',  d3.forceManyBody().strength(-700))
+    .force('center',  d3.forceCenter(W/2, H/2))
+    .force('collide', d3.forceCollide(d => d.type === 'work' ? Math.sqrt((CW/2)**2 + (CH/2)**2) + 18 : (d.type === 'director' ? DR : AR) + 14))
+    .alphaDecay(.015)
     .on('tick', () => {
       lpSel.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
            .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
       nSel.attr('transform', d => `translate(${d.x},${d.y})`);
     });
-
-  sim.alphaTarget(0.3).restart();
-  setTimeout(() => { sim.alphaTarget(0); }, 800);
 
   if (selId)      applyHL(selId, 'click');
   else if (hovId) applyHL(hovId, 'hover');
