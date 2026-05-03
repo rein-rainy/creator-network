@@ -721,10 +721,17 @@ function draw(nodes, links) {
       ? (i / personNodes.length) * 2 * Math.PI
       : Math.atan2(sy, sx);
     const deg = degreeMap[d.id] || 1;
-    const r = Math.min(W, H) * 1.5;
+    const r = Math.min(W, H) * 5;
     d.x = W / 2 + r * Math.cos(angle);
     d.y = H / 2 + r * Math.sin(angle);
   });
+
+  // 接続数上位（人物ノード数の1/10）を現在位置で固定してシミュレーションに渡す
+  const pinCount = Math.max(1, Math.round(personNodes.length / 10));
+  const pinNodes = [...personNodes]
+    .sort((a, b) => (degreeMap[b.id] || 0) - (degreeMap[a.id] || 0))
+    .slice(0, pinCount);
+  pinNodes.forEach(d => { d.fx = d.x; d.fy = d.y; });
 
   sim = d3.forceSimulation(nodes)
     .force('link',    d3.forceLink(links).id(d => d.id).distance(d => d.ltype === 'dir' ? 220 : 260).strength(.5))
@@ -738,7 +745,12 @@ function draw(nodes, links) {
       nSel.attr('transform', d => `translate(${d.x},${d.y})`);
     });
 
-
+  // 1秒後に一斉解放
+  sim.alphaTarget(0.5).restart();
+  setTimeout(() => {
+    pinNodes.forEach(d => { d.fx = null; d.fy = null; });
+    sim.alphaTarget(0);
+  }, 1000);
 
   if (selId)      applyHL(selId, 'click');
   else if (hovId) applyHL(hovId, 'hover');
