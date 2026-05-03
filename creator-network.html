@@ -731,7 +731,7 @@ function draw(nodes, links) {
   setTimeout(() => {
     pinNodes.forEach(d => { d.fx = null; d.fy = null; });
     sim.alphaTarget(0);
-  }, 10000);
+  });
 
   if (selId)      applyHL(selId, 'click');
   else if (hovId) applyHL(hovId, 'hover');
