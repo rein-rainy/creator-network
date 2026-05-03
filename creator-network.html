@@ -716,7 +716,7 @@ function draw(nodes, links) {
   const pinNodes = personNodes.slice(0, pinCount);
 
   // 対象ノードを画面外周に均等配置して固定
-  const pinR = Math.min(W, H) * 0.45;
+  const pinR = Math.min(W, H) * 2;
   pinNodes.forEach((d, i) => {
     const angle = (i / pinCount) * 2 * Math.PI;
     d.x = W / 2 + pinR * Math.cos(angle);
