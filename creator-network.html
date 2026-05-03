@@ -965,8 +965,7 @@ window.addEventListener('resize', () => { if (AN.length) { const { nodes, links 
 /* ═══════════════════════════════════════════
    NOTION SYNC
 ═══════════════════════════════════════════ */
-const NOTION_TOKEN   = process.env.NOTION_TOKEN;
-const NOTION_DB_ID = '18860905b37f80358899e51e4e514f92';
+// トークンはサーバー側 (server.js) で管理。ブラウザには持たない。
 
 function showToast(msg, type = 'ok', duration = 3200) {
   const el = document.getElementById('notion-toast');
