@@ -1148,42 +1148,26 @@ function makeFilter() {
 }
 
 /* ═══════════════════════════════════════════
-   ARTIST AVATAR
-   設計:
-   ・キャッシュキー  = YouTube チャンネルID (ytId)
-   ・キャッシュ値    = avatarUrl（必ず apiKey= 付き）
-   ・無効条件        = apiKey= を含まないエントリは破棄
+   ARTIST AVATAR (Deezer)
    フロー:
-     1. buildGraph() で artist.ytWorkUrl（参加作品1本）を確定
-     2. fetchArtistAvatars() 起動
-     3. /avatar へ ytWorkUrl 送信
-        → server が oEmbed でチャンネルID取得 & unavatar URL 組み立て
-        → { avatarUrl, ytId } を返す
-     4. cache[ytId] = avatarUrl で保存
-     5. node.avatar にセット → DOM反映
+     1. アーティスト名 → サーバー /avatar へ POST
+        → Deezer Search API でアーティスト検索
+        → { imageUrl, artistName } を返す
+     2. /avatar-img/<base64(imageUrl)> でプロキシ取得
+     3. cache[artistName] = proxyUrl で保存
+     4. node.avatar にセット → DOM反映
 ═══════════════════════════════════════════ */
 
 // ── キャッシュ構造 ──────────────────────────────────────────────────────────
 // localStorage に保存するオブジェクト:
-//   {
-//     ytIds:  { ytId  → avatarUrl(apiKey付き) },  // チャンネルID → アイコンURL
-//     urlMap: { ytWorkUrl → ytId },               // 動画URL → チャンネルID
-//   }
-// urlMap があることで、2回目以降のロード時に動画URLだけでキャッシュヒットできる
+//   { artistName → proxyUrl }
 
-const AVATAR_CACHE_KEY = 'creator_avatar_v3';
+const AVATAR_CACHE_KEY = 'creator_avatar_deezer_v1';
 
 function loadAvatarCache() {
   try {
-    const raw = JSON.parse(localStorage.getItem(AVATAR_CACHE_KEY) || '{}');
-    const ytIds  = raw.ytIds  || {};
-    const urlMap = raw.urlMap || {};
-    // apiKey= を含まない avatarUrl は無効として削除
-    for (const [k, v] of Object.entries(ytIds)) {
-      if (typeof v !== 'string' || !v.includes('apiKey=')) delete ytIds[k];
-    }
-    return { ytIds, urlMap };
-  } catch { return { ytIds: {}, urlMap: {} }; }
+    return JSON.parse(localStorage.getItem(AVATAR_CACHE_KEY) || '{}');
+  } catch { return {}; }
 }
 
 function saveAvatarCache(cache) {
@@ -1209,22 +1193,19 @@ function applyAvatarToDOM(node) {
   avatarDiv.appendChild(img);
 }
 
-// サーバーの /avatar に ytWorkUrl を送り { avatarUrl, ytId, authorName } を受け取る
-async function fetchAvatarFromServer(ytUrl) {
+// サーバーの /avatar にアーティスト名を送り { spotifyId, imageUrl, artistName } を受け取る
+async function fetchAvatarFromServer(artistName) {
   try {
     const res = await fetch('/avatar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ytUrl }),
+      body: JSON.stringify({ artistName }),
     });
     if (!res.ok) { console.warn(`[Avatar] HTTP ${res.status}`); return null; }
     const data = await res.json();
     if (data.error) { console.warn('[Avatar] サーバーエラー:', data.error); return null; }
-    if (!data.avatarUrl?.includes('apiKey=')) {
-      console.warn('[Avatar] apiKey なし URL を受信 → 破棄', data.avatarUrl);
-      return null;
-    }
-    return data; // { avatarUrl, ytId, authorName }
+    if (!data.imageUrl) { console.warn('[Avatar] imageUrl が空'); return null; }
+    return data; // { spotifyId, imageUrl, artistName }
   } catch (e) {
     console.error('[Avatar] fetch 例外:', e);
     return null;
@@ -1232,39 +1213,39 @@ async function fetchAvatarFromServer(ytUrl) {
 }
 
 async function fetchArtistAvatars() {
-  const cache = loadAvatarCache(); // { ytIds, urlMap }
+  const cache = loadAvatarCache(); // { artistName → proxyUrl }
 
-  // avatar 未設定 かつ ytWorkUrl を持つアーティストが対象
-  const targets = AN.filter(n => n.type === 'artist' && !n.avatar && n.ytWorkUrl);
+  // avatar 未設定のアーティストが対象（ytWorkUrl 不要）
+  const targets = AN.filter(n => n.type === 'artist' && !n.avatar);
   if (!targets.length) { console.log('[Avatar] 取得対象なし'); return; }
   console.log(`[Avatar] 取得対象: ${targets.length}件`);
 
   for (const node of targets) {
-    // Step1: ytWorkUrl → ytId → avatarUrl でキャッシュヒット判定
-    const cachedYtId = cache.urlMap[node.ytWorkUrl];
-    if (cachedYtId && cache.ytIds[cachedYtId]) {
-      node.avatar = cache.ytIds[cachedYtId];
-      console.log(`[Avatar] ${node.label}: キャッシュヒット ytId=${cachedYtId}`);
+    // キャッシュヒット判定（アーティスト名ベース）
+    if (cache[node.label]) {
+      node.avatar = cache[node.label];
+      console.log(`[Avatar] ${node.label}: キャッシュヒット`);
       applyAvatarToDOM(node);
       continue;
     }
 
-    // Step2: サーバーに問い合わせ
-    console.log(`[Avatar] ${node.label}: サーバー取得 →`, node.ytWorkUrl);
-    const data = await fetchAvatarFromServer(node.ytWorkUrl);
+    // サーバーに問い合わせ
+    console.log(`[Avatar] ${node.label}: Deezer 検索中...`);
+    const data = await fetchAvatarFromServer(node.label);
     if (!data) { console.warn(`[Avatar] ${node.label}: 取得失敗 → スキップ`); continue; }
 
-    // Step3: キャッシュに保存（ytId → avatarUrl、ytWorkUrl → ytId の両方）
-    node.avatar = data.avatarUrl;
-    cache.ytIds[data.ytId]        = data.avatarUrl;
-    cache.urlMap[node.ytWorkUrl]  = data.ytId;
+    // /avatar-img/<base64(imageUrl)> 経由でプロキシ
+    const encoded = btoa(data.imageUrl);
+    const proxyUrl = `/avatar-img/${encoded}`;
+    node.avatar = proxyUrl;
+    cache[node.label] = proxyUrl;
     saveAvatarCache(cache);
 
-    console.log(`[Avatar] ${node.label}: 完了 ytId=${data.ytId}`);
+    console.log(`[Avatar] ${node.label}: 完了`);
     applyAvatarToDOM(node);
 
-    // レート制限対策
-    await new Promise(r => setTimeout(r, 350));
+    // レート制限対策（Spotify APIは無料でも十分余裕あり）
+    await new Promise(r => setTimeout(r, 200));
   }
   console.log('[Avatar] 全処理完了');
 }

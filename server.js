@@ -9,9 +9,8 @@ const fs    = require('fs');
 const path  = require('path');
 const https = require('https');
 
-const PORT           = process.env.PORT || 3000;
-const NOTION_TOKEN   = process.env.NOTION_TOKEN;
-const UNAVATAR_KEY   = process.env.UNAVATAR_KEY;
+const PORT              = process.env.PORT || 3000;
+const NOTION_TOKEN      = process.env.NOTION_TOKEN;
 const DB_WORKS       = '18860905b37f80358899e51e4e514f92'; // メイン（作品）
 const DB_CREATORS    = '2d260905b37f80fbae0de6cb61a03091'; // クリエイター
 const DB_ARTISTS     = '18860905b37f8093954fdb1bb9602c18'; // アーティスト
@@ -20,9 +19,6 @@ const DB_ARTISTS     = '18860905b37f8093954fdb1bb9602c18'; // アーティスト
 if (!NOTION_TOKEN) {
   console.error('[Error] 環境変数 NOTION_TOKEN が設定されていません。');
   process.exit(1);
-}
-if (!UNAVATAR_KEY) {
-  console.warn('[Warn]  環境変数 UNAVATAR_KEY が未設定です。アバター取得が制限される場合があります。');
 }
 const HTML_FILE      = path.join(__dirname, 'creator-network.html');
 
@@ -201,6 +197,74 @@ async function buildData() {
   return { rows, creators, artists, count: rows.length };
 }
 
+
+// ─── Deezer API でアーティスト名からアバター画像URLを取得 ────────────────────
+//
+// フロー:
+//   https://api.deezer.com/search/artist?q=<name>&limit=1 にリクエストを送り、
+//   最初のヒットの picture_medium を imageUrl として返す
+
+// アーティスト名 → { imageUrl, artistName } を返す
+function searchArtistImage(artistName) {
+  return new Promise((resolve) => {
+    const url = `https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}&limit=1`;
+    https.get(url, { headers: { 'Accept': 'application/json' } }, (res) => {
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          const artist = json.data?.[0];
+          if (!artist) {
+            console.warn(`[Deezer] "${artistName}" が見つかりませんでした`);
+            return resolve(null);
+          }
+          if ((artist.nb_fan ?? 0) <= 10000) {
+            console.warn(`[Deezer] "${artistName}" nb_fan=${artist.nb_fan} (1万以下) → スキップ`);
+            return resolve(null);
+          }
+          const imageUrl = artist.picture_medium || artist.picture;
+          console.log(`[Deezer] "${artistName}" nb_fan=${artist.nb_fan} → ${imageUrl}`);
+          resolve({ imageUrl, artistName: artist.name });
+        } catch (e) {
+          console.warn(`[Deezer] "${artistName}" レスポンス解析失敗: ${e.message}`);
+          resolve(null);
+        }
+      });
+    }).on('error', (e) => {
+      console.warn(`[Deezer] "${artistName}" リクエストエラー: ${e.message}`);
+      resolve(null);
+    });
+  });
+}
+
+// 画像URLをプロキシして返す（CORS回避）
+function proxyImage(imageUrl, res) {
+  try {
+    const parsed = new URL(imageUrl);
+    https.request(
+      { hostname: parsed.hostname, path: parsed.pathname + parsed.search, method: 'GET' },
+      (upstream) => {
+        if (upstream.statusCode >= 300 && upstream.statusCode < 400 && upstream.headers.location) {
+          proxyImage(upstream.headers.location, res);
+          return;
+        }
+        res.writeHead(upstream.statusCode === 200 ? 200 : upstream.statusCode, {
+          'Content-Type': upstream.headers['content-type'] || 'image/jpeg',
+          'Cache-Control': 'public, max-age=86400',
+        });
+        upstream.pipe(res);
+      }
+    ).on('error', (e) => {
+      console.error('[Img] プロキシエラー:', e.message);
+      res.writeHead(502); res.end();
+    }).end();
+  } catch (e) {
+    console.error('[Img] URL解析エラー:', e.message);
+    res.writeHead(400); res.end();
+  }
+}
+
 // ─── HTTPサーバー ─────────────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin',  '*');
@@ -209,41 +273,26 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
-  // ─── /avatar : YouTube動画URL → チャンネルアイコンURL を返す ──────────────────
+  // ─── /avatar : アーティスト名 → Deezer画像URL を返す ────────────────────────
+  // リクエスト body: { artistName: string }
+  // レスポンス:     { imageUrl, artistName }
   if (req.method === 'POST' && req.url === '/avatar') {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', async () => {
       try {
-        const { ytUrl } = JSON.parse(body);
-        if (!ytUrl) throw new Error('ytUrl が指定されていません');
+        const { artistName } = JSON.parse(body);
+        if (!artistName) throw new Error('artistName が指定されていません');
 
-        // 1. oEmbed でチャンネルURLを取得（サーバー側なのでCORS不要）
-        const oembedData = await new Promise((resolve, reject) => {
-          const encoded = encodeURIComponent(ytUrl);
-          https.get(`https://www.youtube.com/oembed?url=${encoded}&format=json`, (res) => {
-            let d = '';
-            res.on('data', c => d += c);
-            res.on('end', () => {
-              try { resolve(JSON.parse(d)); } catch(e) { reject(e); }
-            });
-          }).on('error', reject);
-        });
+        const result = await searchArtistImage(artistName);
+        if (!result || !result.imageUrl) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `"${artistName}" の画像が見つかりませんでした` }));
+          return;
+        }
 
-        const authorUrl = oembedData.author_url || '';
-        const chMatch = authorUrl.match(/youtube\.com\/channel\/([A-Za-z0-9_-]+)/);
-        const hdMatch = authorUrl.match(/youtube\.com\/@([^/?#]+)/);
-        const ytId = chMatch ? chMatch[1] : hdMatch ? hdMatch[1] : null;
-        if (!ytId) throw new Error(`チャンネルID取得失敗: author_url="${authorUrl}"`);
-
-        // 2. unavatar URL を組み立て（APIキーがあればクエリに付与）
-        const avatarUrl = UNAVATAR_KEY
-          ? `https://unavatar.io/youtube/${ytId}?apiKey=${UNAVATAR_KEY}`
-          : `https://unavatar.io/youtube/${ytId}`;
-
-        console.log(`[Avatar] ${oembedData.author_name} (${ytId}) => ${avatarUrl}`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ avatarUrl, ytId, authorName: oembedData.author_name }));
+        res.end(JSON.stringify(result));
       } catch (e) {
         console.error('[Avatar Error]', e.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -253,7 +302,24 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'POST' && req.url === '/notion-data') {
+  // ─── /avatar-img/ : 画像をプロキシして返す ───────────────────────────────────
+  if (req.method === 'GET' && req.url.startsWith('/avatar-img/')) {
+    const encoded = req.url.slice('/avatar-img/'.length).split('?')[0];
+    if (!encoded) { res.writeHead(400); res.end('imageUrl required'); return; }
+
+    let imageUrl;
+    try {
+      imageUrl = Buffer.from(encoded, 'base64').toString('utf-8');
+      new URL(imageUrl); // 妥当性チェック
+    } catch {
+      res.writeHead(400); res.end('invalid imageUrl'); return;
+    }
+
+    proxyImage(imageUrl, res);
+    return;
+  }
+
+    if (req.method === 'POST' && req.url === '/notion-data') {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', async () => {
@@ -289,6 +355,14 @@ server.listen(PORT, () => {
   console.log('');
   console.log('  ✅  Creator Network サーバー起動中');
   console.log(`  🌐  http://localhost:${PORT} をブラウザで開いてください`);
+  console.log('');
+  console.log('  必要な環境変数:');
+  console.log('    NOTION_TOKEN — Notion 統合トークン');
+  console.log('');
+  console.log('  アーティストアイコンは Deezer API からアーティスト名で取得します（APIキー不要）');
+  console.log('');
+  console.log('  起動例:');
+  console.log('    NOTION_TOKEN=xxx node server.js');
   console.log('');
   console.log('  Ctrl+C で停止');
   console.log('');
