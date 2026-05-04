@@ -34,7 +34,7 @@ function notionRequest(method, apiPath, body) {
         'Authorization':  `Bearer ${NOTION_TOKEN}`,
         'Notion-Version': '2022-06-28',
         'Content-Type':   'application/json',
-        'Content-Length': Buffer.byteLength(postData),
+        'Content-Length': Buffer.byteLength(postData || ''),
       },
     };
     const req = https.request(options, (res) => {
@@ -208,8 +208,7 @@ async function buildData() {
 //        c. tracklist の曲タイトルと workTitles のいずれかが部分一致
 //   3. どれも満たさなければ null を返す
 
-// Deezer の genre_id: J-Pop=52, K-Pop=129
-const ALLOWED_GENRE_IDS = new Set([52, 129]);
+const ALLOWED_GENRE_IDS = new Set([52, 129]); // J-Pop=52, K-Pop=129
 
 // tracklist URL から曲タイトル一覧を取得
 function fetchTracklist(tracklistUrl) {
@@ -419,7 +418,8 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-    if (req.method === 'POST' && req.url === '/notion-data') {
+  // ─── /notion-data : Notion から全データを取得して返す ───────────────────────
+  if (req.method === 'POST' && req.url === '/notion-data') {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', async () => {
