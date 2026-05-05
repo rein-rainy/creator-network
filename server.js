@@ -8,6 +8,7 @@ const http  = require('http');
 const fs    = require('fs');
 const path  = require('path');
 const https = require('https');
+const { exec } = require('child_process');
 
 const PORT              = process.env.PORT || 3000;
 const NOTION_TOKEN      = process.env.NOTION_TOKEN;
@@ -447,77 +448,110 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // ─── /youtube-video-search : タイトル → YouTube動画直リンクとサムネイル ───────
+  // ─── /youtube-video-search : yt-dlpでタイトル検索 → 動画情報取得 ───────
   // リクエスト body: { titles: string[] }
-  // レスポンス:     { results: { [title]: { videoId, url, thumbnail, title } | null } }
+  // レスポンス:     { results: { [title]: { url, thumbnail, title } | null } }
+  //
+  // 最適化ポイント:
+  //   - ytsearch<N>: で複数タイトルを1プロセスにまとめる（プロセス起動コスト削減）
+  //   - BATCH_SIZE=5: 1プロセスの件数を減らして1バッチの完了を早める
+  //   - 全バッチを同時並列（Promise.all）で実行 → レイテンシ最小化
+  //   - 結果はタイトル順で先頭1件ずつキャッシュ・マッピング
   if (req.method === 'POST' && req.url === '/youtube-video-search') {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', async () => {
       try {
-        if (!YOUTUBE_API_KEY) throw new Error('YOUTUBE_API_KEY が設定されていません');
         const { titles = [] } = JSON.parse(body);
-        const uniqueTitles = [...new Set(titles.map(t => String(t || '').trim()).filter(Boolean))].slice(0, 50);
+        const uniqueTitles = [...new Set(titles.map(t => String(t || '').trim()).filter(Boolean))].slice(0, 100);
+        const startTime = Date.now();
 
-        function youtubeSearch(title) {
-          if (youtubeVideoCache.has(title)) return Promise.resolve(youtubeVideoCache.get(title));
-          return new Promise((resolve, reject) => {
-            const params = new URLSearchParams({
-              part: 'snippet',
-              type: 'video',
-              maxResults: '1',
-              q: title,
-              key: YOUTUBE_API_KEY,
-            });
-            const apiPath = `/youtube/v3/search?${params.toString()}`;
-            https.request({
-              hostname: 'www.googleapis.com',
-              path: apiPath,
-              method: 'GET',
-              headers: { 'Accept': 'application/json' },
-            }, (r) => {
-              let raw = '';
-              r.on('data', c => raw += c);
-              r.on('end', () => {
-                try {
-                  const data = JSON.parse(raw);
-                  if (r.statusCode !== 200) {
-                    reject(new Error(data?.error?.message || `YouTube Data API → ${r.statusCode}`));
-                    return;
-                  }
-                  const item = data.items?.[0];
-                  const videoId = item?.id?.videoId || '';
-                  const result = videoId ? {
-                    videoId,
-                    url: `https://www.youtube.com/watch?v=${videoId}`,
-                    thumbnail: item.snippet?.thumbnails?.medium?.url
-                            || item.snippet?.thumbnails?.default?.url
-                            || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
-                    title: item.snippet?.title || title,
-                  } : null;
-                  youtubeVideoCache.set(title, result);
-                  resolve(result);
-                } catch (e) {
-                  reject(e);
-                }
+        // キャッシュ済みを除外
+        const uncached = uniqueTitles.filter(t => !youtubeVideoCache.has(t));
+        const results = {};
+        uniqueTitles.forEach(t => {
+          if (youtubeVideoCache.has(t)) results[t] = youtubeVideoCache.get(t);
+        });
+
+        console.log(`[yt-dlp] 全体開始 titles=${uniqueTitles.length} (キャッシュ済み=${uniqueTitles.length - uncached.length} 未取得=${uncached.length})`);
+
+        // 複数タイトルを1回のyt-dlp呼び出しでまとめて検索
+        // ytsearch<N>: クエリを連結し、--dump-json で各結果を1行JSONで出力させる
+        function ytDlpBatchSearch(titlesBatch) {
+          return new Promise((resolve) => {
+            const t0 = Date.now();
+            // 各タイトルに対して ytsearch1: を個別クエリとして並べる
+            // yt-dlpは "ytsearch1:A" "ytsearch1:B" ... のように複数URLを受け付ける
+            const args = titlesBatch
+              .map(t => `"ytsearch1:${t.replace(/"/g, '\\"').replace(/`/g, '\\`')}"`)
+              .join(' ');
+            // --extractor-args で不要な追加リクエスト(dash/hls等)をスキップして高速化
+            const cmd = `yt-dlp ${args} --dump-json --no-playlist --skip-download --quiet --flat-playlist --no-warnings --extractor-args "youtube:skip=dash,hls,translated_subs" --ignore-errors`;
+
+            exec(cmd, { timeout: 15000, maxBuffer: 1024 * 1024 * 10 }, (error, stdout) => {
+              const duration = Date.now() - t0;
+              console.log(`[yt-dlp] バッチ${titlesBatch.length}件 実行時間: ${duration}ms`);
+
+              if (!stdout && error) {
+                console.warn(`[yt-dlp] バッチ失敗: ${error.message}`);
+                resolve(titlesBatch.map(() => null));
+                return;
+              }
+
+              // stdout は改行区切りのJSONオブジェクト列
+              const lines = stdout.trim().split('\n').filter(Boolean);
+              const parsed = lines.map(line => {
+                try { return JSON.parse(line); } catch { return null; }
+              }).filter(Boolean);
+
+              // yt-dlpの出力順はクエリ順と一致する（ytsearch1:ごとに1件）
+              const mapped = titlesBatch.map((title, idx) => {
+                const data = parsed[idx] ?? null;
+                if (!data) return null;
+                // flat-playlistモードではwebpage_urlがない場合があるのでidから構築
+                const url = data.webpage_url ?? (data.id ? `https://www.youtube.com/watch?v=${data.id}` : null);
+                if (!url) return null;
+                return {
+                  url,
+                  thumbnail: data.thumbnail ?? (data.thumbnails?.[0]?.url ?? null),
+                  title: data.title || title,
+                };
               });
-            }).on('error', reject).end();
+
+              resolve(mapped);
+            });
           });
         }
 
-        const results = {};
-        for (const title of uniqueTitles) {
-          try { results[title] = await youtubeSearch(title); }
-          catch (e) {
-            console.warn(`[YouTube] "${title}" 検索失敗: ${e.message}`);
-            results[title] = null;
-          }
+        // BATCH_SIZE=5: 1プロセスあたりの件数を減らすことで1バッチの完了が早くなる
+        // 全バッチを同時並列で投げる（yt-dlp起動コストはあるがレイテンシ重視）
+        const BATCH_SIZE = 5;
+
+        const batches = [];
+        for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
+          batches.push(uncached.slice(i, i + BATCH_SIZE));
         }
 
+        // 全バッチを同時に並列実行（完了次第キャッシュに積む）
+        const settled = await Promise.all(
+          batches.map(batch => ytDlpBatchSearch(batch))
+        );
+        settled.forEach((batchResults, bi) => {
+          const batch = batches[bi];
+          batchResults.forEach((result, j) => {
+            const title = batch[j];
+            youtubeVideoCache.set(title, result);
+            results[title] = result;
+          });
+        });
+
+        const totalDuration = Date.now() - startTime;
+        const successCount = Object.values(results).filter(Boolean).length;
+        console.log(`[yt-dlp] 全体完了: ${totalDuration}ms (成功=${successCount}/${uniqueTitles.length})`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ results }));
       } catch (e) {
-        console.error('[YouTube Error]', e.message);
+        console.error('[yt-dlp Error]', e.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
       }
@@ -914,6 +948,7 @@ const server = http.createServer(async (req, res) => {
         if (!nameId) throw new Error('nameId が指定されていません');
 
         console.log(`[IMDB-Filmography] ${nameId} 取得開始`);
+        const startTime = Date.now();
 
         function imdbFilmographyPage(pageToken = '') {
           return new Promise((resolve, reject) => {
@@ -954,12 +989,13 @@ const server = http.createServer(async (req, res) => {
         let page = 0;
         do {
           const data = await imdbFilmographyPage(nextPageToken);
+          console.log(`[IMDB-Filmography] page ${page + 1} 取得完了 (${Date.now() - startTime}ms)`);
           const credits = Array.isArray(data?.credits) ? data.credits : [];
           allCredits.push(...credits);
           totalCount = data?.totalCount ?? totalCount;
           nextPageToken = data?.nextPageToken ?? '';
           page++;
-        } while (nextPageToken && page < 20);
+        } while (nextPageToken && page < 2);
 
         const result = {
           credits: allCredits,
@@ -967,6 +1003,7 @@ const server = http.createServer(async (req, res) => {
           nextPageToken: nextPageToken || undefined,
         };
 
+        console.log(`[IMDB-Filmography] 全体時間: ${Date.now() - startTime}ms`);
         console.log(`[IMDB-Filmography] ${nameId} 完了 — ${allCredits.length}/${result.totalCount}件`);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));

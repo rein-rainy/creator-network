@@ -454,10 +454,26 @@ g.nd { transition: opacity .18s; }
 .fmg-thumb {
   width: 88px; height: 54px; object-fit: cover; border-radius: var(--r-sm);
   flex-shrink: 0; background: var(--bg3);
+  opacity: 0;
+  transition: opacity .4s ease;
+}
+.fmg-thumb.loaded {
+  opacity: 1;
 }
 .fmg-ph {
   width: 88px; height: 54px; border-radius: var(--r-sm);
-  flex-shrink: 0; background: rgba(0,0,0,.22);
+  flex-shrink: 0;
+  background: linear-gradient(90deg, var(--bg3) 25%, var(--bg2) 50%, var(--bg3) 75%);
+  background-size: 200% 100%;
+  animation: fmg-skeleton 1.4s ease-in-out infinite;
+}
+.fmg-ph.done {
+  background: rgba(0,0,0,.22);
+  animation: none;
+}
+@keyframes fmg-skeleton {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
 }
 .fmg-info { flex: 1; min-width: 0; }
 .fmg-title {
@@ -1961,41 +1977,83 @@ function normalizeFilmographyCredits(fmgData) {
 
 async function enrichFmgYoutubeLinks(body) {
   const rows = [...body.querySelectorAll('.fmg-item[data-yt-title]')];
-  const titles = [...new Set(rows.map(row => row.dataset.ytTitle).filter(Boolean))]
+
+  const updateRow = (row) => {
+    const title = row.dataset.ytTitle;
+    const result = _fmgYoutubeCache.get(title);
+    const thumbSlot = row.querySelector('.fmg-thumb, .fmg-ph');
+
+    // 結果なし（取得失敗 or 見つからなかった）→ スケルトン解除だけ
+    if (!result?.url) {
+      if (thumbSlot?.classList.contains('fmg-ph')) thumbSlot.classList.add('done');
+      return;
+    }
+
+    row.href = result.url;
+
+    if (!result.thumbnail || !thumbSlot || thumbSlot.classList.contains('loaded')) {
+      if (thumbSlot?.classList.contains('fmg-ph')) thumbSlot.classList.add('done');
+      return;
+    }
+
+    const img = document.createElement('img');
+    img.className = 'fmg-thumb';
+    img.alt = '';
+    img.loading = 'lazy';
+    img.onload = () => img.classList.add('loaded');
+    img.onerror = () => {
+      const ph = document.createElement('div');
+      ph.className = 'fmg-ph done';
+      img.replaceWith(ph);
+    };
+    img.src = result.thumbnail;
+    thumbSlot.replaceWith(img);
+  };
+
+  // 1. すでにキャッシュにあるものは即座に反映
+  rows.forEach(updateRow);
+
+  // 2. キャッシュにないタイトルを抽出
+  const titlesToFetch = [...new Set(rows.map(row => row.dataset.ytTitle).filter(Boolean))]
     .filter(title => !_fmgYoutubeCache.has(title));
 
-  if (titles.length) {
-    try {
-      const r = await fetch('/youtube-video-search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ titles }),
+  if (!titlesToFetch.length) return;
+
+  // 3. BATCH_SIZE=5 で細かく分割し、全チャンクを同時並列で投げる
+  //    → yt-dlpが1プロセスで処理する件数を減らすことで1バッチの完了が早くなり、
+  //      取得できたものからすぐ表示できる。awaitしないので全バッチが同時に走る。
+  const BATCH_SIZE = 5;
+  for (let i = 0; i < titlesToFetch.length; i += BATCH_SIZE) {
+    const chunk = titlesToFetch.slice(i, i + BATCH_SIZE);
+    fetch('/youtube-video-search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ titles: chunk }),
+    })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      // 取得できなかったタイトルはnullとしてキャッシュしスケルトン解除
+      chunk.forEach(title => {
+        if (!_fmgYoutubeCache.has(title)) _fmgYoutubeCache.set(title, null);
       });
-      if (r.ok) {
-        const data = await r.json();
-        Object.entries(data.results || {}).forEach(([title, result]) => {
+      if (data?.results) {
+        Object.entries(data.results).forEach(([title, result]) => {
           _fmgYoutubeCache.set(title, result || null);
         });
       }
-    } catch (e) {
-      console.warn('[YouTube]', e);
-    }
+      // このチャンクに関連する行をまとめて更新
+      chunk.forEach(title => {
+        rows.filter(r => r.dataset.ytTitle === title).forEach(updateRow);
+      });
+    })
+    .catch(err => {
+      console.warn('[YouTube Batch Error]', err);
+      chunk.forEach(title => {
+        _fmgYoutubeCache.set(title, null);
+        rows.filter(r => r.dataset.ytTitle === title).forEach(updateRow);
+      });
+    });
   }
-
-  rows.forEach(row => {
-    const result = _fmgYoutubeCache.get(row.dataset.ytTitle);
-    if (!result?.url) return;
-    row.href = result.url;
-    const thumbSlot = row.querySelector('.fmg-thumb, .fmg-ph');
-    if (!result.thumbnail || !thumbSlot) return;
-    const img = document.createElement('img');
-    img.className = 'fmg-thumb';
-    img.src = result.thumbnail;
-    img.alt = '';
-    img.loading = 'lazy';
-    img.onerror = () => { img.outerHTML = '<div class="fmg-ph"></div>'; };
-    thumbSlot.replaceWith(img);
-  });
 }
 
 async function openFilmographyModal(personName, avatarSrc) {
@@ -2146,10 +2204,7 @@ function renderFmgList(type) {
     const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(title)}`;
     const titleType = fmgTitleType(item);
 
-    const thumbHtml = imgUrl
-      ? `<img class="fmg-thumb" src="/imdb-img/${btoa(imgUrl)}" alt="" loading="lazy"
-             onerror="this.outerHTML='<div class=&quot;fmg-ph&quot;></div>'">`
-      : '<div class="fmg-ph"></div>';
+    const thumbHtml = '<div class="fmg-ph"></div>';
 
     const roleLabels = item._fmgRoles || [];
     const roleHtml = roleLabels.map(role => `<span class="fmg-role">${esc(role)}</span>`).join('');
