@@ -198,15 +198,24 @@ async function getCreatorRelPropName() {
 }
 
 // ─── メイン処理 ───────────────────────────────────────────────────────────────
-async function buildData() {
-  console.log('[Notion] 3つのDBを並列取得中...');
-  const [works, creatorResult, artistResult] = await Promise.all([
-    fetchWorks(),
-    fetchPersonDB(DB_CREATORS, 'Creator'),
-    fetchPersonDB(DB_ARTISTS,  'Artist'),
-  ]);
-  const creatorMap = creatorResult.map;
-  const artistMap  = artistResult.map;
+async function buildData(targetDb = 'all') {
+  let works = [];
+  let creatorResult = { map: {}, persons: [] };
+  let artistResult = { map: {}, persons: [] };
+
+  if (targetDb === 'creators') {
+    console.log('[Notion] Creator DBのみ取得中...');
+    creatorResult = await fetchPersonDB(DB_CREATORS, 'Creator');
+  } else {
+    console.log('[Notion] 3つのDBを並列取得中...');
+    [works, creatorResult, artistResult] = await Promise.all([
+      fetchWorks(),
+      fetchPersonDB(DB_CREATORS, 'Creator'),
+      fetchPersonDB(DB_ARTISTS,  'Artist'),
+    ]);
+  }
+  const creatorMap = creatorResult.map; // creators のみの場合も空ではない
+  const artistMap  = artistResult.map;   // creators のみの場合も空ではない
   const creators   = creatorResult.persons;
   const artists    = artistResult.persons;
 
@@ -216,28 +225,30 @@ async function buildData() {
   const keys = [...keySet];
 
   // クリエイターリレーションのプロパティ名を特定
-  let creatorRelProp = '';
-  // 一度全プロパティを見て、リレーション先がクリエイターDBのものを探す
-  if (works.length > 0) {
-    const firstPage = works[0];
-    for (const [name, prop] of Object.entries(firstPage.properties)) {
-      if (prop.type === 'relation') {
-        // prop.relation は現在の値の配列だが、database_id はここにはない
-        // なので名前ベース、もしくは適当な ID が creatorMap にあるかで判断する
-        const hasCreatorId = prop.relation.some(r => creatorMap[r.id]);
-        if (hasCreatorId) { creatorRelProp = name; break; }
+  let creatorRelProp = 'Director / Creator'; // デフォルト値
+  if (targetDb !== 'creators') { // creators のみ取得時は作品データがないためスキップ
+    // 一度全プロパティを見て、リレーション先がクリエイターDBのものを探す
+    if (works.length > 0) {
+      const firstPage = works[0];
+      for (const [name, prop] of Object.entries(firstPage.properties)) {
+        if (prop.type === 'relation') {
+          // prop.relation は現在の値の配列だが、database_id はここにはない
+          // なので名前ベース、もしくは適当な ID が creatorMap にあるかで判断する
+          const hasCreatorId = prop.relation.some(r => creatorMap[r.id]);
+          if (hasCreatorId) { creatorRelProp = name; break; }
+        }
       }
     }
-  }
-  // 見つからなかった場合は明示的にDBスキーマから取得（初回のみなどの最適化は後で）
-  if (!creatorRelProp) {
-    creatorRelProp = await getCreatorRelPropName() || 'Director / Creator';
+    // 見つからなかった場合は明示的にDBスキーマから取得
+    if (creatorRelProp === 'Director / Creator') { // デフォルト値のままなら検出を試みる
+      creatorRelProp = await getCreatorRelPropName() || 'Director / Creator';
+    }
   }
 
   // 行データに変換
   const rows = works.map(page => {
     const row = {};
-    keys.forEach(k => {
+    keys.forEach(k => { // works が空の場合はこのループは実行されない
       row[k] = extractValue(page.properties[k], creatorMap, artistMap);
     });
     row['_notionPageId'] = page.id; // Notionページへのリンク用
@@ -1105,8 +1116,9 @@ const server = http.createServer(async (req, res) => {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', async () => {
+      const { database } = JSON.parse(body || '{}'); // リクエストボディから database パラメータを取得
       try {
-        const { rows, creators, artists, count } = await buildData();
+        const { rows, creators, artists, count } = await buildData(database); // database パラメータを渡す
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ results: rows, creators, artists, count }));
       } catch (e) {

@@ -1631,12 +1631,19 @@ function showPanel(d) {
         const r = await fetch('/notion-data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ database: 'creators' }), // クリエイターDBのみを取得するようにリクエスト
         });
         const data = await r.json();
         if (data.creators) {
           ALL_CREATORS = data.creators;
-          loadCreatorMeta([...ALL_CREATORS, ...(data.artists || [])]);
+          // 既存のアーティスト情報を消さないよう、取得したクリエイターのメタ情報のみを個別に更新
+          data.creators.forEach(c => {
+            const name = (c.Name || '').trim();
+            if (name) {
+              const sns = c.SNS ? [snsFromUrl(c.SNS)].filter(Boolean) : [];
+              creatorMetaMap.set(name, { role: c.Role || '', sns, avatar: c.Avatar || '' });
+            }
+          });
         }
       } catch (err) {
         console.error('[AddCreator Re-fetch Error]', err);
@@ -1719,46 +1726,64 @@ function showAddCreatorDropdown(anchor, workNode) {
   window.addEventListener('mousedown', close);
 }
 
-async function addCreatorToWork(workNode, creator) {
-  showToast(`${creator.Name} を追加中...`, 'ok');
-  try {
-    const r = await fetch('/notion-add-creator', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        workId: workNode.notionPageId,
-        creatorPageId: creator.notionPageId
-      }),
-    });
-    const d = await r.json();
-    if (d.error) throw new Error(d.error);
-
-    showToast(`✓ ${creator.Name} を追加しました`);
-    
-    // UIを即座に更新するために、ローカルのデータを更新して再描画
-    if (!workNode._creatorRelIds) workNode._creatorRelIds = [];
-    workNode._creatorRelIds.push(creator.notionPageId);
-    
-    const creatorId = `d_${creator.Name}`;
-    // リンクを追加
-    const newLink = { source: creatorId, target: workNode.id, ltype: 'dir' };
-    AL.push(newLink);
-    
-    // 詳細パネルを再描画
-    showPanel(workNode);
-    
-    // グラフを再描画（リンク追加）
-    const { nodes: vNodes, links: vLinks } = filteredData();
-    draw(vNodes, vLinks);
-    
-    // ハイライトを維持
-    selId = workNode.id;
-    applyHL(selId, 'click');
-
-  } catch (e) {
-    console.error(e);
-    showToast(`✗ 追加失敗: ${e.message}`, 'err');
+function addCreatorToWork(workNode, creator) {
+  // 1. ローカル状態を即座に更新 (Optimistic Update)
+  if (!workNode._creatorRelIds) workNode._creatorRelIds = [];
+  if (workNode._creatorRelIds.includes(creator.notionPageId)) {
+    showToast(`${creator.Name} は既に追加されています`, 'ok');
+    return;
   }
+
+  workNode._creatorRelIds.push(creator.notionPageId);
+
+  const creatorId = `d_${creator.Name}`;
+  let targetNode = AN.find(n => n.id === creatorId);
+
+  // グラフ上にノードが存在しない場合は新規作成（そのクリエイターの初表示など）
+  if (!targetNode) {
+    const sns = creator.SNS ? [snsFromUrl(creator.SNS)].filter(Boolean) : [];
+    targetNode = {
+      id: creatorId,
+      type: 'director',
+      label: creator.Name,
+      role: creator.Role,
+      sns: sns,
+      avatar: creator.Avatar,
+      works: [workNode.id]
+    };
+    AN.push(targetNode);
+  } else if (!targetNode.works.includes(workNode.id)) {
+    targetNode.works.push(workNode.id);
+  }
+
+  // リンクを追加
+  AL.push({ source: creatorId, target: workNode.id, ltype: 'dir' });
+
+  // UIを即座に再描画
+  showPanel(workNode);
+  const { nodes: vNodes, links: vLinks } = filteredData();
+  draw(vNodes, vLinks);
+  selId = workNode.id;
+  applyHL(selId, 'click');
+
+  // 2. バックグラウンドで非同期にNotionへリクエスト（awaitしない）
+  fetch('/notion-add-creator', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      workId: workNode.notionPageId,
+      creatorPageId: creator.notionPageId
+    }),
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.error) throw new Error(d.error);
+  })
+  .catch(e => {
+    console.error(e);
+    showToast(`✗ Notion同期失敗: ${e.message}`, 'err');
+    // 必要に応じてここでALから削除するなどのロールバック処理を行えます
+  });
 }
 
 /* ═══════════════════════════════════════════
