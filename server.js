@@ -12,6 +12,7 @@ const https = require('https');
 const PORT              = process.env.PORT || 3000;
 const NOTION_TOKEN      = process.env.NOTION_TOKEN;
 const DEEPL_API_KEY     = process.env.DEEPL_API_KEY;
+const YOUTUBE_API_KEY   = process.env.YOUTUBE_API_KEY;
 const DB_WORKS       = '18860905b37f80358899e51e4e514f92'; // メイン（作品）
 const DB_CREATORS    = '2d260905b37f80fbae0de6cb61a03091'; // クリエイター
 const DB_ARTISTS     = '18860905b37f8093954fdb1bb9602c18'; // アーティスト
@@ -22,6 +23,15 @@ if (!NOTION_TOKEN) {
   process.exit(1);
 }
 const HTML_FILE      = path.join(__dirname, 'creator-network.html');
+
+function imdbSuggestionUrl(query) {
+  const encoded = encodeURIComponent(query).replace(/%20/g, '_');
+  const first = (encoded[0] || 'x').toLowerCase();
+  const bucket = /^[a-z0-9]$/.test(first) ? first : 'x';
+  return `https://v3.sg.media-imdb.com/suggestion/${bucket}/${encoded}.json`;
+}
+
+const youtubeVideoCache = new Map();
 
 // ─── Notion API リクエスト ────────────────────────────────────────────────────
 function notionRequest(method, apiPath, body) {
@@ -437,6 +447,84 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ─── /youtube-video-search : タイトル → YouTube動画直リンクとサムネイル ───────
+  // リクエスト body: { titles: string[] }
+  // レスポンス:     { results: { [title]: { videoId, url, thumbnail, title } | null } }
+  if (req.method === 'POST' && req.url === '/youtube-video-search') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        if (!YOUTUBE_API_KEY) throw new Error('YOUTUBE_API_KEY が設定されていません');
+        const { titles = [] } = JSON.parse(body);
+        const uniqueTitles = [...new Set(titles.map(t => String(t || '').trim()).filter(Boolean))].slice(0, 50);
+
+        function youtubeSearch(title) {
+          if (youtubeVideoCache.has(title)) return Promise.resolve(youtubeVideoCache.get(title));
+          return new Promise((resolve, reject) => {
+            const params = new URLSearchParams({
+              part: 'snippet',
+              type: 'video',
+              maxResults: '1',
+              q: title,
+              key: YOUTUBE_API_KEY,
+            });
+            const apiPath = `/youtube/v3/search?${params.toString()}`;
+            https.request({
+              hostname: 'www.googleapis.com',
+              path: apiPath,
+              method: 'GET',
+              headers: { 'Accept': 'application/json' },
+            }, (r) => {
+              let raw = '';
+              r.on('data', c => raw += c);
+              r.on('end', () => {
+                try {
+                  const data = JSON.parse(raw);
+                  if (r.statusCode !== 200) {
+                    reject(new Error(data?.error?.message || `YouTube Data API → ${r.statusCode}`));
+                    return;
+                  }
+                  const item = data.items?.[0];
+                  const videoId = item?.id?.videoId || '';
+                  const result = videoId ? {
+                    videoId,
+                    url: `https://www.youtube.com/watch?v=${videoId}`,
+                    thumbnail: item.snippet?.thumbnails?.medium?.url
+                            || item.snippet?.thumbnails?.default?.url
+                            || `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+                    title: item.snippet?.title || title,
+                  } : null;
+                  youtubeVideoCache.set(title, result);
+                  resolve(result);
+                } catch (e) {
+                  reject(e);
+                }
+              });
+            }).on('error', reject).end();
+          });
+        }
+
+        const results = {};
+        for (const title of uniqueTitles) {
+          try { results[title] = await youtubeSearch(title); }
+          catch (e) {
+            console.warn(`[YouTube] "${title}" 検索失敗: ${e.message}`);
+            results[title] = null;
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ results }));
+      } catch (e) {
+        console.error('[YouTube Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // ─── /imdb-search : タイトル → IMDB musicVideo tt ID を取得 ─────────────────
   // リクエスト body: { title: string }
   // レスポンス:     { tt, title, year, image } | { notFound: true } | { error }
@@ -535,11 +623,10 @@ const server = http.createServer(async (req, res) => {
           return [...queries].filter(q => q && q.length >= 2 && q.length <= 120);
         }
         // IMDB Suggestion API
-        // https://v3.sg.media-imdb.com/suggestion/x/<query>.json
+        // https://v3.sg.media-imdb.com/suggestion/<first-letter>/<query>.json
         async function imdbSuggest(query) {
           return new Promise((resolve) => {
-            const encoded = encodeURIComponent(query).replace(/%20/g, '_');
-            const url = `https://v3.sg.media-imdb.com/suggestion/x/${encoded}.json`;
+            const url = imdbSuggestionUrl(query);
             https.get(url, { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } }, (res) => {
               let data = '';
               res.on('data', c => data += c);
@@ -774,8 +861,7 @@ const server = http.createServer(async (req, res) => {
         const { name } = JSON.parse(body);
         if (!name) throw new Error('name が指定されていません');
 
-        const encoded = encodeURIComponent(name).replace(/%20/g, '_');
-        const url = `https://v3.sg.media-imdb.com/suggestion/x/${encoded}.json`;
+        const url = imdbSuggestionUrl(name);
 
         const result = await new Promise((resolve) => {
           https.get(url, { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } }, (res) => {
@@ -794,9 +880,10 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // qid === 'name' の候補を優先
-        const found = result.d.find(item => item.qid === 'name')
-                   ?? result.d.find(item => item.id?.startsWith('nm'));
+        const nameItems = result.d.filter(item => item.id?.startsWith('nm'));
+        const found = nameItems.find(item => /\bDirector\b/i.test(item.s || ''))
+                   ?? nameItems.find(item => item.qid === 'name')
+                   ?? nameItems[0];
         if (!found) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ notFound: true }));
@@ -932,6 +1019,7 @@ server.listen(PORT, () => {
   console.log('');
   console.log('  必要な環境変数:');
   console.log('    NOTION_TOKEN — Notion 統合トークン');
+  console.log('    YOUTUBE_API_KEY — YouTube Data API v3 キー（フィルモグラフィー動画リンク用）');
   console.log('');
   console.log('  アーティストアイコンは Deezer API からアーティスト名で取得します（APIキー不要）');
   console.log('');

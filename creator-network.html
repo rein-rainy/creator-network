@@ -1329,7 +1329,7 @@ function showPanel(d) {
       selId = null;
     };
     searchBtn.onclick = () => {
-      window.open('https://www.google.com/search?q=' + encodeURIComponent(d.label), '_blank');
+      openFilmographyModal(d.label, d.avatar || '');
     };
   }
 
@@ -1859,6 +1859,7 @@ async function fetchImdbInfo(panelId, workTitle) {
 ═══════════════════════════════════════════ */
 const _fmgNameIdCache = new Map();  // name → nameId
 const _fmgDataCache   = new Map();  // nameId → filmography data
+const _fmgYoutubeCache = new Map(); // title → YouTube video data | null
 
 // カテゴリ種別ラベル
 function fmgTypeLabel(titleType) {
@@ -1956,6 +1957,45 @@ function normalizeFilmographyCredits(fmgData) {
       : [];
 
   return credits.filter(item => item && typeof item === 'object');
+}
+
+async function enrichFmgYoutubeLinks(body) {
+  const rows = [...body.querySelectorAll('.fmg-item[data-yt-title]')];
+  const titles = [...new Set(rows.map(row => row.dataset.ytTitle).filter(Boolean))]
+    .filter(title => !_fmgYoutubeCache.has(title));
+
+  if (titles.length) {
+    try {
+      const r = await fetch('/youtube-video-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ titles }),
+      });
+      if (r.ok) {
+        const data = await r.json();
+        Object.entries(data.results || {}).forEach(([title, result]) => {
+          _fmgYoutubeCache.set(title, result || null);
+        });
+      }
+    } catch (e) {
+      console.warn('[YouTube]', e);
+    }
+  }
+
+  rows.forEach(row => {
+    const result = _fmgYoutubeCache.get(row.dataset.ytTitle);
+    if (!result?.url) return;
+    row.href = result.url;
+    const thumbSlot = row.querySelector('.fmg-thumb, .fmg-ph');
+    if (!result.thumbnail || !thumbSlot) return;
+    const img = document.createElement('img');
+    img.className = 'fmg-thumb';
+    img.src = result.thumbnail;
+    img.alt = '';
+    img.loading = 'lazy';
+    img.onerror = () => { img.outerHTML = '<div class="fmg-ph"></div>'; };
+    thumbSlot.replaceWith(img);
+  });
 }
 
 async function openFilmographyModal(personName, avatarSrc) {
@@ -2114,7 +2154,7 @@ function renderFmgList(type) {
     const roleLabels = item._fmgRoles || [];
     const roleHtml = roleLabels.map(role => `<span class="fmg-role">${esc(role)}</span>`).join('');
 
-    return `<a class="fmg-item" href="${esc(youtubeUrl)}" target="_blank" rel="noopener">
+    return `<a class="fmg-item" href="${esc(youtubeUrl)}" target="_blank" rel="noopener" data-yt-title="${esc(title)}">
       ${thumbHtml}
       <div class="fmg-info">
         <div class="fmg-title">${esc(title)}</div>
@@ -2129,6 +2169,7 @@ function renderFmgList(type) {
   }).join('');
 
   body.innerHTML = html;
+  enrichFmgYoutubeLinks(body);
 }
 
 function closeFilmographyModal() {
