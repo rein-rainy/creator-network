@@ -228,7 +228,7 @@ body {
 #info-panel.mode-modal {
   top: 50%; left: 50%;
   transform: translate(-50%, -48%) scale(.97);
-  width: 90vmin;
+  width: min(92vmin, 680px);
   max-height: 88vh;
 }
 #info-panel.mode-modal.visible {
@@ -293,6 +293,8 @@ body {
 .pw-ph    { width: 96px; height: 58px; flex-shrink: 0; background: var(--bg3); border-radius: var(--r-sm); display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--text-dim); }
 .pw-title { font-size: 14px; font-weight: 500; line-height: 1.4; color: var(--text); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; margin-bottom: 5px; }
 .pw-cat   { font-size: 13px; color: var(--text-dim); }
+
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── work cards ── */
 .wcard {
@@ -359,6 +361,118 @@ g.nd { transition: opacity .18s; }
   font-size: 10px; font-weight: 500; color: var(--text-2);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; line-height: 1.3;
 }
+
+/* ── filmography modal ── */
+#filmography-overlay {
+  position: fixed; inset: 0; z-index: 8000;
+  background: rgba(0,0,0,.6); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+  display: none; align-items: center; justify-content: center;
+}
+#filmography-overlay.visible { display: flex; }
+#filmography-modal {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r-xl); width: min(90vw, 720px); max-height: 85vh;
+  display: flex; flex-direction: column;
+  animation: slideIn .22s cubic-bezier(.4,0,.2,1);
+  overflow: hidden;
+}
+#filmography-modal .fm2-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 18px 20px 14px; border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+#filmography-modal .fm2-avatar {
+  width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0;
+  background: var(--node-dir); overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; font-weight: 700; color: #fff;
+}
+#filmography-modal .fm2-avatar img { width: 100%; height: 100%; object-fit: cover; }
+#filmography-modal .fm2-title-wrap { flex: 1; min-width: 0; }
+#filmography-modal .fm2-name { font-size: 17px; font-weight: 700; color: var(--text); }
+#filmography-modal .fm2-sub  { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+#filmography-modal .fm2-close {
+  width: 30px; height: 30px; border: none; background: var(--bg3);
+  color: var(--text-dim); border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+  transition: all .15s; flex-shrink: 0;
+}
+#filmography-modal .fm2-close:hover { background: var(--border-hi); color: var(--text); }
+#filmography-modal .fm2-google {
+  width: 30px; height: 30px; border: none; background: var(--bg3);
+  color: var(--text-dim); border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all .15s; flex-shrink: 0;
+}
+#filmography-modal .fm2-google:hover { background: var(--border-hi); color: var(--text); }
+
+#filmography-modal .fm2-tabs {
+  display: flex; gap: 0; padding: 12px 20px 0; flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+#filmography-modal .fm2-tab {
+  padding: 7px 16px; border: none; background: none;
+  font-size: 13px; font-weight: 500; color: var(--text-2);
+  cursor: pointer; border-bottom: 2px solid transparent;
+  transition: all .15s; margin-bottom: -1px; font-family: var(--sans);
+}
+#filmography-modal .fm2-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+#filmography-modal .fm2-tab:hover:not(.active) { color: var(--text); }
+
+#filmography-modal .fm2-body {
+  flex: 1; overflow-y: auto; padding: 0;
+  min-height: 0;
+}
+#filmography-modal .fm2-body::-webkit-scrollbar { width: 4px; }
+#filmography-modal .fm2-body::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+#filmography-modal .fm2-loading {
+  display: flex; align-items: center; justify-content: center;
+  gap: 10px; padding: 48px 20px; color: var(--text-2); font-size: 13px;
+}
+#filmography-modal .fm2-spinner {
+  width: 20px; height: 20px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin .8s linear infinite; flex-shrink: 0;
+}
+#filmography-modal .fm2-empty {
+  padding: 40px 20px; text-align: center; color: var(--text-dim); font-size: 13px;
+}
+#filmography-modal .fm2-error {
+  padding: 20px; color: var(--accent-red); font-size: 13px;
+  background: rgba(255,69,58,.08); border-radius: var(--r-sm); margin: 16px 20px;
+}
+
+/* フィルモグラフィーの各作品行 */
+.fmg-item {
+  display: flex; gap: 12px; padding: 12px 20px;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+  text-decoration: none; color: inherit; transition: background .12s;
+  align-items: flex-start;
+}
+.fmg-item:hover { background: var(--bg3); }
+.fmg-item:last-child { border-bottom: none; }
+.fmg-thumb {
+  width: 88px; height: 54px; object-fit: cover; border-radius: var(--r-sm);
+  flex-shrink: 0; background: var(--bg3);
+}
+.fmg-ph {
+  width: 88px; height: 54px; border-radius: var(--r-sm);
+  flex-shrink: 0; background: rgba(0,0,0,.22);
+}
+.fmg-info { flex: 1; min-width: 0; }
+.fmg-title {
+  font-size: 13px; font-weight: 600; color: var(--text);
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; line-height: 1.4; margin-bottom: 4px;
+}
+.fmg-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.fmg-year { font-size: 11px; color: var(--text-dim); }
+.fmg-role { font-size: 11px; color: var(--text-2); font-weight: 500; }
+.fmg-type {
+  font-size: 10px; font-weight: 600; padding: 2px 7px;
+  border-radius: 100px; background: var(--bg3); color: var(--text-dim);
+}
+.fmg-rating { font-size: 11px; color: var(--accent2); font-weight: 600; }
 
 /* ── context menu ── */
 @keyframes ctxAppear { from { opacity:0; transform:scale(.95); } }
@@ -462,6 +576,87 @@ g.nd { transition: opacity .18s; }
 #notion-toast.show { display: block; }
 #notion-toast.ok  { border-color: var(--accent);     color: var(--accent); }
 #notion-toast.err { border-color: var(--accent-red); color: var(--accent-red); }
+
+/* ── IMDB section ── */
+.imdb-section { border-top: 1px solid var(--border); padding: 0 14px; }
+.imdb-section-title {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-dim); padding: 14px 0 10px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.imdb-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: rgba(245,197,24,0.15); border: 1px solid rgba(245,197,24,0.35);
+  color: rgb(245,197,24); font-size: 10px; font-weight: 700;
+  padding: 2px 8px; border-radius: 4px; letter-spacing: .03em;
+}
+.imdb-meta-row {
+  padding: 0 0 14px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.imdb-info-grid {
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.imdb-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 500; padding: 3px 10px;
+  background: var(--bg3); border-radius: 100px; color: var(--text-2); white-space: nowrap;
+}
+.imdb-chip.rating { background: rgba(245,197,24,0.12); color: rgb(220,170,0); font-weight: 700; }
+.imdb-chip.runtime { background: rgba(0,145,255,0.10); color: var(--accent); }
+.imdb-plot {
+  font-size: 12px; color: var(--text-2); line-height: 1.65;
+  border-left: 2px solid var(--border); padding-left: 12px;
+}
+.imdb-person-grid {
+  display: flex; gap: 8px; overflow-x: auto;
+  -webkit-overflow-scrolling: touch; scrollbar-width: none;
+  padding: 0 20px 16px;
+}
+.imdb-person-grid::-webkit-scrollbar { display: none; }
+.imdb-person-card {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  flex-shrink: 0; width: 72px; cursor: default;
+}
+.imdb-person-avatar {
+  width: 52px; height: 52px; border-radius: 50%;
+  overflow: hidden; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg3); border: 1.5px solid var(--border);
+  font-size: 18px; font-weight: 700; color: var(--text-dim);
+}
+.imdb-person-avatar img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
+.imdb-person-name {
+  font-size: 10px; font-weight: 600; color: var(--text);
+  text-align: center; line-height: 1.3;
+  overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  word-break: break-all; width: 100%;
+}
+.imdb-person-role {
+  font-size: 9px; font-weight: 500; color: var(--text-dim);
+  text-align: center; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; width: 100%;
+}
+.imdb-sub-title {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-dim); padding: 10px 0 8px;
+}
+.imdb-loading {
+  padding: 20px 0; text-align: center; font-size: 12px; color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.imdb-loading-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--text-dim);
+  animation: imdbDotPulse 1.2s ease-in-out infinite;
+}
+.imdb-loading-dot:nth-child(2) { animation-delay: .2s; }
+.imdb-loading-dot:nth-child(3) { animation-delay: .4s; }
+@keyframes imdbDotPulse { 0%,80%,100% { opacity:.2; transform:scale(.8); } 40% { opacity:1; transform:scale(1); } }
+.imdb-not-found { padding: 16px 0; font-size: 12px; color: var(--text-dim); }
+.imdb-error { padding: 14px 0; color: var(--accent-red); font-size: 12px; }
 
 /* ── graph loading overlay ── */
 #graph-loading-overlay {
@@ -586,6 +781,26 @@ g.nd { transition: opacity .18s; }
   </div>
 </div>
 
+<div id="filmography-overlay">
+  <div id="filmography-modal">
+    <div class="fm2-header">
+      <div class="fm2-avatar" id="fm2-avatar"></div>
+      <div class="fm2-title-wrap">
+        <div class="fm2-name" id="fm2-name"></div>
+        <div class="fm2-sub" id="fm2-sub"></div>
+      </div>
+      <button class="fm2-google" id="fm2-google" title="Googleで検索">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+      <button class="fm2-close" id="fm2-close">✕</button>
+    </div>
+    <div class="fm2-tabs" id="fm2-tabs"></div>
+    <div class="fm2-body" id="fm2-body"></div>
+  </div>
+</div>
+
 <div id="notion-toast"></div>
 <div id="graph-loading-overlay">
   <div class="glo-spinner"></div>
@@ -612,6 +827,11 @@ g.nd { transition: opacity .18s; }
       <div class="ph-name" id="pn"></div>
     </div>
     <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+      <button class="ph-close" id="pc-notion" title="Notionで開く" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+      </button>
       <button class="ph-close" id="pc-search" title="このクリエイターを検索" style="display:none">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -744,7 +964,8 @@ function buildGraph(rows) {
     const cats = (row['Category'] || '').split(',').map(c => c.trim()).filter(Boolean);
     const th = thumbUrl(url);
     const wid = `w${i}`;
-    ensure(wid, 'work', title, { url, th, cats });
+    const notionPageId = (row['_notionPageId'] || '').replace(/-/g, '');
+    ensure(wid, 'work', title, { url, th, cats, notionPageId });
     xnames(row['Director / Creator'] || '').forEach(d => {
       const did = `d_${d}`;
       const meta = getCreatorMeta(d);
@@ -1045,6 +1266,9 @@ function showPanel(d) {
   document.getElementById('pt').style.color = col;
   document.getElementById('pn').textContent = d.label;
 
+  // IMDB panel ID（work用、関数スコープで管理）
+  let _imdbPanelId = null;
+
   // ph アバター更新
   const phAvatar = document.getElementById('ph-avatar');
   if (d.type === 'work') {
@@ -1081,10 +1305,20 @@ function showPanel(d) {
 
   const hideBtn = document.getElementById('pc-hide');
   const searchBtn = document.getElementById('pc-search');
+  const notionBtn = document.getElementById('pc-notion');
   if (d.type === 'work') {
     hideBtn.style.display = 'none';
     searchBtn.style.display = 'none';
+    if (d.notionPageId) {
+      notionBtn.style.display = 'flex';
+      notionBtn.onclick = () => {
+        window.open('https://www.notion.so/' + d.notionPageId, '_blank');
+      };
+    } else {
+      notionBtn.style.display = 'none';
+    }
   } else {
+    notionBtn.style.display = 'none';
     hideBtn.style.display = 'flex';
     searchBtn.style.display = 'flex';
     hideBtn.onclick = () => {
@@ -1113,7 +1347,7 @@ function showPanel(d) {
     html += (d.cats || []).map(c => `<span class="wc-tag" style="margin-right:5px;margin-bottom:5px;display:inline-block;font-size:12px;padding:4px 10px">${esc(c)}</span>`).join('');
     html += `</div>`;
 
-    // --- 参加クリエイター（director のみ）---
+    // --- 参加クリエイター（director）横スクロールカード ---
     const workPersons = [];
     AL.forEach(l => {
       const s = lid(l.source), t = lid(l.target);
@@ -1124,20 +1358,30 @@ function showPanel(d) {
           workPersons.push({ person });
       }
     });
-    // role あり優先、同じ条件内は名前順
     workPersons.sort((a, b) => {
-      const ar = a.person.role ? 1 : 0, br = b.person.role ? 1 : 0;
-      if (br !== ar) return br - ar;
+      // スコア: アイコンあり & 名前ロール一致=0, アイコンあり=1, 名前ロール一致=2, 残り=3
+      function personScore(p) {
+        const hasAvatar = !!(p.avatar);
+        const hasRole   = !!(p.role && p.role.trim());
+        if (hasAvatar && hasRole) return 0;
+        if (hasAvatar)            return 1;
+        if (hasRole)              return 2;
+        return 3;
+      }
+      const sa = personScore(a.person), sb = personScore(b.person);
+      if (sa !== sb) return sa - sb;
+      // スコアが同じ場合: ロール名でグループ化してから名前順
+      const ra = a.person.role || '', rb = b.person.role || '';
+      if (ra !== rb) return ra.localeCompare(rb, 'ja');
       return a.person.label.localeCompare(b.person.label, 'ja');
     });
     if (workPersons.length) {
-      // タイトルと横スクロールカードを同一ブロック（仕切り線なし）に
       html += `<div style="border-top:1px solid var(--border);padding:10px 14px 14px">`;
       html += `<div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);padding:2px 0 10px">参加クリエイター</div>`;
       html += `<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none">`;
       workPersons.forEach(({ person }) => {
-        const roleText = person.role || 'Creator';
-        const initial  = [...person.label][0] || '?';
+        const roleText  = person.role || 'Creator';
+        const initial   = [...person.label][0] || '?';
         const avatarUrl = person.avatar || '';
         const avatarInner = avatarUrl
           ? `<img src="${esc(avatarUrl)}" alt=""
@@ -1153,7 +1397,7 @@ function showPanel(d) {
           onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
           onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
           <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
-                      background:var(--node-art);overflow:hidden;
+                      background:var(--node-dir);overflow:hidden;
                       display:flex;align-items:center;justify-content:center">
             ${avatarInner}
           </div>
@@ -1169,6 +1413,23 @@ function showPanel(d) {
       });
       html += `</div></div>`;
     }
+
+    // IMDB セクション（パネルオープン時に自動取得）
+    _imdbPanelId = `imdb_${Date.now()}`;
+    html += `<div id="imdb-section-${esc(_imdbPanelId)}" class="imdb-section">
+      <div class="imdb-section-title">
+        <span>IMDb 情報</span>
+        <span class="imdb-badge">IMDb</span>
+      </div>
+      <div id="imdb-found-${esc(_imdbPanelId)}"></div>
+      <div id="imdb-body-${esc(_imdbPanelId)}">
+        <div class="imdb-loading">
+          <div class="imdb-loading-dot"></div>
+          <div class="imdb-loading-dot"></div>
+          <div class="imdb-loading-dot"></div>
+        </div>
+      </div>
+    </div>`;
   } else {
     const works = (d.works || []).map(wid => AN.find(n => n.id === wid)).filter(Boolean);
     const sl = d.type === 'director' ? `制作作品 (${works.length})` : `出演作品 (${works.length})`;
@@ -1286,7 +1547,599 @@ function showPanel(d) {
       showPanel(person);
     });
   });
+
+  // work パネルを開いた瞬間にIMDB情報を自動取得
+  if (d.type === 'work' && _imdbPanelId) {
+    fetchImdbInfo(_imdbPanelId, d.label);
+  }
 }
+
+/* ═══════════════════════════════════════════
+   IMDB INTEGRATION
+═══════════════════════════════════════════ */
+const _imdbCache       = new Map(); // tt → data
+const _imdbTtCache     = new Map(); // workTitle → tt | 'NOT_FOUND'
+const _translateCache  = new Map(); // 原文 → 訳文
+
+async function translatePlot(text) {
+  if (!text) return text;
+  if (_translateCache.has(text)) return _translateCache.get(text);
+  try {
+    const r = await fetch('/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const d = await r.json();
+    if (d.translated) { _translateCache.set(text, d.translated); return d.translated; }
+  } catch (e) { console.warn('[DeepL]', e); }
+  return text; // 失敗時は原文を返す
+}
+
+function categoryLabel(cat) {
+  const map = {
+    director: '監督', writer: '脚本', producer: 'プロデューサー',
+    composer: '音楽', cinematographer: '撮影', editor: '編集',
+    production_designer: 'プロダクションデザイン',
+    casting_director: 'キャスティング',
+    costume_designer: '衣装',
+    self: '本人出演', archive_footage: 'アーカイブ映像',
+    archive_sound: 'アーカイブ音声',
+  };
+  return map[cat] || cat;
+}
+
+function imdbProxyImg(url) {
+  if (!url) return null;
+  return `/imdb-img/${btoa(url)}`;
+}
+
+function personImgHtml(imgUrl, phIcon, imgClass, phClass) {
+  if (imgUrl) {
+    return `<img class="${esc(imgClass)}" src="${esc(imdbProxyImg(imgUrl))}" alt="" loading="lazy"
+              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+            <div class="${esc(phClass)}" style="display:none">${phIcon}</div>`;
+  }
+  return `<div class="${esc(phClass)}">${phIcon}</div>`;
+}
+
+function renderImdbData(panelId, data) {
+  const body    = document.getElementById(`imdb-body-${panelId}`);
+  const foundEl = document.getElementById(`imdb-found-${panelId}`);
+  if (!body) return;
+
+  if (data.notFound) {
+    body.innerHTML = `<div class="imdb-not-found">IMDbに情報が見つかりませんでした</div>`;
+    return;
+  }
+
+  // ── ヘッダー: タイトル・年・評価 ──────────────────────────────────
+  if (foundEl) {
+    let chips = '';
+    if (data.rating) chips += `<span class="imdb-chip rating">★ ${data.rating}</span>`;
+    if (data.votes)  chips += `<span class="imdb-chip">${Number(data.votes).toLocaleString('ja-JP')} votes</span>`;
+    if (data.year)   chips += `<span class="imdb-chip">${data.year}</span>`;
+    foundEl.innerHTML = `
+      <div style="padding:4px 0 10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px">
+        <span class="imdb-badge">IMDb</span>
+        <span style="font-size:13px;font-weight:600;color:var(--text)">${esc(data.title || '')}</span>
+        ${chips}
+      </div>`;
+  }
+
+  const directors = data.directors || [];
+  const cast      = data.cast      || [];
+  const crew      = data.crew      || [];
+  const writers   = data.writers   || [];
+
+  // クルー重複排除（writersがcrewに含まれる場合）
+  const crewNames = new Set(crew.map(p => p.name));
+  const allCrew   = [
+    ...directors.map(p => ({ ...p, category: 'director' })),
+    ...writers.map(p => ({ ...p, category: 'writer' })).filter(p => !crewNames.has(p.name)),
+    ...crew,
+  ];
+
+  let html = '';
+
+  // ── 基本情報: ジャンル・上映時間・あらすじ ───────────────────────────
+  const infoChips = [];
+  if (data.runtime) infoChips.push(`<span class="imdb-chip runtime">${data.runtime}分</span>`);
+  (data.genres || []).forEach(g => infoChips.push(`<span class="imdb-chip">${esc(g)}</span>`));
+  if (infoChips.length || data.plot) {
+    html += `<div class="imdb-meta-row">`;
+    if (infoChips.length) html += `<div class="imdb-info-grid">${infoChips.join('')}</div>`;
+    if (data.plot) html += `<div class="imdb-plot">${esc(data.plot)}</div>`;
+    html += `</div>`;
+  }
+
+  // work-person-btn と同じカードUI（横スクロール）、クリックでGoogle検索
+  // onclick は data-name 属性経由で安全に渡す（JSON.stringify を HTML属性に直書きするとSyntaxError）
+  const imdbPersonCard = (name, role, imgSrc, accentColor) => {
+    const initial  = [...name][0] || '?';
+    const showRole = role && role.trim() && role.trim().toLowerCase() !== name.trim().toLowerCase();
+    const avatarInner = imgSrc
+      ? `<img src="${esc(imgSrc)}" alt="" style="width:100%;height:100%;object-fit:cover"
+           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+         <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`
+      : `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`;
+    return `
+      <button class="imdb-search-card" data-name="${esc(name)}"
+        style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
+               width:fit-content;max-width:200px;flex-shrink:0;
+               background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
+               padding:10px 12px;cursor:pointer;text-align:left;transition:all .15s;font-family:var(--sans)"
+        onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
+        onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
+        <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
+                    background:${accentColor};overflow:hidden;
+                    display:flex;align-items:center;justify-content:center">
+          ${avatarInner}
+        </div>
+        <div style="min-width:0;overflow:hidden">
+          <div style="font-size:11px;font-weight:700;color:var(--text);
+                      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                      line-height:1.4;margin-bottom:2px">${esc(name)}</div>
+          ${showRole ? `<div style="font-size:10px;font-weight:500;color:var(--text-2);
+                      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                      line-height:1.3">${esc(role)}</div>` : ''}
+        </div>
+      </button>`;
+  };
+
+
+  // role の優先度順（数値が小さいほど先）
+  const ROLE_ORDER = ['director','writer','producer','composer','cinematographer','editor','production_designer','casting_director','costume_designer'];
+  function roleRank(cat) {
+    const i = ROLE_ORDER.indexOf(cat);
+    return i === -1 ? ROLE_ORDER.length : i;
+  }
+
+  // ── クリエイター（監督・スタッフ）ロールごとにセクション分け ────────────
+  if (allCrew.length) {
+    // ロールごとにグループ化（優先度順を保持）
+    const roleGroups = new Map();
+    [...allCrew]
+      .sort((a, b) => roleRank(a.category) - roleRank(b.category))
+      .forEach(p => {
+        const key = p.category || '';
+        if (!roleGroups.has(key)) roleGroups.set(key, []);
+        roleGroups.get(key).push(p);
+      });
+
+    // 各グループ内: アイコンあり & creatorMetaに登録=0, アイコンあり=1, creatorMetaに登録=2, 残り=3 → 名前順
+    roleGroups.forEach(persons => {
+      persons.sort((a, b) => {
+        function crewScore(p) {
+          const hasImg = !!(p.image);
+          const inMeta = creatorMetaMap.has(p.name || '');
+          if (hasImg && inMeta) return 0;
+          if (hasImg)           return 1;
+          if (inMeta)           return 2;
+          return 3;
+        }
+        const sa = crewScore(a), sb = crewScore(b);
+        if (sa !== sb) return sa - sb;
+        return (a.name || '').localeCompare(b.name || '', 'ja');
+      });
+    });
+
+    html += `<div class="imdb-sub-title">クリエイター (${allCrew.length}人)</div>`;
+    html += `<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:10px">`;
+    roleGroups.forEach((persons, cat) => {
+      persons.forEach(p => {
+        const name   = p.name || '';
+        const role   = p.job  ? p.job : categoryLabel(p.category);
+        const imgSrc = p.image ? imdbProxyImg(p.image) : '';
+        html += imdbPersonCard(name, role, imgSrc, 'var(--node-dir)');
+      });
+    });
+    html += `</div>`;
+  }
+
+  // ── 出演者 ───────────────────────────────────────────────────────────
+  if (cast.length) {
+    const castLimit = 30;
+    // アイコンあり & 名前=characters[0]=0, アイコンあり=1, 名前=characters[0]=2, 残りはcharacters毎に名前順
+    const sortedCast = [...cast].sort((a, b) => {
+      function castScore(p) {
+        const hasImg      = !!(p.image);
+        const nameMatchCh = !!(p.characters && p.characters.length && p.name && p.name === p.characters[0]);
+        if (hasImg && nameMatchCh) return 0;
+        if (hasImg)                return 1;
+        if (nameMatchCh)           return 2;
+        return 3;
+      }
+      const sa = castScore(a), sb = castScore(b);
+      if (sa !== sb) return sa - sb;
+      // スコア3同士はcharacters[0]毎にまとめてから名前順
+      if (sa === 3) {
+        const ca = (a.characters && a.characters[0]) || '', cb = (b.characters && b.characters[0]) || '';
+        if (ca !== cb) return ca.localeCompare(cb, 'ja');
+      }
+      return (a.name || '').localeCompare(b.name || '', 'ja');
+    });
+    html += `<div class="imdb-sub-title">出演 (${cast.length}人)</div>`;
+    html += `<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:10px">`;
+    sortedCast.slice(0, castLimit).forEach(p => {
+      const name   = p.name || '';
+      const role   = (p.characters && p.characters.length) ? p.characters[0] : categoryLabel(p.category) || '';
+      const imgSrc = p.image ? imdbProxyImg(p.image) : '';
+      html += imdbPersonCard(name, role, imgSrc, 'var(--node-art)');
+    });
+    html += `</div>`;
+    if (cast.length > castLimit) {
+      html += `<div style="font-size:11px;color:var(--text-dim);padding-bottom:4px">他 ${cast.length - castLimit} 人</div>`;
+    }
+  }
+
+  if (!html) html = `<div class="imdb-not-found">データなし</div>`;
+  body.innerHTML = html;
+
+  // カードクリック → フィルモグラフィー表示（IMDb nameId を検索）
+  body.querySelectorAll('.imdb-search-card').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const name = btn.dataset.name;
+      const imgSrc = btn.querySelector('img')?.src || '';
+      if (name) openFilmographyModal(name, imgSrc);
+    });
+  });
+}
+
+async function fetchImdbInfo(panelId, workTitle) {
+  const body    = document.getElementById(`imdb-body-${panelId}`);
+  const foundEl = document.getElementById(`imdb-found-${panelId}`);
+  if (!body) return;
+
+  try {
+    // ── 1) tt 取得 ────────────────────────────────────────────────
+    let tt = _imdbTtCache.get(workTitle);
+
+    if (!tt) {
+      const r1 = await fetch('/imdb-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: workTitle }),
+      });
+      if (!r1.ok) throw new Error(`検索失敗 (${r1.status})`);
+      const d1 = await r1.json();
+
+      if (d1.error) throw new Error(d1.error);
+
+      if (d1.notFound) {
+        _imdbTtCache.set(workTitle, 'NOT_FOUND');
+        renderImdbData(panelId, { notFound: true });
+        return;
+      }
+
+      tt = d1.tt;
+      _imdbTtCache.set(workTitle, tt);
+      if (foundEl) foundEl.textContent = d1.title || '';
+    }
+
+    if (tt === 'NOT_FOUND') {
+      renderImdbData(panelId, { notFound: true });
+      return;
+    }
+
+    // ── 2) キャッシュ確認 ─────────────────────────────────────────
+    if (_imdbCache.has(tt)) {
+      renderImdbData(panelId, _imdbCache.get(tt));
+      return;
+    }
+
+    // ── 3) キャスト・クルー取得（サーバー経由で api.imdbapi.dev を叩く）────
+    const r2 = await fetch('/imdb-crew', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tt }),
+    });
+    if (!r2.ok) throw new Error(`クルー取得失敗 (${r2.status})`);
+    const d2 = await r2.json();
+    if (d2.error) throw new Error(d2.error);
+
+    // plot を日本語に翻訳してからキャッシュ・描画
+    const plotJa = d2.plot ? await translatePlot(d2.plot) : d2.plot;
+    const d2ja = { ...d2, tt, plot: plotJa };
+    _imdbCache.set(tt, d2ja);
+    renderImdbData(panelId, d2ja);
+
+  } catch (e) {
+    console.error('[IMDB]', e);
+    if (body) {
+      body.innerHTML = `<div class="imdb-error">
+        <span style="font-weight:600">取得エラー:</span> ${esc(e.message)}
+      </div>`;
+    }
+  }
+}
+
+/* ═══════════════════════════════════════════
+   FILMOGRAPHY MODAL
+═══════════════════════════════════════════ */
+const _fmgNameIdCache = new Map();  // name → nameId
+const _fmgDataCache   = new Map();  // nameId → filmography data
+
+// カテゴリ種別ラベル
+function fmgTypeLabel(titleType) {
+  const map = {
+    musicVideo: 'Music Video', movie: '映画', tvSeries: 'TVシリーズ',
+    tvMiniSeries: 'TVミニシリーズ', tvMovie: 'TV映画', short: '短編',
+    video: 'ビデオ', tvSpecial: 'TVスペシャル', tvShort: 'TV短編',
+    videoGame: 'ゲーム', podcastSeries: 'ポッドキャスト',
+  };
+  return map[titleType] || titleType || '不明';
+}
+
+// フィルモグラフィーのカテゴリタブ一覧（優先順）
+const FMG_TAB_ORDER = ['musicVideo', 'movie', 'tvSeries', 'tvMiniSeries', 'tvMovie', 'short', 'video', 'tvSpecial'];
+
+let _fmgCurrentTab  = null;
+let _fmgCurrentName = null;
+let _fmgGroups      = {};
+
+function fmgTitleObject(item) {
+  return item?.title && typeof item.title === 'object' ? item.title : {};
+}
+
+function fmgTitleType(item) {
+  const title = fmgTitleObject(item);
+  return item?.titleType ?? item?.type ?? title.titleType ?? title.type ?? item?.kind ?? 'unknown';
+}
+
+function fmgCreditTitle(item) {
+  const title = fmgTitleObject(item);
+  if (typeof item?.title === 'string') return item.title;
+  return title.primaryTitle ?? title.originalTitle ?? item?.primaryTitle ?? item?.l ?? item?.titleId ?? item?.id ?? '不明';
+}
+
+function fmgTitleId(item) {
+  const title = fmgTitleObject(item);
+  return item?.tconst ?? item?.titleId ?? title.id ?? item?.id ?? '';
+}
+
+function fmgRawRoleValues(item) {
+  const values = [];
+  const push = (value) => {
+    if (!value) return;
+    if (typeof value === 'string') values.push(value);
+    else if (typeof value === 'object') values.push(value.job ?? value.category ?? value.name ?? value.text ?? '');
+  };
+  push(item?.category);
+  push(item?.job);
+  (Array.isArray(item?.jobs) ? item.jobs : []).forEach(push);
+  (Array.isArray(item?.roles) ? item.roles : []).forEach(push);
+  if (!values.length) (Array.isArray(item?.characters) ? item.characters : []).forEach(push);
+  return values.filter(Boolean);
+}
+
+function fmgRoleLabel(role) {
+  const map = {
+    director: '監督', writer: '脚本', producer: 'プロデューサー',
+    composer: '音楽', cinematographer: '撮影', editor: '編集',
+    production_designer: 'プロダクションデザイン',
+    actor: '出演', actress: '出演', self: '本人出演',
+  };
+  return map[role] || role;
+}
+
+function mergeFilmographyItems(items) {
+  const merged = new Map();
+  items.forEach(item => {
+    const key = fmgTitleId(item) || `${fmgCreditTitle(item)}|${item.year ?? item.startYear ?? fmgTitleObject(item).startYear ?? ''}`;
+    const existing = merged.get(key);
+    if (!existing) {
+      merged.set(key, { ...item, _fmgRoles: fmgRawRoleValues(item) });
+      return;
+    }
+
+    existing._fmgRoles = [...(existing._fmgRoles || []), ...fmgRawRoleValues(item)];
+    const existingTitle = fmgTitleObject(existing);
+    const title = fmgTitleObject(item);
+    if (!existingTitle.primaryImage?.url && title.primaryImage?.url) existing.title = item.title;
+    if (!existing.primaryImage?.url && item.primaryImage?.url) existing.primaryImage = item.primaryImage;
+    if (!existing.rating && item.rating) existing.rating = item.rating;
+  });
+
+  return [...merged.values()].map(item => ({
+    ...item,
+    _fmgRoles: [...new Set((item._fmgRoles || []).map(fmgRoleLabel))],
+  }));
+}
+
+function normalizeFilmographyCredits(fmgData) {
+  const source = fmgData?.filmography ?? fmgData?.credits ?? (Array.isArray(fmgData) ? fmgData : []);
+  const credits = Array.isArray(source)
+    ? source
+    : source && typeof source === 'object'
+      ? Object.values(source).flat()
+      : [];
+
+  return credits.filter(item => item && typeof item === 'object');
+}
+
+async function openFilmographyModal(personName, avatarSrc) {
+  _fmgCurrentName = personName;
+
+  // モーダルを開く
+  const overlay = document.getElementById('filmography-overlay');
+  overlay.classList.add('visible');
+
+  // ヘッダー設定
+  const initial = [...personName][0] || '?';
+  const avatarEl = document.getElementById('fm2-avatar');
+  avatarEl.style.background = 'var(--node-dir)';
+  if (avatarSrc && !avatarSrc.endsWith('/imdb-img/')) {
+    avatarEl.innerHTML = `<img src="${esc(avatarSrc)}" alt="" onerror="this.parentElement.innerHTML='${esc(initial)}'">`;
+  } else {
+    avatarEl.textContent = initial;
+  }
+  document.getElementById('fm2-name').textContent = personName;
+  document.getElementById('fm2-sub').textContent = 'IMDb フィルモグラフィーを読み込み中…';
+  document.getElementById('fm2-google').onclick = () => {
+    window.open(`https://www.google.com/search?q=${encodeURIComponent(personName)}`, '_blank', 'noopener');
+  };
+  document.getElementById('fm2-tabs').innerHTML = '';
+  document.getElementById('fm2-body').innerHTML = `
+    <div class="fm2-loading">
+      <div class="fm2-spinner"></div>フィルモグラフィー取得中…
+    </div>`;
+
+  try {
+    // nameId 取得
+    let nameId = _fmgNameIdCache.get(personName);
+    if (!nameId) {
+      const r1 = await fetch('/imdb-name-search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: personName }),
+      });
+      if (!r1.ok) throw new Error(`nameId取得失敗 (${r1.status})`);
+      const d1 = await r1.json();
+      if (d1.notFound || !d1.nameId) {
+        document.getElementById('fm2-sub').textContent = 'IMDbに情報が見つかりませんでした';
+        document.getElementById('fm2-body').innerHTML = `<div class="fm2-empty">IMDbにこの人物の情報が見つかりませんでした。<br><br><a href="https://www.imdb.com/find?q=${encodeURIComponent(personName)}" target="_blank" style="color:var(--accent)">IMDbで手動検索する →</a></div>`;
+        return;
+      }
+      nameId = d1.nameId;
+      _fmgNameIdCache.set(personName, nameId);
+      // アバター画像を IMDB画像で更新
+      if (d1.image) {
+        avatarEl.innerHTML = `<img src="/imdb-img/${btoa(d1.image)}" alt="" onerror="this.parentElement.textContent='${esc(initial)}'">`;
+      }
+    }
+
+    // フィルモグラフィー取得
+    let fmgData = _fmgDataCache.get(nameId);
+    if (!fmgData) {
+      const r2 = await fetch('/imdb-filmography', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nameId }),
+      });
+      if (!r2.ok) throw new Error(`フィルモグラフィー取得失敗 (${r2.status})`);
+      fmgData = await r2.json();
+      if (fmgData.error) throw new Error(fmgData.error);
+      _fmgDataCache.set(nameId, fmgData);
+    }
+
+    // データを種別ごとにグループ化
+    // api.imdbapi.devのフィルモグラフィーレスポンス形式に対応
+    _fmgGroups = {};
+    const creditArray = normalizeFilmographyCredits(fmgData);
+
+    creditArray.forEach(item => {
+      const type = fmgTitleType(item);
+      if (!_fmgGroups[type]) _fmgGroups[type] = [];
+      _fmgGroups[type].push(item);
+    });
+
+    // 各グループを年降順にソート
+    Object.values(_fmgGroups).forEach(arr => {
+      arr.sort((a, b) => {
+        const titleA = fmgTitleObject(a);
+        const titleB = fmgTitleObject(b);
+        const ya = a.year ?? a.startYear ?? titleA.startYear ?? 0;
+        const yb = b.year ?? b.startYear ?? titleB.startYear ?? 0;
+        return yb - ya;
+      });
+    });
+
+    const availableTypes = FMG_TAB_ORDER.filter(t => _fmgGroups[t]?.length)
+      .concat(Object.keys(_fmgGroups).filter(t => !FMG_TAB_ORDER.includes(t) && _fmgGroups[t]?.length));
+
+    if (!availableTypes.length) {
+      document.getElementById('fm2-sub').textContent = '合計 0 件';
+      document.getElementById('fm2-body').innerHTML = `<div class="fm2-empty">フィルモグラフィー情報が見つかりませんでした。</div>`;
+      return;
+    }
+
+    // タブ生成
+    const tabsEl = document.getElementById('fm2-tabs');
+    tabsEl.innerHTML = '';
+    availableTypes.forEach((type, i) => {
+      const count = mergeFilmographyItems(_fmgGroups[type] || []).length;
+      const btn = document.createElement('button');
+      btn.className = 'fm2-tab' + (i === 0 ? ' active' : '');
+      btn.textContent = `${fmgTypeLabel(type)} (${count})`;
+      btn.dataset.type = type;
+      btn.addEventListener('click', () => {
+        tabsEl.querySelectorAll('.fm2-tab').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _fmgCurrentTab = type;
+        renderFmgList(type);
+      });
+      tabsEl.appendChild(btn);
+    });
+
+    _fmgCurrentTab = availableTypes[0];
+    const totalWorks = availableTypes.reduce((sum, type) => sum + mergeFilmographyItems(_fmgGroups[type] || []).length, 0);
+    document.getElementById('fm2-sub').textContent = `合計 ${totalWorks} 件`;
+    renderFmgList(_fmgCurrentTab);
+
+  } catch (e) {
+    console.error('[Filmography]', e);
+    document.getElementById('fm2-sub').textContent = 'エラーが発生しました';
+    document.getElementById('fm2-body').innerHTML = `
+      <div class="fm2-error">取得エラー: ${esc(e.message)}</div>
+      <div style="padding:12px 20px">
+        <a href="https://www.imdb.com/find?q=${encodeURIComponent(personName)}" target="_blank"
+           style="color:var(--accent);font-size:13px">IMDbで手動検索する →</a>
+      </div>`;
+  }
+}
+
+function renderFmgList(type) {
+  const body = document.getElementById('fm2-body');
+  const items = mergeFilmographyItems(_fmgGroups[type] || []);
+  if (!items.length) {
+    body.innerHTML = `<div class="fm2-empty">この種別の作品はありません</div>`;
+    return;
+  }
+
+  const html = items.map(item => {
+    const titleObj = fmgTitleObject(item);
+    const title   = fmgCreditTitle(item);
+    const year    = item.year ?? item.startYear ?? titleObj.startYear ?? '';
+    const rating  = item.rating?.aggregateRating ?? titleObj.rating?.aggregateRating ?? null;
+    const imgUrl  = titleObj.primaryImage?.url ?? item.primaryImage?.url ?? item.image ?? '';
+    const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(title)}`;
+    const titleType = fmgTitleType(item);
+
+    const thumbHtml = imgUrl
+      ? `<img class="fmg-thumb" src="/imdb-img/${btoa(imgUrl)}" alt="" loading="lazy"
+             onerror="this.outerHTML='<div class=&quot;fmg-ph&quot;></div>'">`
+      : '<div class="fmg-ph"></div>';
+
+    const roleLabels = item._fmgRoles || [];
+    const roleHtml = roleLabels.map(role => `<span class="fmg-role">${esc(role)}</span>`).join('');
+
+    return `<a class="fmg-item" href="${esc(youtubeUrl)}" target="_blank" rel="noopener">
+      ${thumbHtml}
+      <div class="fmg-info">
+        <div class="fmg-title">${esc(title)}</div>
+        <div class="fmg-meta">
+          ${year ? `<span class="fmg-year">${esc(String(year))}</span>` : ''}
+          ${roleHtml}
+          ${titleType && titleType !== type ? `<span class="fmg-type">${esc(fmgTypeLabel(titleType))}</span>` : ''}
+          ${rating ? `<span class="fmg-rating">★ ${rating}</span>` : ''}
+        </div>
+      </div>
+    </a>`;
+  }).join('');
+
+  body.innerHTML = html;
+}
+
+function closeFilmographyModal() {
+  document.getElementById('filmography-overlay').classList.remove('visible');
+  _fmgCurrentName = null;
+}
+
+document.getElementById('fm2-close').addEventListener('click', closeFilmographyModal);
+document.getElementById('filmography-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('filmography-overlay')) closeFilmographyModal();
+});
 
 /* ═══════════════════════════════════════════
    TAG FILTER DROPDOWN

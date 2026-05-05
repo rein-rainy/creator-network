@@ -11,6 +11,7 @@ const https = require('https');
 
 const PORT              = process.env.PORT || 3000;
 const NOTION_TOKEN      = process.env.NOTION_TOKEN;
+const DEEPL_API_KEY     = process.env.DEEPL_API_KEY;
 const DB_WORKS       = '18860905b37f80358899e51e4e514f92'; // メイン（作品）
 const DB_CREATORS    = '2d260905b37f80fbae0de6cb61a03091'; // クリエイター
 const DB_ARTISTS     = '18860905b37f8093954fdb1bb9602c18'; // アーティスト
@@ -190,6 +191,7 @@ async function buildData() {
     keys.forEach(k => {
       row[k] = extractValue(page.properties[k], creatorMap, artistMap);
     });
+    row['_notionPageId'] = page.id; // Notionページへのリンク用
     return row;
   });
 
@@ -415,6 +417,478 @@ const server = http.createServer(async (req, res) => {
     }
 
     proxyImage(imageUrl, res);
+    return;
+  }
+
+  // ─── /imdb-img/ : IMDb画像をプロキシして返す（/avatar-img/ と同じ実装） ────────
+  if (req.method === 'GET' && req.url.startsWith('/imdb-img/')) {
+    const encoded = req.url.slice('/imdb-img/'.length).split('?')[0];
+    if (!encoded) { res.writeHead(400); res.end('imageUrl required'); return; }
+
+    let imageUrl;
+    try {
+      imageUrl = Buffer.from(encoded, 'base64').toString('utf-8');
+      new URL(imageUrl); // 妥当性チェック
+    } catch {
+      res.writeHead(400); res.end('invalid imageUrl'); return;
+    }
+
+    proxyImage(imageUrl, res);
+    return;
+  }
+
+  // ─── /imdb-search : タイトル → IMDB musicVideo tt ID を取得 ─────────────────
+  // リクエスト body: { title: string }
+  // レスポンス:     { tt, title, year, image } | { notFound: true } | { error }
+  if (req.method === 'POST' && req.url === '/imdb-search') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { title } = JSON.parse(body);
+        if (!title) throw new Error('title が指定されていません');
+
+        // ── クエリ候補を生成 ──────────────────────────────────────────────
+        // 例: "ILLIT (아일릿) 'It's Me' Official MV"
+        //   → ["It's Me", "ILLIT It's Me", "ILLIT (아일릿) 'It's Me' Official MV"]
+        function normalizeTitle(raw) {
+          return raw
+            // 1) 異体字クォート・ダッシュを正規化
+            .replace(/[‘’`´]/g, "'")
+            .replace(/[“”]/g, '"')
+            .replace(/[‐‑‒–—―]/g, '-')
+            .replace(/\s*[|｜]\s*/g, ' - ')  // 縦棒をダッシュ区切りに統一
+            .replace(/[・･]/g, ' ')
+            .replace(/　/g, ' ')
+            // 2) 韓国語のみ削除（日本語・漢字は残す）
+            .replace(/[가-힣ᄀ-ᇿ㄰-㆏]/g, "")
+            // 3) 空括弧を削除
+            .replace(/\(\s*\)/g, '').replace(/\[\s*\]/g, '')
+            // 4) 不要語削除（長いフレーズから順に）
+            .replace(/\b(official\s+music\s+video|music\s+video|official\s+video|official\s+mv|official\s+m\/v|official\s+audio|official\s+lyric\s+video|official\s+performance\s+video)\b/gi, '')
+            .replace(/\b(lyric\s+video|lyrics\s+video|lyric\s+ver\.?|performance\s+video|dance\s+video|dance\s+ver\.?|dance\s+practice|dance\s+challenge|dance\s+film)\b/gi, '')
+            .replace(/\b(visualizer|audio\s+only|full\s+ver\.?|short\s+ver\.?|inst\.?|instrumental|karaoke|acapella|a\s+cappella)\b/gi, '')
+            .replace(/\b(official|m\/v|mv|m\.v\.|video|audio|lyric|lyrics|teaser|highlight|preview|trailer|comeback|debut)\b/gi, '')
+            .replace(/\b(feat\.?|ft\.?|prod\.?|produced\s+by|dir\.?|directed\s+by|choreography\s+by|choreo\.?\s+by)\b/gi, '')
+            .replace(/\b(hd|4k|fhd|1080p|720p|remastered|remaster|ver\.?|version|edit|remix|mix|extended|radio\s+edit)\b/gi, '')
+            .replace(/\b(ep\.?|album|single|ost|bgm)\b/gi, '')
+            // 5) 末尾の記号・区切り文字を整理
+            .replace(/[\s\-:_]+$/, '')
+            .replace(/\s{2,}/g, ' ')
+            .trim();
+        }
+
+        function buildQueries(raw) {
+          const queries = new Set();
+          const norm = normalizeTitle(raw);
+
+          // A) クォート内テキストを抽出（最優先：曲タイトルそのもの）
+          //    縮約形アポストロフィ（It's, Don't 等）はクォートと区別して内部に許容する
+          const extractQuoted = (str) => {
+            const out = [];
+            // “…” ・ ‘…’ の対応ペア
+            for (const m of str.matchAll(/‘([^‘’]{2,})’/g)) out.push(m[1].trim());
+            for (const m of str.matchAll(/“([^“”]{2,})”/g)) out.push(m[1].trim());
+            // ASCII ' : 内部の ' は \w'\w （縮約）のみ許容
+            for (const m of str.matchAll(/'((?:[^']|(?<=\w)'(?=\w)){2,})'/g))  out.push(m[1].trim());
+            // ASCII "
+            for (const m of str.matchAll(/"([^"]{2,})"/g)) out.push(m[1].trim());
+            return out.filter(s => s.length > 1);
+          };
+          extractQuoted(raw).forEach(s => queries.add(s.replace(/[‘’]/g, "'")));
+          extractQuoted(norm).forEach(s => queries.add(s));
+
+          // B) ダッシュ・縦棒・コロン区切りで分割 → 後半が曲タイトル、前半がアーティスト
+          const dashSplit = norm.split(/\s*[-:]\s*/);
+          let artistPart = '';
+          let songPart   = '';
+          if (dashSplit.length >= 2) {
+            artistPart = dashSplit[0].replace(/(.*?)/g, '').replace(/[.*?]/g, '').trim();
+            songPart   = dashSplit.slice(1).join(' ').replace(/(.*?)/g, '').replace(/[.*?]/g, '').trim();
+            if (songPart.length > 1)               queries.add(songPart);
+            if (artistPart && songPart.length > 1) queries.add(artistPart + ' ' + songPart);
+          }
+
+          // C) 括弧内テキスト（英数字中心のもの）を曲タイトル候補として追加
+          for (const m of norm.matchAll(/(([^)]{2,}))/g)) {
+            const inner = m[1].trim();
+            const nonAscii = (inner.match(/[^ -]/g) || []).length;
+            if (nonAscii < inner.length * 0.4) queries.add(inner);
+          }
+
+          // D) 正規化済み全体（括弧除去）
+          const cleanFull = norm.replace(/(.*?)/g, '').replace(/[.*?]/g, '').replace(/s{2,}/g, ' ').trim();
+          if (cleanFull.length > 1) queries.add(cleanFull);
+
+          // E) ダッシュ区切りがない場合：先頭語をアーティスト名と仮定して残りを候補に
+          if (dashSplit.length < 2) {
+            const words = cleanFull.split(/s+/);
+            if (words.length >= 3) {
+              queries.add(words.slice(1).join(' '));
+              queries.add(words.slice(2).join(' '));
+            }
+          }
+
+          // F) 最終手段：正規化済み文字列（括弧含む）
+          if (norm.length > 1) queries.add(norm);
+
+          return [...queries].filter(q => q && q.length >= 2 && q.length <= 120);
+        }
+        // IMDB Suggestion API
+        // https://v3.sg.media-imdb.com/suggestion/x/<query>.json
+        async function imdbSuggest(query) {
+          return new Promise((resolve) => {
+            const encoded = encodeURIComponent(query).replace(/%20/g, '_');
+            const url = `https://v3.sg.media-imdb.com/suggestion/x/${encoded}.json`;
+            https.get(url, { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+              let data = '';
+              res.on('data', c => data += c);
+              res.on('end', () => {
+                try { resolve(JSON.parse(data)); }
+                catch { resolve(null); }
+              });
+            }).on('error', () => resolve(null));
+          });
+        }
+
+        const queries = buildQueries(title);
+        console.log(`[IMDB] "${title}" → クエリ候補: ${JSON.stringify(queries)}`);
+
+        let found = null;
+        for (const q of queries) {
+          const json = await imdbSuggest(q);
+          if (!json?.d) continue;
+          const mv = json.d.find(item => item.qid === 'musicVideo')
+                  ?? json.d.find(item => item.q  === 'music video')
+                  ?? json.d.find(item => (item.l || '').toLowerCase().includes(title.toLowerCase().slice(0, 10)));
+          if (mv) {
+            found = { tt: mv.id, title: mv.l, year: mv.y ?? '', image: mv.i?.imageUrl ?? '' };
+            console.log(`[IMDB] ヒット: ${JSON.stringify(found)} (query="${q}")`);
+            break;
+          }
+        }
+
+        if (!found) {
+          console.log(`[IMDB] "${title}" → 見つかりませんでした`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ notFound: true }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(found));
+      } catch (e) {
+        console.error('[IMDB Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ─── /imdb-crew : tt ID → キャスト・クルー情報を api.imdbapi.dev から取得 ────
+  // リクエスト body: { tt: string }
+  // レスポンス:     { title, year, rating, votes, poster, genres, runtime, plot,
+  //                  directors, cast, writers, crew }
+  if (req.method === 'POST' && req.url === '/imdb-crew') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { tt } = JSON.parse(body);
+        if (!tt) throw new Error('tt が指定されていません');
+
+        // api.imdbapi.dev への汎用GETヘルパー
+        function imdbApiGet(apiPath) {
+          return new Promise((resolve, reject) => {
+            const options = {
+              hostname: 'api.imdbapi.dev',
+              path: apiPath,
+              method: 'GET',
+              headers: { 'Accept': 'application/json' },
+            };
+            https.request(options, (r) => {
+              let data = '';
+              r.on('data', c => data += c);
+              r.on('end', () => {
+                if (r.statusCode !== 200) {
+                  reject(new Error(`imdbapi.dev ${apiPath} → ${r.statusCode}`));
+                  return;
+                }
+                try { resolve(JSON.parse(data)); }
+                catch (e) { reject(e); }
+              });
+            }).on('error', reject).end();
+          });
+        }
+
+        // タイトル情報とクレジットを並列取得（creditsは失敗してもOK）
+        console.log(`[IMDB-Crew] ${tt} 取得開始`);
+        let titleData, creditsData;
+        try {
+          [titleData, creditsData] = await Promise.all([
+            imdbApiGet(`/titles/${tt}`),
+            imdbApiGet(`/titles/${tt}/credits?pageSize=50`).catch(e => {
+              console.warn(`[IMDB-Crew] credits取得失敗（タイトル情報のみ返します）: ${e.message}`);
+              return null;
+            }),
+          ]);
+        } catch (e) {
+          throw new Error(`タイトル情報取得失敗: ${e.message}`);
+        }
+
+        // ── タイトル情報を整形 ──────────────────────────────────────
+        const result = {
+          title:   titleData.primaryTitle ?? titleData.originalTitle ?? '',
+          year:    titleData.startYear ?? '',
+          rating:  titleData.rating?.aggregateRating ?? null,
+          votes:   titleData.rating?.voteCount ?? null,
+          poster:  titleData.primaryImage?.url ?? '',
+          genres:  titleData.genres ?? [],
+          runtime: titleData.runtimeSeconds ? Math.round(titleData.runtimeSeconds / 60) : null,
+          plot:    titleData.plot ?? '',
+          directors: [],
+          cast:      [],
+          writers:   [],
+          crew:      [],
+        };
+
+        // ── クレジットをカテゴリ別に分類 ────────────────────────────
+        const credits = creditsData?.credits ?? [];
+        for (const c of credits) {
+          const name  = c.name?.displayName ?? c.name?.primaryName ?? '';
+          const image = c.name?.primaryImage?.url ?? '';
+          const cat   = c.category ?? '';
+          const job   = c.job ?? '';
+
+          const person = { name, image };
+
+          if (cat === 'director') {
+            result.directors.push(person);
+          } else if (cat === 'actor' || cat === 'actress' || cat === 'self') {
+            result.cast.push({
+              name, image,
+              characters: c.characters ?? [],
+              category: cat,
+            });
+          } else if (cat === 'writer') {
+            result.writers.push(person);
+          } else {
+            result.crew.push({ name, image, job, category: cat });
+          }
+        }
+
+        // 次ページが存在する場合は cast / crew をさらに取得（最大100件まで）
+        let nextToken = creditsData?.nextPageToken;
+        let page = 1;
+        while (nextToken && page < 2) {
+          const more = await imdbApiGet(`/titles/${tt}/credits?pageSize=50&pageToken=${encodeURIComponent(nextToken)}`);
+          for (const c of (more.credits ?? [])) {
+            const name  = c.name?.displayName ?? c.name?.primaryName ?? '';
+            const image = c.name?.primaryImage?.url ?? '';
+            const cat   = c.category ?? '';
+            const job   = c.job ?? '';
+            if (cat === 'director')                      result.directors.push({ name, image });
+            else if (cat === 'actor' || cat === 'actress' || cat === 'self')
+              result.cast.push({ name, image, characters: c.characters ?? [], category: cat });
+            else if (cat === 'writer')                   result.writers.push({ name, image });
+            else                                         result.crew.push({ name, image, job, category: cat });
+          }
+          nextToken = more.nextPageToken;
+          page++;
+        }
+
+        console.log(`[IMDB-Crew] ${tt} 完了 — 監督${result.directors.length} キャスト${result.cast.length} クルー${result.crew.length}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (e) {
+        console.error('[IMDB-Crew Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ─── /translate : DeepL API でテキストを日本語に翻訳 ──────────────────────────
+  if (req.method === 'POST' && req.url === '/translate') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { text } = JSON.parse(body);
+        if (!text) { res.writeHead(400); res.end(JSON.stringify({ error: 'text required' })); return; }
+        if (!DEEPL_API_KEY) throw new Error('DEEPL_API_KEY が設定されていません');
+
+        // Free plan は api-free.deepl.com、有料は api.deepl.com
+        const isFree = DEEPL_API_KEY.endsWith(':fx');
+        const hostname = isFree ? 'api-free.deepl.com' : 'api.deepl.com';
+        const postData = new URLSearchParams({ text, target_lang: 'JA' }).toString();
+
+        const translated = await new Promise((resolve, reject) => {
+          const options = {
+            hostname,
+            path: '/v2/translate',
+            method: 'POST',
+            headers: {
+              'Authorization': `DeepL-Auth-Key ${DEEPL_API_KEY}`,
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Length': Buffer.byteLength(postData),
+            },
+          };
+          const r = https.request(options, (resp) => {
+            let data = '';
+            resp.on('data', c => data += c);
+            resp.on('end', () => {
+              try {
+                const json = JSON.parse(data);
+                if (resp.statusCode !== 200) reject(new Error(json.message || `DeepL ${resp.statusCode}`));
+                else resolve(json.translations?.[0]?.text ?? '');
+              } catch (e) { reject(e); }
+            });
+          });
+          r.on('error', reject);
+          r.write(postData);
+          r.end();
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ translated }));
+      } catch (e) {
+        console.error('[DeepL]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ─── /imdb-name-search : 人名 → nameId を取得 ───────────────────────────────
+  // リクエスト body: { name: string }
+  // レスポンス:     { nameId, name, image } | { notFound: true } | { error }
+  if (req.method === 'POST' && req.url === '/imdb-name-search') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { name } = JSON.parse(body);
+        if (!name) throw new Error('name が指定されていません');
+
+        const encoded = encodeURIComponent(name).replace(/%20/g, '_');
+        const url = `https://v3.sg.media-imdb.com/suggestion/x/${encoded}.json`;
+
+        const result = await new Promise((resolve) => {
+          https.get(url, { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+            let data = '';
+            res.on('data', c => data += c);
+            res.on('end', () => {
+              try { resolve(JSON.parse(data)); }
+              catch { resolve(null); }
+            });
+          }).on('error', () => resolve(null));
+        });
+
+        if (!result?.d) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ notFound: true }));
+          return;
+        }
+
+        // qid === 'name' の候補を優先
+        const found = result.d.find(item => item.qid === 'name')
+                   ?? result.d.find(item => item.id?.startsWith('nm'));
+        if (!found) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ notFound: true }));
+          return;
+        }
+
+        console.log(`[IMDB-Name] "${name}" → ${found.id} (${found.l})`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ nameId: found.id, name: found.l, image: found.i?.imageUrl ?? '' }));
+      } catch (e) {
+        console.error('[IMDB-Name Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ─── /imdb-filmography : nameId → フィルモグラフィーを取得 ─────────────────
+  // リクエスト body: { nameId: string }
+  // レスポンス:     { credits: [...] } | { error }
+  if (req.method === 'POST' && req.url === '/imdb-filmography') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { nameId } = JSON.parse(body);
+        if (!nameId) throw new Error('nameId が指定されていません');
+
+        console.log(`[IMDB-Filmography] ${nameId} 取得開始`);
+
+        function imdbFilmographyPage(pageToken = '') {
+          return new Promise((resolve, reject) => {
+            const params = new URLSearchParams({ pageSize: '50' });
+            if (pageToken) params.set('pageToken', pageToken);
+            const apiPath = `/names/${nameId}/filmography?${params.toString()}`;
+            const options = {
+              hostname: 'api.imdbapi.dev',
+              path: apiPath,
+              method: 'GET',
+              headers: { 'Accept': 'application/json' },
+            };
+            https.request(options, (r) => {
+              let raw = '';
+              r.on('data', c => raw += c);
+              r.on('end', () => {
+                if (r.statusCode !== 200) {
+                  reject(new Error(`imdbapi.dev ${apiPath} → ${r.statusCode}`));
+                  return;
+                }
+                try {
+                  const data = JSON.parse(raw);
+                  if (data?.code && data?.message) {
+                    reject(new Error(`imdbapi.dev ${apiPath} → ${data.message}`));
+                    return;
+                  }
+                  resolve(data);
+                }
+                catch (e) { reject(e); }
+              });
+            }).on('error', reject).end();
+          });
+        }
+
+        const allCredits = [];
+        let nextPageToken = '';
+        let totalCount = 0;
+        let page = 0;
+        do {
+          const data = await imdbFilmographyPage(nextPageToken);
+          const credits = Array.isArray(data?.credits) ? data.credits : [];
+          allCredits.push(...credits);
+          totalCount = data?.totalCount ?? totalCount;
+          nextPageToken = data?.nextPageToken ?? '';
+          page++;
+        } while (nextPageToken && page < 20);
+
+        const result = {
+          credits: allCredits,
+          totalCount: totalCount || allCredits.length,
+          nextPageToken: nextPageToken || undefined,
+        };
+
+        console.log(`[IMDB-Filmography] ${nameId} 完了 — ${allCredits.length}/${result.totalCount}件`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (e) {
+        console.error('[IMDB-Filmography Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
 
