@@ -709,6 +709,42 @@ g.nd { transition: opacity .18s; }
   color: var(--text-2);
   letter-spacing: .02em;
 }
+
+/* ── add creator dropdown ── */
+#add-creator-dropdown {
+  display: none; position: fixed;
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 8px;
+  min-width: 220px; max-height: 380px; overflow-y: auto;
+  z-index: 5000;
+  box-shadow: 0 8px 32px rgba(0,0,0,.35);
+  animation: ctxAppear .12s cubic-bezier(.4,0,.2,1);
+}
+#add-creator-dropdown.open { display: block; }
+#add-creator-dropdown::-webkit-scrollbar { width: 4px; }
+#add-creator-dropdown::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+.acd-search {
+  width: 100%; background: var(--bg3); border: 1.5px solid transparent;
+  color: var(--text); padding: 7px 10px; font-size: 13px;
+  border-radius: var(--r-sm); outline: none; transition: border-color .2s;
+  margin-bottom: 8px; font-family: var(--sans);
+}
+.acd-search:focus { border-color: var(--accent); }
+.acd-list { display: flex; flex-direction: column; gap: 2px; }
+.acd-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; border-radius: var(--r-sm);
+  cursor: pointer; transition: background .12s;
+}
+.acd-item:hover { background: var(--bg3); }
+.acd-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--node-dir); overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.acd-name { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acd-role { font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
 </style>
 </head>
 <body data-theme="dark">
@@ -822,6 +858,12 @@ g.nd { transition: opacity .18s; }
   <div class="glo-spinner"></div>
   <div class="glo-label">読み込み中…</div>
 </div>
+
+<div id="add-creator-dropdown">
+  <input type="text" class="acd-search" placeholder="クリエイターを検索...">
+  <div class="acd-list"></div>
+</div>
+
 <input type="file" id="fi0" accept=".csv" style="display:none">
 <svg id="canvas"></svg>
 
@@ -881,6 +923,7 @@ const HIDDEN_KEY = 'creator_network_hidden_labels';
    STATE
 ═══════════════════════════════════════════ */
 let AN = [], AL = [];
+let ALL_CREATORS = [];
 let aFilters = new Set(), sq = '', depth2 = false;  // aFilters: 空=全表示
 let showDir = true, showArt = true;
 let hiddenIds = new Set();
@@ -1391,43 +1434,51 @@ function showPanel(d) {
       if (ra !== rb) return ra.localeCompare(rb, 'ja');
       return a.person.label.localeCompare(b.person.label, 'ja');
     });
-    if (workPersons.length) {
+    if (workPersons.length || true) {
       html += `<div style="border-top:1px solid var(--border);padding:10px 14px 14px">`;
-      html += `<div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);padding:2px 0 10px">参加クリエイター</div>`;
-      html += `<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none">`;
-      workPersons.forEach(({ person }) => {
-        const roleText  = person.role || 'Creator';
-        const initial   = [...person.label][0] || '?';
-        const avatarUrl = person.avatar || '';
-        const avatarInner = avatarUrl
-          ? `<img src="${esc(avatarUrl)}" alt=""
-               style="width:100%;height:100%;object-fit:cover"
-               onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-             ><span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`
-          : `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`;
-        html += `<button class="work-person-btn" data-person-id="${esc(person.id)}"
-          style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
-                 width:fit-content;max-width:200px;flex-shrink:0;
-                 background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
-                 padding:10px 12px;cursor:pointer;text-align:left;transition:all .15s"
-          onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
-          onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
-          <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
-                      background:var(--node-dir);overflow:hidden;
-                      display:flex;align-items:center;justify-content:center">
-            ${avatarInner}
-          </div>
-          <div style="min-width:0;overflow:hidden">
-            <div style="font-size:11px;font-weight:700;color:var(--text);
-                        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-                        line-height:1.4;margin-bottom:2px">${esc(person.label)}</div>
-            <div style="font-size:10px;font-weight:500;color:var(--text-2);
-                        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-                        line-height:1.3">${esc(roleText)}</div>
-          </div>
-        </button>`;
-      });
-      html += `</div></div>`;
+      html += `<div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);padding:2px 0 10px;display:flex;justify-content:space-between;align-items:center">
+        <span>参加クリエイター</span>
+        <button id="add-creator-btn" style="width:22px;height:22px;border-radius:50%;border:none;background:var(--bg3);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s" title="クリエイターを追加" onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text-2)'">＋</button>
+      </div>`;
+      if (workPersons.length) {
+        html += `<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none">`;
+        workPersons.forEach(({ person }) => {
+          const roleText  = person.role || 'Creator';
+          const initial   = [...person.label][0] || '?';
+          const avatarUrl = person.avatar || '';
+          const avatarInner = avatarUrl
+            ? `<img src="${esc(avatarUrl)}" alt=""
+                 style="width:100%;height:100%;object-fit:cover"
+                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
+               ><span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`
+            : `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`;
+          html += `<button class="work-person-btn" data-person-id="${esc(person.id)}"
+            style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
+                   width:fit-content;max-width:200px;flex-shrink:0;
+                   background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
+                   padding:10px 12px;cursor:pointer;text-align:left;transition:all .15s"
+            onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
+            onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
+            <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
+                        background:var(--node-dir);overflow:hidden;
+                        display:flex;align-items:center;justify-content:center">
+              ${avatarInner}
+            </div>
+            <div style="min-width:0;overflow:hidden">
+              <div style="font-size:11px;font-weight:700;color:var(--text);
+                          overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                          line-height:1.4;margin-bottom:2px">${esc(person.label)}</div>
+              <div style="font-size:10px;font-weight:500;color:var(--text-2);
+                          overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                          line-height:1.3">${esc(roleText)}</div>
+            </div>
+          </button>`;
+        });
+        html += `</div>`;
+      } else {
+        html += `<div style="font-size:12px;color:var(--text-dim);padding:4px 0 8px">紐づいているクリエイターはいません</div>`;
+      }
+      html += `</div>`;
     }
 
     // IMDB セクション（パネルオープン時に自動取得）
@@ -1564,9 +1615,149 @@ function showPanel(d) {
     });
   });
 
+  // クリエイター追加ボタン
+  const addBtn = document.getElementById('add-creator-btn');
+  if (addBtn) {
+    addBtn.onclick = async (e) => {
+      e.stopPropagation();
+      
+      // 毎回最新のデータベースを読み込む
+      const originalText = addBtn.textContent;
+      addBtn.textContent = '...';
+      addBtn.style.pointerEvents = 'none';
+      addBtn.style.opacity = '0.6';
+      
+      try {
+        const r = await fetch('/notion-data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const data = await r.json();
+        if (data.creators) {
+          ALL_CREATORS = data.creators;
+          loadCreatorMeta([...ALL_CREATORS, ...(data.artists || [])]);
+        }
+      } catch (err) {
+        console.error('[AddCreator Re-fetch Error]', err);
+        showToast('データの再取得に失敗しました', 'err');
+      } finally {
+        addBtn.textContent = originalText;
+        addBtn.style.pointerEvents = 'auto';
+        addBtn.style.opacity = '1';
+      }
+      
+      showAddCreatorDropdown(addBtn, d);
+    };
+  }
+
   // work パネルを開いた瞬間にIMDB情報を自動取得
   if (d.type === 'work' && _imdbPanelId) {
     fetchImdbInfo(_imdbPanelId, d.label);
+  }
+}
+
+/* ═══════════════════════════════════════════
+   ADD CREATOR LOGIC
+═══════════════════════════════════════════ */
+function showAddCreatorDropdown(anchor, workNode) {
+  const dropdown = document.getElementById('add-creator-dropdown');
+  const search = dropdown.querySelector('.acd-search');
+  const list = dropdown.querySelector('.acd-list');
+
+  // 位置調整
+  const rect = anchor.getBoundingClientRect();
+  dropdown.style.top = (rect.bottom + 8) + 'px';
+  dropdown.style.left = (Math.max(10, rect.right - 220)) + 'px';
+
+  const currentRelIds = new Set(workNode._creatorRelIds || []);
+
+  const render = (q = '') => {
+    list.innerHTML = '';
+    const filtered = ALL_CREATORS.filter(c => 
+      c.Name.toLowerCase().includes(q.toLowerCase()) && !currentRelIds.has(c.notionPageId)
+    ).slice(0, 50);
+
+    if (filtered.length === 0) {
+      list.innerHTML = `<div style="padding:10px;font-size:12px;color:var(--text-dim);text-align:center">見つかりませんでした</div>`;
+      return;
+    }
+
+    filtered.forEach(c => {
+      const item = document.createElement('div');
+      item.className = 'acd-item';
+      const initial = [...c.Name][0] || '?';
+      item.innerHTML = `
+        <div class="acd-avatar" style="background:${c.Avatar ? 'none' : 'var(--node-dir)'}">
+          ${c.Avatar ? `<img src="${esc(c.Avatar)}" style="width:100%;height:100%;object-fit:cover">` : `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff">${esc(initial)}</span>`}
+        </div>
+        <div class="acd-name">${esc(c.Name)}</div>
+        <div class="acd-role">${esc(c.Role)}</div>
+      `;
+      item.onclick = async () => {
+        dropdown.classList.remove('open');
+        await addCreatorToWork(workNode, c);
+      };
+      list.appendChild(item);
+    });
+  };
+
+  search.value = '';
+  search.oninput = (e) => render(e.target.value);
+  render();
+
+  dropdown.classList.add('open');
+  search.focus();
+
+  // 外側クリックで閉じる
+  const close = (e) => {
+    if (!dropdown.contains(e.target) && e.target !== anchor) {
+      dropdown.classList.remove('open');
+      window.removeEventListener('mousedown', close);
+    }
+  };
+  window.addEventListener('mousedown', close);
+}
+
+async function addCreatorToWork(workNode, creator) {
+  showToast(`${creator.Name} を追加中...`, 'ok');
+  try {
+    const r = await fetch('/notion-add-creator', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workId: workNode.notionPageId,
+        creatorPageId: creator.notionPageId
+      }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+
+    showToast(`✓ ${creator.Name} を追加しました`);
+    
+    // UIを即座に更新するために、ローカルのデータを更新して再描画
+    if (!workNode._creatorRelIds) workNode._creatorRelIds = [];
+    workNode._creatorRelIds.push(creator.notionPageId);
+    
+    const creatorId = `d_${creator.Name}`;
+    // リンクを追加
+    const newLink = { source: creatorId, target: workNode.id, ltype: 'dir' };
+    AL.push(newLink);
+    
+    // 詳細パネルを再描画
+    showPanel(workNode);
+    
+    // グラフを再描画（リンク追加）
+    const { nodes: vNodes, links: vLinks } = filteredData();
+    draw(vNodes, vLinks);
+    
+    // ハイライトを維持
+    selId = workNode.id;
+    applyHL(selId, 'click');
+
+  } catch (e) {
+    console.error(e);
+    showToast(`✗ 追加失敗: ${e.message}`, 'err');
   }
 }
 
@@ -2816,8 +3007,10 @@ async function fetchFromNotionAPI() {
     const data = await r.json();
     if (data.error) throw new Error(data.error);
     if (!data.results?.length) throw new Error('データが0件です');
+    ALL_CREATORS = data.creators || [];
     // creators / artists フィールドがあればメタ情報を先に読み込む
-    const allPersons = [...(data.creators ?? []), ...(data.artists ?? [])];
+    const allPersons = [...ALL_CREATORS, ...(data.artists ?? [])];
+
     if (allPersons.length) loadCreatorMeta(allPersons);
     init(data.results);
     localStorage.setItem('notion_last_sync', new Date().toLocaleString('ja-JP'));

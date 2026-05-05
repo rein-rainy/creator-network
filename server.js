@@ -3,6 +3,7 @@
  * 起動: node server.js
  * アクセス: http://localhost:3000
  */
+require('dotenv').config();
 
 const http  = require('http');
 const fs    = require('fs');
@@ -15,8 +16,8 @@ const NOTION_TOKEN      = process.env.NOTION_TOKEN;
 const DEEPL_API_KEY     = process.env.DEEPL_API_KEY;
 const YOUTUBE_API_KEY   = process.env.YOUTUBE_API_KEY;
 const DB_WORKS       = '18860905b37f80358899e51e4e514f92'; // メイン（作品）
-const DB_CREATORS    = '2d260905b37f80fbae0de6cb61a03091'; // クリエイター
-const DB_ARTISTS     = '18860905b37f8093954fdb1bb9602c18'; // アーティスト
+const DB_CREATORS    = '18860905b37f8093954fdb1bb9602c18'; // クリエイター (Director / Creator)
+const DB_ARTISTS     = '2d260905b37f80fbae0de6cb61a03091'; // アーティスト (Artist)
 
 // 起動時にトークンの存在を確認
 if (!NOTION_TOKEN) {
@@ -111,7 +112,7 @@ async function fetchPersonDB(dbId, label) {
       if (cover?.type === 'external') avatar = cover.external?.url ?? '';
       else if (cover?.type === 'file') avatar = cover.file?.url ?? '';
 
-      persons.push({ Name: name, Role: role, SNS: sns, Avatar: avatar });
+      persons.push({ Name: name, Role: role, SNS: sns, Avatar: avatar, notionPageId: page.id });
     }
 
     hasMore = r.body.has_more;
@@ -178,6 +179,24 @@ function extractValue(prop, creatorMap, artistMap) {
   }
 }
 
+// ─── クリエイターリレーションのプロパティ名を取得 ────────────────────────────
+async function getCreatorRelPropName() {
+  console.log('[Notion] リレーションプロパティ名を自動検出中...');
+  const r = await notionRequest('GET', `/v1/databases/${DB_WORKS}`);
+  if (r.status !== 200) return null;
+  const creatorDbIdNorm = DB_CREATORS.replace(/-/g, '').toLowerCase();
+  for (const [name, prop] of Object.entries(r.body.properties)) {
+    if (prop.type === 'relation' && prop.relation?.database_id) {
+      const relDbId = prop.relation.database_id.replace(/-/g, '').toLowerCase();
+      if (relDbId === creatorDbIdNorm) {
+        console.log(`[Notion] 検出完了: "${name}"`);
+        return name;
+      }
+    }
+  }
+  return null;
+}
+
 // ─── メイン処理 ───────────────────────────────────────────────────────────────
 async function buildData() {
   console.log('[Notion] 3つのDBを並列取得中...');
@@ -196,6 +215,25 @@ async function buildData() {
   works.forEach(p => Object.keys(p.properties).forEach(k => keySet.add(k)));
   const keys = [...keySet];
 
+  // クリエイターリレーションのプロパティ名を特定
+  let creatorRelProp = '';
+  // 一度全プロパティを見て、リレーション先がクリエイターDBのものを探す
+  if (works.length > 0) {
+    const firstPage = works[0];
+    for (const [name, prop] of Object.entries(firstPage.properties)) {
+      if (prop.type === 'relation') {
+        // prop.relation は現在の値の配列だが、database_id はここにはない
+        // なので名前ベース、もしくは適当な ID が creatorMap にあるかで判断する
+        const hasCreatorId = prop.relation.some(r => creatorMap[r.id]);
+        if (hasCreatorId) { creatorRelProp = name; break; }
+      }
+    }
+  }
+  // 見つからなかった場合は明示的にDBスキーマから取得（初回のみなどの最適化は後で）
+  if (!creatorRelProp) {
+    creatorRelProp = await getCreatorRelPropName() || 'Director / Creator';
+  }
+
   // 行データに変換
   const rows = works.map(page => {
     const row = {};
@@ -203,6 +241,12 @@ async function buildData() {
       row[k] = extractValue(page.properties[k], creatorMap, artistMap);
     });
     row['_notionPageId'] = page.id; // Notionページへのリンク用
+    
+    // 現在紐づいているクリエイターID配列を保持
+    const relProp = page.properties[creatorRelProp];
+    row['_creatorRelIds'] = (relProp?.type === 'relation') ? relProp.relation.map(r => r.id) : [];
+    row['_creatorRelPropName'] = creatorRelProp;
+
     return row;
   });
 
@@ -992,6 +1036,63 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify(result));
       } catch (e) {
         console.error('[IMDB-Filmography Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ─── /notion-add-creator : 作品にクリエイターを追加 ───────────────────────
+  // body: { workId, creatorPageId }
+  if (req.method === 'POST' && req.url === '/notion-add-creator') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { workId, creatorPageId } = JSON.parse(body);
+        if (!workId || !creatorPageId) throw new Error('workId, creatorPageId が必要です');
+
+        console.log(`[Notion] クリエイター追加開始: work=${workId} creator=${creatorPageId}`);
+
+        // 1. 現在のページ情報を取得してリレーションプロパティを特定
+        const pageRes = await notionRequest('GET', `/v1/pages/${workId}`);
+        if (pageRes.status !== 200) throw new Error(`ページ取得失敗: ${pageRes.status}`);
+
+        const props = pageRes.body.properties;
+        let relPropName = await getCreatorRelPropName();
+        if (!relPropName) throw new Error('クリエイターリレーションプロパティが見つかりませんでした');
+
+        const relProp = props[relPropName];
+        let currentIds = [];
+        if (relProp?.type === 'relation') {
+          currentIds = relProp.relation.map(r => r.id);
+        }
+
+        // すでに追加されているかチェック
+        if (currentIds.includes(creatorPageId)) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: '既に追加されています' }));
+          return;
+        }
+
+        // 2. PATCH で更新
+        const updateBody = {
+          properties: {
+            [relPropName]: {
+              relation: [...currentIds.map(id => ({ id })), { id: creatorPageId }]
+            }
+          }
+        };
+
+        const patchRes = await notionRequest('PATCH', `/v1/pages/${workId}`, updateBody);
+        if (patchRes.status !== 200) throw new Error(`更新失敗: ${patchRes.status}`);
+
+        console.log(`[Notion] 追加成功: ${workId}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (e) {
+        console.error('[Notion Add Error]', e.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));
       }
