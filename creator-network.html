@@ -769,6 +769,21 @@ g.nd { transition: opacity .18s; }
     </svg>
   </div>
   <div class="sep"></div>
+  <button id="search-mode-btn" title="検索モード切替：フィルター / 移動" style="
+    width:32px;height:32px;flex-shrink:0;
+    background:var(--bg3);border:1.5px solid transparent;color:var(--text-2);
+    border-radius:var(--r-sm);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:all .18s;padding:0;">
+    <!-- filter icon (default) -->
+    <svg id="smb-icon-filter" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+    </svg>
+    <!-- navigate icon (hidden by default) -->
+    <svg id="smb-icon-nav" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+    </svg>
+  </button>
   <input type="text" id="search-box" placeholder="検索...">
   <div id="tag-filter-wrap">
     <button id="tag-filter-btn" title="タグで絞り込み">
@@ -925,10 +940,13 @@ const HIDDEN_KEY = 'creator_network_hidden_labels';
 let AN = [], AL = [];
 let ALL_CREATORS = [];
 let aFilters = new Set(), sq = '', depth2 = false;  // aFilters: 空=全表示
+let searchMode = 'filter'; // 'filter' | 'navigate'
 let showDir = true, showArt = true, simTimer = null, baseLinkStrength = 0.5;
 let hiddenIds = new Set();
 let selId = null, hovId = null;
 let sim = null, gDimRect = null, draggedNode = null, connectedToDragged = new Set();
+let _lpSel = null, _nSel = null; // tick ハンドラが参照する D3 セレクション
+let _preSqSnapshot = null; // 検索開始直前のノード座標スナップショット
 
 /* ═══════════════════════════════════════════
    UTILS
@@ -981,20 +999,21 @@ function thumbUrl(url) { const id = ytid(url); return id ? `https://img.youtube.
 const creatorMetaMap = new Map();
 
 function loadCreatorMeta(rows) {
-  // rows は { Name, Role, SNS, Avatar?, 作品 } の配列
+  // rows は { Name, Role, SNS, Avatar?, notionPageId? } の配列
   creatorMetaMap.clear();
   rows.forEach(row => {
     const name = (row['Name'] || '').trim(); if (!name) return;
-    const role   = (row['Role']   || '').trim();
-    const snsRaw = (row['SNS']    || '').trim();
-    const avatar = (row['Avatar'] || '').trim();
+    const role          = (row['Role']          || '').trim();
+    const snsRaw        = (row['SNS']            || '').trim();
+    const avatar        = (row['Avatar']         || '').trim();
+    const notionPageId  = (row['notionPageId']   || '').trim();
     const sns = snsRaw ? [snsFromUrl(snsRaw)].filter(Boolean) : [];
-    creatorMetaMap.set(name, { role, sns, avatar });
+    creatorMetaMap.set(name, { role, sns, avatar, notionPageId });
   });
 }
 
 function getCreatorMeta(name) {
-  return creatorMetaMap.get(name) || { role: '', sns: [], avatar: '' };
+  return creatorMetaMap.get(name) || { role: '', sns: [], avatar: '', notionPageId: '' };
 }
 
 /* ═══════════════════════════════════════════
@@ -1028,7 +1047,7 @@ function buildGraph(rows) {
     xnames(row['Director / Creator'] || '').forEach(d => {
       const did = `d_${d}`;
       const meta = getCreatorMeta(d);
-      ensure(did, 'director', d, { role: meta.role, sns: meta.sns, avatar: meta.avatar });
+      ensure(did, 'director', d, { role: meta.role, sns: meta.sns, avatar: meta.avatar, notionPageId: meta.notionPageId || '' });
       nm.get(did).works.push(wid);
       links.push({ source: did, target: wid, ltype: 'dir' });
     });
@@ -1072,7 +1091,7 @@ function filteredData() {
     links = links.filter(l => keep.has(lid(l.source)) && keep.has(lid(l.target)));
   }
 
-  if (sq) {
+  if (sq && searchMode === 'filter') {
     const q = sq.toLowerCase();
     const direct = new Set(nodes.filter(n => n.label.toLowerCase().includes(q)).map(n => n.id));
     const exp = new Set(direct);
@@ -1142,7 +1161,7 @@ function applyHL(activeId, mode) {
 /* ═══════════════════════════════════════════
    DRAW
 ═══════════════════════════════════════════ */
-function draw(nodes, links) {
+function draw(nodes, links, { freeLayout = false } = {}) {
   const W = window.innerWidth, H = window.innerHeight - 48;
   d3.select('#canvas').selectAll('*').remove();
   gDimRect = null;
@@ -1179,13 +1198,13 @@ function draw(nodes, links) {
   const gL = g.append('g').attr('class', 'layer-links');
   const gN = g.append('g').attr('class', 'layer-nodes');
 
-  const lpSel = gL.selectAll('line.lp').data(links).join('line')
+  _lpSel = gL.selectAll('line.lp').data(links).join('line')
     .attr('class', 'lp')
     .attr('stroke', d => d.ltype === 'dir' ? 'var(--link-dir)' : 'var(--link-art)')
     .attr('stroke-width', d => d.ltype === 'dir' ? 1.8 : 1)
     .attr('stroke-opacity', 0.45);
 
-  const nSel = gN.selectAll('g.nd').data(nodes, d => d.id).join('g').attr('class', 'nd')
+  _nSel = gN.selectAll('g.nd').data(nodes, d => d.id).join('g').attr('class', 'nd')
     .call(d3.drag()
       .on('start', (e, d) => {
         if (!e.active) sim.alphaTarget(.3).restart();
@@ -1194,79 +1213,32 @@ function draw(nodes, links) {
         draggedNode = d;
         connectedToDragged.clear();
 
-        if (e.sourceEvent.shiftKey) {
-          d._isClusterDrag = true;
-          d._clusterNodes = new Set([d]);
-          // 直接つながっているノードを収集
+        if (!e.sourceEvent.shiftKey) {
+          // 通常ドラッグ：接続ノードにソフトヒモ拘束
           AL.forEach(l => {
-            if (lid(l.source) === d.id) {
-              d._clusterNodes.add(l.target);
-            } else if (lid(l.target) === d.id) {
-              d._clusterNodes.add(l.source);
+            const s = lid(l.source), t = lid(l.target);
+            if (s === d.id) {
+              connectedToDragged.add(t);
+              l._ropeLength = Math.sqrt((l.source.x - l.target.x)**2 + (l.source.y - l.target.y)**2);
+            } else if (t === d.id) {
+              connectedToDragged.add(s);
+              l._ropeLength = Math.sqrt((l.source.x - l.target.x)**2 + (l.source.y - l.target.y)**2);
             }
           });
-
-          // クラスター内の各ノードの初期固定位置と、ドラッグ対象ノードからの相対オフセットを保存
-          d._clusterNodes.forEach(node => {
-            node.fx = node.x;
-            node.fy = node.y;
-            node._dragRelX = node.x - d.x;
-            node._dragRelY = node.y - d.y;
-          });
         }
-
-        const dragSourceIds = d._isClusterDrag ? new Set([...d._clusterNodes].map(n => n.id)) : new Set([d.id]);
-        AL.forEach(l => {
-          const s = lid(l.source), t = lid(l.target);
-          const isS = dragSourceIds.has(s), isT = dragSourceIds.has(t);
-          // 片方がドラッグ群で、もう片方が外側のノードの場合のみ距離を固定する
-          if (isS && !isT) {
-            connectedToDragged.add(t);
-            l._initialDistance = Math.sqrt((l.source.x - l.target.x)**2 + (l.source.y - l.target.y)**2);
-          }
-          if (isT && !isS) {
-            connectedToDragged.add(s);
-            l._initialDistance = Math.sqrt((l.source.x - l.target.x)**2 + (l.source.y - l.target.y)**2);
-          }
-        });
-
-        // D3のforceLinkにアクセサの再評価を強制する（これをしないと初期距離が反映されない）
-        sim.force('link')
-           .distance(sim.force('link').distance())
-           .strength(sim.force('link').strength());
+        // Shift+ドラッグ：ヒモなし・connectedToDragged も空のまま → 完全単体移動
       })
       .on('drag',  (e, d) => {
         d.fx = e.x;
         d.fy = e.y;
-        if (d._isClusterDrag) {
-          d._clusterNodes.forEach(node => { if (node.id !== d.id) { node.fx = d.fx + node._dragRelX; node.fy = d.fy + node._dragRelY; } });
-        }
       })
       .on('end',   (e, d) => {
         if (!e.active) sim.alphaTarget(0);
         d.fx = null;
         d.fy = null;
         draggedNode = null;
-        // ドラッグ終了時にリンクの初期距離設定をクリア
-        AL.forEach(l => {
-          delete l._initialDistance;
-        });
-        // ドラッグ終了時にデフォルト値（280/300）へ戻すために再トリガー
-        sim.force('link')
-           .distance(sim.force('link').distance())
-           .strength(sim.force('link').strength());
+        AL.forEach(l => { delete l._ropeLength; });
         connectedToDragged.clear();
-
-        if (d._isClusterDrag) {
-          d._clusterNodes.forEach(node => {
-            node.fx = null;
-            node.fy = null;
-            delete node._dragRelX;
-            delete node._dragRelY;
-          });
-          delete d._isClusterDrag;
-          delete d._clusterNodes;
-        }
       })
     )
     .on('mouseenter', (e, d) => { if (selId) return; hovId = d.id; applyHL(hovId, 'hover'); })
@@ -1278,70 +1250,12 @@ function draw(nodes, links) {
     })
     .on('contextmenu', (e, d) => showCtx(e, d));
 
-  nSel.each(function(d) {
-    const grp = d3.select(this);
-    if (d.type === 'work') {
-      const fo = grp.append('foreignObject').attr('width', CW).attr('height', CH).attr('x', -CW/2).attr('y', -CH/2);
-      const card = fo.append('xhtml:div').attr('class', 'wcard').attr('data-id', d.id);
-      if (d.th) {
-        card.append('xhtml:img').attr('class', 'wc-img').attr('src', d.th)
-          .on('error', function() { d3.select(this).remove(); card.insert('xhtml:div', ':first-child').attr('class', 'wc-ph').text('🎬'); });
-      } else {
-        card.append('xhtml:div').attr('class', 'wc-ph').text('🎬');
-      }
-      const bd = card.append('xhtml:div').attr('class', 'wc-bd');
-      bd.append('xhtml:div').attr('class', 'wc-tt').text(d.label);
-      const tgs = bd.append('xhtml:div').attr('class', 'wc-tags');
-      (d.cats || []).slice(0, 3).forEach(c => tgs.append('xhtml:span').attr('class', 'wc-tag').text(c));
-    } else {
-      const isDir = d.type === 'director';
-      const col   = isDir ? 'var(--node-dir)' : 'var(--node-art)';
-      const cardW = isDir ? PNW : ANW;
-      const cardH = isDir ? PNH : ANH;
-      const initial = [...d.label][0] || '?';
-
-      // 線をカード中心につなぐための不可視サークル（半径1）
-      grp.append('circle').attr('r', 1).attr('fill', 'none').attr('stroke', 'none');
-
-      // 初期サイズは最大値で確保。描画後に実幅を測定して更新する
-      const fo = grp.append('foreignObject')
-        .attr('width', cardW).attr('height', cardH)
-        .attr('x', -cardW / 2).attr('y', -cardH / 2);
-
-      const card = fo.append('xhtml:div')
-        .attr('class', 'pnode-card')
-        .attr('data-id', d.id)
-        .style('border-color', col);
-
-      // アバター円
-      const avatarDiv = card.append('xhtml:div').attr('class', 'pnode-avatar').style('background', col);
-      if (d.avatar) {
-        avatarDiv.append('xhtml:img')
-          .attr('src', d.avatar)
-          .attr('alt', '')
-          .style('width', '100%').style('height', '100%')
-          .style('object-fit', 'cover')
-          .on('error', function() {
-            d3.select(this).remove();
-            avatarDiv.append('xhtml:span').attr('class', 'pnode-initial').text(initial);
-          });
-      } else {
-        avatarDiv.append('xhtml:span').attr('class', 'pnode-initial').text(initial);
-      }
-
-      // テキスト
-      const textDiv = card.append('xhtml:div').attr('class', 'pnode-text');
-      textDiv.append('xhtml:div').attr('class', 'pnode-name').text(d.label);
-      if (isDir) {
-        textDiv.append('xhtml:div').attr('class', 'pnode-role').text(d.role || 'Creator');
-      }
-    }
-  });
+  _nSel.each(function(d) { _renderNodeContent(d3.select(this), d); });
 
   // 描画後に各pnode-cardの実幅を測定し foreignObject を中心基準で更新
   // avatar は fetchArtistAvatars() が非同期で差し込むため、ここでは寸法のみ処理
   requestAnimationFrame(() => {
-    nSel.each(function(d) {
+    _nSel.each(function(d) {
       if (d.type === 'work') return;
       const fo = d3.select(this).select('foreignObject');
       const cardEl = this.querySelector('.pnode-card');
@@ -1371,67 +1285,97 @@ function draw(nodes, links) {
     });
   });
 
+  // 既存ノードは現在位置を fx/fy で固定してからシミュに渡す。
+  // これにより charge/center/link の力が一斉にかかっても既存ノードは動かない。
+  // 新規ノード（x/y が未定義）のみ自然に配置される。
+  // simTimer の完了タイミングで fx/fy を解除する。
+  // ただし freeLayout=true（検索時など）は固定しない——シミュに自由に動かせる。
+  const isFirstDraw = !sim;
+  if (!freeLayout) {
+    nodes.forEach(n => {
+      if (n.x != null) { n.fx = n.x; n.fy = n.y; }
+    });
+  }
+
+  // freeLayout（検索時）は前回の緩和後パラメータが残っているため初期値に戻す。
+  // 通常の draw（初回・更新どちらも）も同様にリセットして、更新時に広がらないようにする。
+  baseLinkStrength = 0.5;
+
   if (sim) sim.stop();
   sim = d3.forceSimulation(nodes)
-    .force('link',    d3.forceLink(links).id(d => d.id)
-      .distance(l => {
-        if (draggedNode && l._initialDistance != null) {
-          return l._initialDistance;
-        }
-        return l.ltype === 'dir' ? 280 : 300;
-      })
-      .strength(l => {
-      if (draggedNode) {
-        const s = lid(l.source), t = lid(l.target);
-        const isCluster = draggedNode._isClusterDrag;
-        // 強度を少し抑える(0.2)ことで、他のノードとの衝突を避けつつスムーズに追従させる
-        if (isCluster ? (draggedNode._clusterNodes.has(l.source) || draggedNode._clusterNodes.has(l.target)) : (s === draggedNode.id || t === draggedNode.id)) return 0.2;
-        const isConnectedToDragged = isCluster ? (draggedNode._clusterNodes.has(l.source) || draggedNode._clusterNodes.has(l.target)) : (s === draggedNode.id || t === draggedNode.id);
+      .force('link',    d3.forceLink(links).id(d => d.id)
+        .distance(l => l.ltype === 'dir' ? 280 : 300)
+        .strength(() => baseLinkStrength))
+      .force('charge',  d3.forceManyBody().strength(-2500))
+      .force('center',  d3.forceCenter(W/2, H/2))
+      .force('collide', d3.forceCollide(d => d.type === 'work' ? Math.sqrt((CW/2)**2 + (CH/2)**2) + 18 : Math.sqrt((PNW/2)**2 + (PNH/2)**2) + 12))
+      .alphaDecay(.015)
+      .on('tick', () => {
+        if (draggedNode) {
+          // ── ソフトヒモ拘束 ────────────────────────────────────────────────
+          // 自然長を超えた分だけ引力を速度に加算する（バネの伸び方向のみ）。
+          // 慣性を残すことで「伸びてから遅れて追従」する動きになる。
+          // ROPE_K  : 超過量に対する引力係数（大きいほど素早く追従）
+          // ROPE_DAMPING : 速度の減衰（小さいほど慣性が強く、遅れが大きい）
+          const ROPE_K       = 0.12;
+          const ROPE_DAMPING = 0.72;
 
-        if (isConnectedToDragged && l._initialDistance != null) {
-          const dx = l.source.x - l.target.x;
-          const dy = l.source.y - l.target.y;
-          const currentDistance = Math.sqrt(dx * dx + dy * dy);
+          AL.forEach(l => {
+            if (l._ropeLength == null) return;
 
-          // 現在の距離が初期距離以下の場合、リンクの力を0にして押し戻さない
-          if (currentDistance <= l._initialDistance) {
-            return 0;
-          }
-          // 現在の距離が初期距離より大きい場合、適度な力で引き寄せる
-          return 0.8; // 紐で引かれるように追従するため、強度を上げる
+            const srcInDrag = lid(l.source) === draggedNode.id;
+
+            const anchor = srcInDrag ? l.source : l.target;
+            const free   = srcInDrag ? l.target : l.source;
+
+            const dx   = free.x - anchor.x;
+            const dy   = free.y - anchor.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+            if (dist > l._ropeLength) {
+              // 超過分だけ引力を速度に加算し、現在速度は減衰させる
+              const excess = dist - l._ropeLength;
+              const pull   = ROPE_K * excess / dist;
+              free.vx = free.vx * ROPE_DAMPING - dx * pull;
+              free.vy = free.vy * ROPE_DAMPING - dy * pull;
+            } else {
+              // 弛んでいる間は慣性を穏やかに減衰させて余韻を残す
+              free.vx *= ROPE_DAMPING;
+              free.vy *= ROPE_DAMPING;
+            }
+          });
+
+          // ── 無関係ノードを凍結 ───────────────────────────────────────────
+          sim.nodes().forEach(n => {
+            if (!connectedToDragged.has(n.id) && n !== draggedNode) {
+              n.vx = 0; n.vy = 0;
+            }
+          });
         }
-      }
-      return baseLinkStrength;
-    }))
-    .force('charge',  d3.forceManyBody().strength(-2500))
-    .force('center',  d3.forceCenter(W/2, H/2))
-    .force('collide', d3.forceCollide(d => d.type === 'work' ? Math.sqrt((CW/2)**2 + (CH/2)**2) + 18 : Math.sqrt((PNW/2)**2 + (PNH/2)**2) + 12))
-    .alphaDecay(.015)
-    .on('tick', () => {
-      if (draggedNode) {
-        nodes.forEach(n => {
-          // ドラッグに直接関係ない（つながっていない）ノードは動かさないようにして、操作感を安定させる
-          if (n.fx === null && !connectedToDragged.has(n.id)) {
-            n.vx = 0; n.vy = 0;
-          }
-        });
-      }
-      lpSel.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
-           .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-      nSel.attr('transform', d => `translate(${d.x},${d.y})`);
-    });
+
+        if (_lpSel) _lpSel.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                          .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+        if (_nSel)  _nSel.attr('transform', d => `translate(${d.x},${d.y})`);
+      });
 
   if (simTimer) clearTimeout(simTimer);
-  simTimer = setTimeout(() => {
-    if (sim) {
-      sim.force('charge').strength(-400).distanceMax(150); // 反発は近距離でしっかり効かせつつ、範囲を150pxに限定
-      baseLinkStrength = 0.01; // リンクの力を弱める
-      sim.force('link').strength(sim.force('link').strength());
-      sim.velocityDecay(0.7);            // 摩擦を強くして、動きがネットワーク全体に伝搬しないようにする
-      sim.force('center', null); // 中心力を無効化
-      sim.alpha(0.05).restart();
-    }
-  }, 3000);
+  if (!freeLayout) {
+    simTimer = setTimeout(() => {
+      if (sim) {
+        // 既存ノードの位置固定を解除（新規ノードはここで初めて自由になる）
+        sim.nodes().forEach(n => { n.fx = null; n.fy = null; });
+        sim.force('charge').strength(-400).distanceMax(150);
+        baseLinkStrength = 0.01;
+        sim.force('link').strength(sim.force('link').strength());
+        sim.velocityDecay(0.7);
+        sim.force('center', null);
+        sim.alpha(0.05).restart();
+      }
+    }, isFirstDraw ? 3000 : 800);
+  } else {
+    // freeLayout: 固定なしで起動したシミュをそのまま自走させる（pin 解除フェーズは不要）
+    simTimer = null;
+  }
 
   if (selId)      applyHL(selId, 'click');
   else if (hovId) applyHL(hovId, 'hover');
@@ -1442,6 +1386,134 @@ function draw(nodes, links) {
   document.getElementById('stats').innerHTML = `${dirs} creators<br>${arts} artists<br>${wks} works`;
 }
 
+/* ─── redraw: 位置を維持したまま SVG と シミュのデータだけ更新 ───────────────
+   フィルター・非表示・ノード追加/削除・検索など、
+   配置を変えたくないすべての再描画はこちらを呼ぶ。
+   draw() が一度も呼ばれていない場合（sim === null）はフォールバックで draw() を使う。
+─────────────────────────────────────────────────────────────────────────────── */
+function redraw(nodes, links) {
+  if (!sim) { draw(nodes, links); return; }
+
+  const svg = d3.select('#canvas');
+  const g   = svg.select('g');
+  if (g.empty()) { draw(nodes, links); return; }
+
+  const gL = g.select('.layer-links');
+  const gN = g.select('.layer-nodes');
+
+  // リンク線を差し替え
+  _lpSel = gL.selectAll('line.lp').data(links, d => `${lid(d.source)}-${lid(d.target)}`)
+    .join('line')
+    .attr('class', 'lp')
+    .attr('stroke', d => d.ltype === 'dir' ? 'var(--link-dir)' : 'var(--link-art)')
+    .attr('stroke-width', d => d.ltype === 'dir' ? 1.8 : 1)
+    .attr('stroke-opacity', 0.45);
+
+  // ノードグループを差し替え（既存ノードは DOM を再利用、追加分だけ生成）
+  _nSel = gN.selectAll('g.nd').data(nodes, d => d.id)
+    .join(
+      enter => {
+        const grp = enter.append('g').attr('class', 'nd');
+        grp.call(d3.drag()
+          .on('start', (e, d) => {
+            if (!e.active) sim.alphaTarget(.3).restart();
+            d.fx = d.x; d.fy = d.y;
+            draggedNode = d; connectedToDragged.clear();
+            if (!e.sourceEvent.shiftKey) {
+              AL.forEach(l => {
+                const s = lid(l.source), t = lid(l.target);
+                if (s === d.id) { connectedToDragged.add(t); l._ropeLength = Math.sqrt((l.source.x-l.target.x)**2+(l.source.y-l.target.y)**2); }
+                else if (t === d.id) { connectedToDragged.add(s); l._ropeLength = Math.sqrt((l.source.x-l.target.x)**2+(l.source.y-l.target.y)**2); }
+              });
+            }
+          })
+          .on('drag', (e, d) => {
+            d.fx = e.x; d.fy = e.y;
+          })
+          .on('end', (e, d) => {
+            if (!e.active) sim.alphaTarget(0);
+            d.fx = null; d.fy = null; draggedNode = null;
+            AL.forEach(l => { delete l._ropeLength; });
+            connectedToDragged.clear();
+          })
+        )
+        .on('mouseenter', (e, d) => { if (selId) return; hovId = d.id; applyHL(hovId, 'hover'); })
+        .on('mouseleave', (e, d) => { if (selId) return; hovId = null; applyHL(null, null); })
+        .on('click', (e, d) => {
+          e.stopPropagation(); hovId = null;
+          if (selId === d.id) { selId = null; applyHL(null, null); document.getElementById('info-panel').classList.remove('visible'); document.getElementById('info-overlay').classList.remove('visible'); }
+          else { selId = d.id; applyHL(selId, 'click'); showPanel(d); }
+        })
+        .on('contextmenu', (e, d) => showCtx(e, d));
+
+        grp.each(function(d) { _renderNodeContent(d3.select(this), d); });
+        return grp;
+      },
+      update => update,
+      exit   => exit.remove()
+    );
+
+  // シミュのデータを差し替え（alpha は触らない → 動かない）
+  sim.stop();
+  sim.nodes(nodes);
+  sim.force('link').links(links);
+  // link の source/target を ID→オブジェクトに解決（tick なし）
+  if (sim.force('link').initialize) {
+    sim.force('link').initialize(nodes, () => Math.random());
+  }
+  // 解決後の座標で DOM を再反映
+  _nSel.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`);
+  _lpSel.attr('x1', d => (typeof d.source === 'object' ? d.source.x : 0))
+        .attr('y1', d => (typeof d.source === 'object' ? d.source.y : 0))
+        .attr('x2', d => (typeof d.target === 'object' ? d.target.x : 0))
+        .attr('y2', d => (typeof d.target === 'object' ? d.target.y : 0));
+
+  const dirs = nodes.filter(n => n.type === 'director').length;
+  const arts = nodes.filter(n => n.type === 'artist').length;
+  const wks  = nodes.filter(n => n.type === 'work').length;
+  document.getElementById('stats').innerHTML = `${dirs} creators<br>${arts} artists<br>${wks} works`;
+
+  if (selId)      applyHL(selId, 'click');
+  else if (hovId) applyHL(hovId, 'hover');
+}
+
+/* ─── _renderNodeContent: ノード1つ分の内部 DOM を構築 ─────────────────────── */
+function _renderNodeContent(grp, d) {
+  if (d.type === 'work') {
+    const fo = grp.append('foreignObject').attr('width', CW).attr('height', CH).attr('x', -CW/2).attr('y', -CH/2);
+    const card = fo.append('xhtml:div').attr('class', 'wcard').attr('data-id', d.id);
+    if (d.th) {
+      card.append('xhtml:img').attr('class', 'wc-img').attr('src', d.th)
+        .on('error', function() { d3.select(this).remove(); card.insert('xhtml:div', ':first-child').attr('class', 'wc-ph').text('🎬'); });
+    } else {
+      card.append('xhtml:div').attr('class', 'wc-ph').text('🎬');
+    }
+    const bd = card.append('xhtml:div').attr('class', 'wc-bd');
+    bd.append('xhtml:div').attr('class', 'wc-tt').text(d.label);
+    const tgs = bd.append('xhtml:div').attr('class', 'wc-tags');
+    (d.cats || []).slice(0, 3).forEach(c => tgs.append('xhtml:span').attr('class', 'wc-tag').text(c));
+  } else {
+    const isDir = d.type === 'director';
+    const col   = isDir ? 'var(--node-dir)' : 'var(--node-art)';
+    const cardW = isDir ? PNW : ANW;
+    const cardH = isDir ? PNH : ANH;
+    const initial = [...d.label][0] || '?';
+    grp.append('circle').attr('r', 1).attr('fill', 'none').attr('stroke', 'none');
+    const fo = grp.append('foreignObject').attr('width', cardW).attr('height', cardH).attr('x', -cardW/2).attr('y', -cardH/2);
+    const card = fo.append('xhtml:div').attr('class', 'pnode-card').attr('data-id', d.id).style('border-color', col);
+    const avatarDiv = card.append('xhtml:div').attr('class', 'pnode-avatar').style('background', col);
+    if (d.avatar) {
+      avatarDiv.append('xhtml:img').attr('src', d.avatar).attr('alt', '').style('width','100%').style('height','100%').style('object-fit','cover')
+        .on('error', function() { d3.select(this).remove(); avatarDiv.append('xhtml:span').attr('class','pnode-initial').text(initial); });
+    } else {
+      avatarDiv.append('xhtml:span').attr('class', 'pnode-initial').text(initial);
+    }
+    const textDiv = card.append('xhtml:div').attr('class', 'pnode-text');
+    textDiv.append('xhtml:div').attr('class', 'pnode-name').text(d.label);
+    if (isDir) textDiv.append('xhtml:div').attr('class', 'pnode-role').text(d.role || 'Creator');
+  }
+}
+
 /* ═══════════════════════════════════════════
    INFO PANEL
 ═══════════════════════════════════════════ */
@@ -1450,7 +1522,80 @@ function showPanel(d) {
   const lbl = d.type === 'director' ? 'CREATOR' : d.type === 'artist' ? 'ARTIST' : 'WORK';
   document.getElementById('pt').textContent = lbl;
   document.getElementById('pt').style.color = col;
-  document.getElementById('pn').textContent = d.label;
+
+  const pnEl = document.getElementById('pn');
+  pnEl.textContent = d.label;
+
+  // クリエイター / アーティストのみ: ダブルクリックで名前を編集
+  pnEl.ondblclick = null;
+  if (d.type === 'director' || d.type === 'artist') {
+    pnEl.title = 'ダブルクリックで名前を編集';
+    pnEl.style.cursor = 'text';
+    pnEl.ondblclick = () => {
+      if (pnEl.querySelector('input')) return;
+      const oldName = d.label;
+      const input = document.createElement('input');
+      input.value = oldName;
+      input.style.cssText = [
+        'font:inherit', 'font-size:inherit', 'font-weight:inherit',
+        'color:var(--text)', 'background:var(--bg3)',
+        'border:1.5px solid var(--accent)', 'border-radius:6px',
+        'padding:2px 6px', 'outline:none',
+        'width:100%', 'box-sizing:border-box',
+      ].join(';');
+      pnEl.textContent = '';
+      pnEl.appendChild(input);
+      input.focus();
+      input.select();
+
+      let committed = false;
+      async function commitRename() {
+        if (committed) return;
+        committed = true;
+        const newName = input.value.trim();
+        pnEl.textContent = newName || oldName;
+        if (!newName || newName === oldName) return;
+
+        // サイト内のノードデータを即時更新
+        const node = AN.find(n => n.id === d.id);
+        if (node) {
+          node.label = newName;
+          d.label = newName;
+          d3.selectAll('foreignObject').each(function(nd) {
+            if (nd && nd.id === d.id) {
+              d3.select(this).select('.pnode-name').text(newName);
+            }
+          });
+        }
+
+        if (!d.notionPageId) {
+          console.warn('[Rename] notionPageId がありません');
+          return;
+        }
+        try {
+          const r = await fetch('/notion-rename-creator', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creatorPageId: d.notionPageId, newName }),
+          });
+          const json = await r.json();
+          if (!json.success) throw new Error(json.error || '更新失敗');
+          console.log('[Rename] Notion 更新完了: "' + newName + '"');
+        } catch (e) {
+          console.error('[Rename] Notion 更新エラー:', e.message);
+        }
+      }
+
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter')  { e.preventDefault(); commitRename(); }
+        if (e.key === 'Escape') { committed = true; pnEl.textContent = oldName; }
+      });
+      input.addEventListener('blur', commitRename);
+    };
+  } else {
+    pnEl.title = '';
+    pnEl.style.cursor = '';
+  }
 
   // IMDB panel ID（work用、関数スコープで管理）
   let _imdbPanelId = null;
@@ -1568,7 +1713,7 @@ function showPanel(d) {
         <button id="add-creator-btn" style="width:22px;height:22px;border-radius:50%;border:none;background:var(--bg3);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s" title="クリエイターを追加" onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text-2)'">＋</button>
       </div>`;
       if (workPersons.length) {
-        html += `<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none">`;
+        html += `<div style="display:flex;gap:8px;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:8px 2px">`;
         workPersons.forEach(({ person }) => {
           const roleText  = person.role || 'Creator';
           const initial   = [...person.label][0] || '?';
@@ -1579,27 +1724,44 @@ function showPanel(d) {
                  onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
                ><span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`
             : `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`;
-          html += `<button class="work-person-btn" data-person-id="${esc(person.id)}"
-            style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
-                   width:fit-content;max-width:200px;flex-shrink:0;
-                   background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
-                   padding:10px 12px;cursor:pointer;text-align:left;transition:all .15s"
-            onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
-            onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
-            <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
-                        background:var(--node-dir);overflow:hidden;
-                        display:flex;align-items:center;justify-content:center">
-              ${avatarInner}
-            </div>
-            <div style="min-width:0;overflow:hidden">
-              <div style="font-size:11px;font-weight:700;color:var(--text);
-                          overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-                          line-height:1.4;margin-bottom:2px">${esc(person.label)}</div>
-              <div style="font-size:10px;font-weight:500;color:var(--text-2);
-                          overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-                          line-height:1.3">${esc(roleText)}</div>
-            </div>
-          </button>`;
+          html += `<div class="work-person-wrap" data-person-id="${esc(person.id)}" data-notion-page-id="${esc(person.notionPageId || '')}"
+              style="position:relative;display:inline-flex;flex-shrink:0"
+              onmouseenter="this.querySelector('.remove-creator-btn').style.opacity='1';this.querySelector('.remove-creator-btn').style.pointerEvents='auto'"
+              onmouseleave="this.querySelector('.remove-creator-btn').style.opacity='0';this.querySelector('.remove-creator-btn').style.pointerEvents='none'">
+            <button class="work-person-btn" data-person-id="${esc(person.id)}"
+              style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
+                     width:fit-content;max-width:200px;flex-shrink:0;
+                     background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
+                     padding:10px 12px;cursor:pointer;text-align:left;transition:all .15s"
+              onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
+              onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
+              <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
+                          background:var(--node-dir);overflow:hidden;
+                          display:flex;align-items:center;justify-content:center">
+                ${avatarInner}
+              </div>
+              <div style="min-width:0;overflow:hidden">
+                <div style="font-size:11px;font-weight:700;color:var(--text);
+                            overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                            line-height:1.4;margin-bottom:2px">${esc(person.label)}</div>
+                <div style="font-size:10px;font-weight:500;color:var(--text-2);
+                            overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                            line-height:1.3">${esc(roleText)}</div>
+              </div>
+            </button>
+            <button class="remove-creator-btn" data-person-id="${esc(person.id)}" data-person-name="${esc(person.label)}" title="${esc(person.label)}を削除"
+              onmouseover="this.style.background='var(--accent-red)';this.style.color='#fff'"
+              onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text-2)'"
+              style="position:absolute;top:-7px;right:-7px;width:18px;height:18px;
+                     border-radius:50%;border:1.5px solid var(--bg2);background:var(--bg3);color:var(--text-2);
+                     cursor:pointer;display:flex;align-items:center;justify-content:center;
+                     box-shadow:0 1px 4px rgba(0,0,0,.4);transition:background .15s,opacity .15s;z-index:10;
+                     padding:0;opacity:0;pointer-events:none">
+              <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+                <line x1="1.5" y1="1.5" x2="8.5" y2="8.5"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5"/>
+              </svg>
+            </button>
+          </div>`;
         });
         html += `</div>`;
       } else {
@@ -1742,6 +1904,56 @@ function showPanel(d) {
     });
   });
 
+  // work パネル内の「参加クリエイター削除」バツボタン
+  document.getElementById('pc2').querySelectorAll('.remove-creator-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const personId   = btn.dataset.personId;
+      const personName = btn.dataset.personName;
+
+      // 1. ローカル状態を即座に更新 (Optimistic Update)
+      // リンク削除
+      const linkIdx = AL.findIndex(l => {
+        const s = lid(l.source), t = lid(l.target);
+        return (s === personId && t === d.id) || (t === personId && s === d.id);
+      });
+      if (linkIdx !== -1) AL.splice(linkIdx, 1);
+
+      // クリエイターノードの works からも削除
+      const personNode = AN.find(n => n.id === personId);
+      if (personNode) {
+        personNode.works = personNode.works.filter(wid => wid !== d.id);
+      }
+
+      // _creatorRelIds からも削除
+      if (d._creatorRelIds && personNode?.notionPageId) {
+        d._creatorRelIds = d._creatorRelIds.filter(id =>
+          id.replace(/-/g,'') !== (personNode.notionPageId||'').replace(/-/g,'')
+        );
+      }
+
+      // UIを即座に再描画（位置維持）
+      showPanel(d);
+      const { nodes: vNodes, links: vLinks } = filteredData();
+      redraw(vNodes, vLinks);
+      selId = d.id;
+      applyHL(selId, 'click');
+
+      // バックグラウンドで Notion に反映
+      if (!d.notionPageId || !personNode?.notionPageId) return;
+      fetch('/notion-remove-creator', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          workId:        d.notionPageId,
+          creatorPageId: personNode.notionPageId,
+        }),
+      })
+      .then(r => r.json())
+      .catch(err => console.error('[RemoveCreator]', err));
+    });
+  });
+
   // クリエイター追加ボタン
   const addBtn = document.getElementById('add-creator-btn');
   if (addBtn) {
@@ -1787,7 +1999,7 @@ function showPanel(d) {
 
   // work パネルを開いた瞬間にIMDB情報を自動取得
   if (d.type === 'work' && _imdbPanelId) {
-    fetchImdbInfo(_imdbPanelId, d.label);
+    fetchImdbInfo(_imdbPanelId, d.label, d);
   }
 }
 
@@ -1854,12 +2066,8 @@ function showAddCreatorDropdown(anchor, workNode) {
 }
 
 function addCreatorToWork(workNode, creator) {
-  // 1. ローカル状態を即座に更新 (Optimistic Update)
   if (!workNode._creatorRelIds) workNode._creatorRelIds = [];
-  if (workNode._creatorRelIds.includes(creator.notionPageId)) {
-    showToast(`${creator.Name} は既に追加されています`, 'ok');
-    return;
-  }
+  if (workNode._creatorRelIds.includes(creator.notionPageId)) return;
 
   workNode._creatorRelIds.push(creator.notionPageId);
 
@@ -1876,6 +2084,7 @@ function addCreatorToWork(workNode, creator) {
       role: creator.Role,
       sns: sns,
       avatar: creator.Avatar,
+      notionPageId: creator.notionPageId || '',
       works: [workNode.id]
     };
     AN.push(targetNode);
@@ -1886,10 +2095,10 @@ function addCreatorToWork(workNode, creator) {
   // リンクを追加
   AL.push({ source: creatorId, target: workNode.id, ltype: 'dir' });
 
-  // UIを即座に再描画
+  // UIを即座に再描画（位置維持）
   showPanel(workNode);
   const { nodes: vNodes, links: vLinks } = filteredData();
-  draw(vNodes, vLinks);
+  redraw(vNodes, vLinks);
   selId = workNode.id;
   applyHL(selId, 'click');
 
@@ -1908,8 +2117,6 @@ function addCreatorToWork(workNode, creator) {
   })
   .catch(e => {
     console.error(e);
-    showToast(`✗ Notion同期失敗: ${e.message}`, 'err');
-    // 必要に応じてここでALから削除するなどのロールバック処理を行えます
   });
 }
 
@@ -1918,6 +2125,75 @@ function addCreatorToWork(workNode, creator) {
 ═══════════════════════════════════════════ */
 const _imdbCache       = new Map(); // tt → data
 const _imdbTtCache     = new Map(); // workTitle → tt | 'NOT_FOUND'
+
+/* ── 名前類似度ユーティリティ ─────────────────────────────
+   normalize: 大文字小文字・記号・空白を統一
+   nameSimilarity: 0.0〜1.0 のスコアを返す
+     - 完全一致        → 1.0
+     - 一方が他方を含む → 0.85〜0.95
+     - トークン部分一致 → 共通トークン数で按分
+   IMDB_NAME_THRESHOLD: この値以上なら「同一人物とみなす」
+─────────────────────────────────────────────────────── */
+const IMDB_NAME_THRESHOLD = 0.72;
+
+function _normName(s) {
+  return (s || '').toLowerCase()
+    .replace(/[·•．・\-_''.]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+// スペースを完全除去した形（"chogiseok" と "cho gi seok" を同一視するため）
+function _compact(s) { return s.replace(/\s/g, ''); }
+
+function nameSimilarity(a, b) {
+  const na = _normName(a), nb = _normName(b);
+  if (!na || !nb) return 0;
+  if (na === nb) return 1.0;
+
+  // スペース除去後の完全一致（例: "chogiseok" vs "cho gi seok"）
+  if (_compact(na) === _compact(nb)) return 0.97;
+
+  // 通常の包含チェック（スペースあり）
+  if (na.includes(nb) || nb.includes(na)) {
+    const longer = Math.max(na.length, nb.length);
+    const shorter = Math.min(na.length, nb.length);
+    return 0.75 + 0.2 * (shorter / longer);
+  }
+
+  // スペース除去後の包含チェック（例: "chogiseok" vs "cho gi seok extra"）
+  const ca = _compact(na), cb = _compact(nb);
+  if (ca.includes(cb) || cb.includes(ca)) {
+    const longer = Math.max(ca.length, cb.length);
+    const shorter = Math.min(ca.length, cb.length);
+    return 0.70 + 0.2 * (shorter / longer);
+  }
+
+  // トークン単位の Jaccard 類似度
+  const ta = new Set(na.split(' ').filter(Boolean));
+  const tb = new Set(nb.split(' ').filter(Boolean));
+  let inter = 0;
+  ta.forEach(t => { if (tb.has(t)) inter++; });
+  const union = ta.size + tb.size - inter;
+  return union > 0 ? inter / union : 0;
+}
+
+/** IMDbの名前 imdbName が、グラフ上のクリエイターノード群のいずれかと
+ *  閾値以上一致するか判定し、一致したノードIDを返す（なければ null）*/
+function findMatchedCreatorNode(imdbName, workNodeId) {
+  let best = null, bestScore = 0;
+  AN.forEach(n => {
+    if (n.type !== 'director' && n.type !== 'artist') return;
+    // このノードが workNode とリンクされているか確認
+    const linked = AL.some(l => {
+      const s = lid(l.source), t = lid(l.target);
+      return (s === n.id && t === workNodeId) || (t === n.id && s === workNodeId);
+    });
+    if (!linked) return;
+    const score = nameSimilarity(imdbName, n.label || '');
+    if (score > bestScore) { bestScore = score; best = n.id; }
+  });
+  return bestScore >= IMDB_NAME_THRESHOLD ? best : null;
+}
 const _translateCache  = new Map(); // 原文 → 訳文
 
 async function translatePlot(text) {
@@ -1962,7 +2238,7 @@ function personImgHtml(imgUrl, phIcon, imgClass, phClass) {
   return `<div class="${esc(phClass)}">${phIcon}</div>`;
 }
 
-function renderImdbData(panelId, data) {
+function renderImdbData(panelId, data, workNode = null) {
   const body    = document.getElementById(`imdb-body-${panelId}`);
   const foundEl = document.getElementById(`imdb-found-${panelId}`);
   if (!body) return;
@@ -2012,9 +2288,10 @@ function renderImdbData(panelId, data) {
     html += `</div>`;
   }
 
-  // work-person-btn と同じカードUI（横スクロール）、クリックでGoogle検索
-  // onclick は data-name 属性経由で安全に渡す（JSON.stringify を HTML属性に直書きするとSyntaxError）
-  const imdbPersonCard = (name, role, imgSrc, accentColor) => {
+  // work-person-btn と同じカードUI（横スクロール）、クリックでフィルモグラフィー表示
+  // workNode が渡された場合は＋ボタンを表示して参加クリエイターに追加できる
+  // rawImgUrl: IMDb 側の元画像URL（カバー設定用）
+  const imdbPersonCard = (name, role, imgSrc, accentColor, rawImgUrl = '', _workNode = workNode) => {
     const initial  = [...name][0] || '?';
     const showRole = role && role.trim() && role.trim().toLowerCase() !== name.trim().toLowerCase();
     const avatarInner = imgSrc
@@ -2022,28 +2299,58 @@ function renderImdbData(panelId, data) {
            onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
          <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`
       : `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`;
+
+    // 完全一致 OR 名前類似度が閾値以上のノードとリンクされていれば追加済みとみなす
+    const alreadyAdded = _workNode
+      ? !!findMatchedCreatorNode(name, _workNode.id)
+      : false;
+
+    const plusBtn = _workNode ? `
+      <button class="imdb-add-creator-btn"
+        data-name="${esc(name)}" data-raw-img="${esc(rawImgUrl)}"
+        title="${esc(name)}を参加クリエイターに追加"
+        ${alreadyAdded ? '' : `onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text-2)'"`}
+        style="position:absolute;top:-7px;right:-7px;width:18px;height:18px;
+               border-radius:50%;border:1.5px solid var(--bg2);
+               background:${alreadyAdded ? 'var(--bg3)' : 'var(--bg3)'};
+               color:${alreadyAdded ? 'var(--accent)' : 'var(--text-2)'};
+               cursor:${alreadyAdded ? 'default' : 'pointer'};
+               display:flex;align-items:center;justify-content:center;
+               box-shadow:0 1px 4px rgba(0,0,0,.4);transition:background .15s,opacity .15s;z-index:10;
+               padding:0;opacity:0;pointer-events:none">
+        ${alreadyAdded
+          ? `<svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5,5 4,7.5 8.5,2"/></svg>`
+          : `<svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="1.5" x2="5" y2="8.5"/><line x1="1.5" y1="5" x2="8.5" y2="5"/></svg>`
+        }
+      </button>` : '';
+
     return `
-      <button class="imdb-search-card" data-name="${esc(name)}"
-        style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
-               width:fit-content;max-width:200px;flex-shrink:0;
-               background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
-               padding:10px 12px;cursor:pointer;text-align:left;transition:all .15s;font-family:var(--sans)"
-        onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
-        onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
-        <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
-                    background:${accentColor};overflow:hidden;
-                    display:flex;align-items:center;justify-content:center">
-          ${avatarInner}
-        </div>
-        <div style="min-width:0;overflow:hidden">
-          <div style="font-size:11px;font-weight:700;color:var(--text);
-                      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-                      line-height:1.4;margin-bottom:2px">${esc(name)}</div>
-          ${showRole ? `<div style="font-size:10px;font-weight:500;color:var(--text-2);
-                      overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-                      line-height:1.3">${esc(role)}</div>` : ''}
-        </div>
-      </button>`;
+      <div class="imdb-person-wrap" style="position:relative;display:inline-flex;flex-shrink:0"
+        onmouseenter="const b=this.querySelector('.imdb-add-creator-btn');if(b){b.style.opacity='1';b.style.pointerEvents='auto'}"
+        onmouseleave="const b=this.querySelector('.imdb-add-creator-btn');if(b){b.style.opacity='0';b.style.pointerEvents='none'}">
+        <button class="imdb-search-card" data-name="${esc(name)}"
+          style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
+                 width:fit-content;max-width:200px;flex-shrink:0;
+                 background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
+                 padding:10px 12px;cursor:pointer;text-align:left;transition:all .15s;font-family:var(--sans)"
+          onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
+          onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
+          <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
+                      background:${accentColor};overflow:hidden;
+                      display:flex;align-items:center;justify-content:center">
+            ${avatarInner}
+          </div>
+          <div style="min-width:0;overflow:hidden">
+            <div style="font-size:11px;font-weight:700;color:var(--text);
+                        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                        line-height:1.4;margin-bottom:2px">${esc(name)}</div>
+            ${showRole ? `<div style="font-size:10px;font-weight:500;color:var(--text-2);
+                        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+                        line-height:1.3">${esc(role)}</div>` : ''}
+          </div>
+        </button>
+        ${plusBtn}
+      </div>`;
   };
 
 
@@ -2084,13 +2391,13 @@ function renderImdbData(panelId, data) {
     });
 
     html += `<div class="imdb-sub-title">クリエイター (${allCrew.length}人)</div>`;
-    html += `<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:10px">`;
+    html += `<div style="display:flex;gap:8px;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:8px 2px">`;
     roleGroups.forEach((persons, cat) => {
       persons.forEach(p => {
         const name   = p.name || '';
         const role   = p.job  ? p.job : categoryLabel(p.category);
         const imgSrc = p.image ? imdbProxyImg(p.image) : '';
-        html += imdbPersonCard(name, role, imgSrc, 'var(--node-dir)');
+        html += imdbPersonCard(name, role, imgSrc, 'var(--node-dir)', p.image || '', workNode);
       });
     });
     html += `</div>`;
@@ -2119,12 +2426,12 @@ function renderImdbData(panelId, data) {
       return (a.name || '').localeCompare(b.name || '', 'ja');
     });
     html += `<div class="imdb-sub-title">出演 (${cast.length}人)</div>`;
-    html += `<div style="display:flex;gap:8px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding-bottom:10px">`;
+    html += `<div style="display:flex;gap:8px;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:8px 2px">`;
     sortedCast.slice(0, castLimit).forEach(p => {
       const name   = p.name || '';
       const role   = (p.characters && p.characters.length) ? p.characters[0] : categoryLabel(p.category) || '';
       const imgSrc = p.image ? imdbProxyImg(p.image) : '';
-      html += imdbPersonCard(name, role, imgSrc, 'var(--node-art)');
+      html += imdbPersonCard(name, role, imgSrc, 'var(--node-art)', '', null);
     });
     html += `</div>`;
     if (cast.length > castLimit) {
@@ -2143,9 +2450,81 @@ function renderImdbData(panelId, data) {
       if (name) openFilmographyModal(name, imgSrc);
     });
   });
+
+  // ＋ボタン → 参加クリエイターに追加（Notionクリエイター新規作成＋リレーション＋カバー画像）
+  if (workNode) {
+    body.querySelectorAll('.imdb-add-creator-btn').forEach(btn => {
+      if (btn.textContent.trim() === '✓') return; // 追加済みはスキップ
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const personName = btn.dataset.name;
+        const rawImgUrl  = btn.dataset.rawImg || '';
+
+        // 1. ボタンを即座に ✓ に変える
+        btn.innerHTML = `<svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5,5 4,7.5 8.5,2"/></svg>`;
+        btn.style.background = 'var(--bg3)';
+        btn.style.color = 'var(--accent)';
+        btn.style.opacity = '1';
+        btn.style.cursor = 'default';
+        btn.style.pointerEvents = 'none';
+        btn.onmouseover = null;
+        btn.onmouseout = null;
+
+        // 2. ローカルグラフに即座に反映
+        if (!workNode._creatorRelIds) workNode._creatorRelIds = [];
+        const creatorNodeId = `d_${personName}`;
+        let targetNode = AN.find(n => n.id === creatorNodeId);
+        if (!targetNode) {
+          targetNode = {
+            id: creatorNodeId, type: 'director', label: personName,
+            role: '', sns: [], avatar: rawImgUrl || '',
+            notionPageId: '', works: [workNode.id],
+          };
+          AN.push(targetNode);
+        } else {
+          if (!targetNode.works.includes(workNode.id)) targetNode.works.push(workNode.id);
+        }
+        if (!AL.find(l => lid(l.source) === creatorNodeId && lid(l.target) === workNode.id)) {
+          AL.push({ source: creatorNodeId, target: workNode.id, ltype: 'dir' });
+        }
+
+        // 3. UIを即座に再描画（位置維持）
+        showPanel(workNode);
+        const { nodes: vNodes, links: vLinks } = filteredData();
+        redraw(vNodes, vLinks);
+        selId = workNode.id;
+        applyHL(selId, 'click');
+
+        // 4. バックグラウンドで Notion に反映（fire-and-forget）
+        fetch('/notion-create-creator', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: personName, imageUrl: rawImgUrl || undefined }),
+        })
+        .then(r => r.json())
+        .then(createData => {
+          if (!createData.success) throw new Error(createData.error || '作成失敗');
+          const creatorPageId = createData.creatorPageId;
+          // notionPageId を後から補完
+          if (targetNode && !targetNode.notionPageId) targetNode.notionPageId = creatorPageId;
+          const normalizedNewId = creatorPageId.replace(/-/g, '');
+          if (!workNode._creatorRelIds.some(id => id.replace(/-/g,'') === normalizedNewId)) {
+            workNode._creatorRelIds.push(creatorPageId);
+          }
+          return fetch('/notion-add-creator', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workId: workNode.notionPageId, creatorPageId }),
+          });
+        })
+        .then(r => r.json())
+        .catch(err => console.error('[IMDB AddCreator]', err));
+      });
+    });
+  }
 }
 
-async function fetchImdbInfo(panelId, workTitle) {
+async function fetchImdbInfo(panelId, workTitle, workNode = null) {
   const body    = document.getElementById(`imdb-body-${panelId}`);
   const foundEl = document.getElementById(`imdb-found-${panelId}`);
   if (!body) return;
@@ -2167,7 +2546,7 @@ async function fetchImdbInfo(panelId, workTitle) {
 
       if (d1.notFound) {
         _imdbTtCache.set(workTitle, 'NOT_FOUND');
-        renderImdbData(panelId, { notFound: true });
+        renderImdbData(panelId, { notFound: true }, workNode);
         return;
       }
 
@@ -2177,13 +2556,13 @@ async function fetchImdbInfo(panelId, workTitle) {
     }
 
     if (tt === 'NOT_FOUND') {
-      renderImdbData(panelId, { notFound: true });
+      renderImdbData(panelId, { notFound: true }, workNode);
       return;
     }
 
     // ── 2) キャッシュ確認 ─────────────────────────────────────────
     if (_imdbCache.has(tt)) {
-      renderImdbData(panelId, _imdbCache.get(tt));
+      renderImdbData(panelId, _imdbCache.get(tt), workNode);
       return;
     }
 
@@ -2201,7 +2580,7 @@ async function fetchImdbInfo(panelId, workTitle) {
     const plotJa = d2.plot ? await translatePlot(d2.plot) : d2.plot;
     const d2ja = { ...d2, tt, plot: plotJa };
     _imdbCache.set(tt, d2ja);
-    renderImdbData(panelId, d2ja);
+    renderImdbData(panelId, d2ja, workNode);
 
   } catch (e) {
     console.error('[IMDB]', e);
@@ -2899,11 +3278,11 @@ function fetchArtistAvatars() {
 /* ═══════════════════════════════════════════
    REFRESH / INIT
 ═══════════════════════════════════════════ */
-function refresh() {
+function refresh({ freeLayout = false } = {}) {
   const { nodes, links } = filteredData();
   selId = null; hovId = null;
   document.getElementById('info-panel').classList.remove('visible');
-  draw(nodes, links);
+  draw(nodes, links, { freeLayout });
 }
 
 function showGraphOverlay() {
@@ -2925,6 +3304,9 @@ function hideGraphOverlay(delayMs = 2000) {
 function init(rows) {
   const data = buildGraph(rows);
   AN = data.nodes; AL = data.links;
+
+  // 更新時も初回と同じ初期配置から始めるため、座標・速度をリセット
+  AN.forEach(n => { delete n.x; delete n.y; n.vx = 0; n.vy = 0; });
 
   // キャッシュから ytId が既知のアーティストを事前解決
   // （ytId は前回の fetch 後に node に保存されていないため、
@@ -3088,7 +3470,125 @@ document.getElementById('fm-search').addEventListener('input', renderFmList);
 /* ═══════════════════════════════════════════
    TOPBAR EVENTS
 ═══════════════════════════════════════════ */
-document.getElementById('search-box').addEventListener('input', e => { sq = e.target.value.trim(); refresh(); });
+/* ── search-mode toggle ── */
+function updateSearchModeBtn() {
+  const isFilter = searchMode === 'filter';
+  const btn = document.getElementById('search-mode-btn');
+  document.getElementById('smb-icon-filter').style.display = isFilter ? '' : 'none';
+  document.getElementById('smb-icon-nav').style.display    = isFilter ? 'none' : '';
+  btn.style.background    = isFilter ? 'var(--bg3)' : 'var(--accent)';
+  btn.style.color         = isFilter ? 'var(--text-2)' : 'rgb(28,28,30)';
+  btn.title = isFilter ? '検索モード：フィルター（クリックで移動モードへ）' : '検索モード：移動（クリックでフィルターモードへ）';
+  document.getElementById('search-box').placeholder = isFilter ? '検索（フィルター）...' : '検索（移動）...';
+}
+
+/** navigateモード: 一致ノードをハイライトし、その重心にズームで移動する */
+function navigateToMatches(q) {
+  if (!q) {
+    // クリア: ハイライト解除
+    applyHL(null, null);
+    return;
+  }
+  const ql = q.toLowerCase();
+  const matched = AN.filter(n => !hiddenIds.has(n.id) && n.label.toLowerCase().includes(ql));
+  if (!matched.length) { applyHL(null, null); return; }
+
+  // 複数一致の場合は重心を計算、単一なら applyHL でハイライト
+  if (matched.length === 1) {
+    applyHL(matched[0].id, 'hover');
+  } else {
+    // 全体ハイライト: 一致ノードを浮かび上がらせる
+    const matchedIds = new Set(matched.map(n => n.id));
+    // リンクで繋がる隣接ノードも含める
+    const expanded = new Set(matchedIds);
+    AL.forEach(l => {
+      const s = lid(l.source), t = lid(l.target);
+      if (matchedIds.has(s)) expanded.add(t);
+      if (matchedIds.has(t)) expanded.add(s);
+    });
+    if (gDimRect) gDimRect.attr('fill-opacity', 0.75);
+    document.querySelectorAll('.wcard').forEach(el => {
+      el.classList.remove('hl-dir','hl-art','hl-both','dim');
+      if (!expanded.has(el.dataset.id)) el.classList.add('dim');
+    });
+    d3.selectAll('g.nd').each(function(d) {
+      if (d.type === 'work') return;
+      d3.select(this).style('opacity', expanded.has(d.id) ? 1 : 0.08);
+    });
+    d3.selectAll('line.lp').each(function(d) {
+      const s = lid(d.source), t = lid(d.target);
+      const active = expanded.has(s) && expanded.has(t);
+      d3.select(this).attr('stroke-opacity', active ? 1 : 0.04)
+        .attr('stroke-width', active ? (d.ltype==='dir' ? 2.8 : 2.0) : (d.ltype==='dir' ? 1.8 : 1.0));
+    });
+  }
+
+  // 重心に向かってズーム移動
+  const xs = matched.map(n => n.x).filter(v => v != null);
+  const ys = matched.map(n => n.y).filter(v => v != null);
+  if (!xs.length) return;
+  const cx = xs.reduce((a,b) => a+b, 0) / xs.length;
+  const cy = ys.reduce((a,b) => a+b, 0) / ys.length;
+  const W = window.innerWidth, H = window.innerHeight - 48;
+  const svg = d3.select('#canvas');
+  const currentZoom = d3.zoomTransform(svg.node());
+  const k = Math.max(currentZoom.k, 0.8); // 現在のズームが大きければ維持、小さければ0.8に
+  svg.transition().duration(500)
+    .call(d3.zoom().scaleExtent([0.04,4]).on('zoom', e => {
+      svg.select('g').attr('transform', e.transform);
+    }).transform, d3.zoomIdentity.translate(W/2 - k*cx, H/2 - k*cy).scale(k));
+}
+
+document.getElementById('search-mode-btn').addEventListener('click', () => {
+  searchMode = searchMode === 'filter' ? 'navigate' : 'filter';
+  updateSearchModeBtn();
+
+  // モード切替時に現在の検索クエリで再適用
+  if (sq) {
+    if (searchMode === 'filter') {
+      refresh({ freeLayout: true });
+    } else {
+      // filterモードから抜けるので全ノードを戻す
+      if (_preSqSnapshot) {
+        AN.forEach(n => { const s = _preSqSnapshot[n.id]; if (s) { n.x = s.x; n.y = s.y; n.vx = 0; n.vy = 0; } });
+        _preSqSnapshot = null;
+      }
+      const { nodes, links } = filteredData();
+      redraw(nodes, links);
+      navigateToMatches(sq);
+    }
+  }
+});
+
+document.getElementById('search-box').addEventListener('input', e => {
+  const prev = sq;
+  sq = e.target.value.trim();
+
+  if (searchMode === 'navigate') {
+    // navigateモード: フィルターせずハイライト＋移動
+    if (!sq) applyHL(null, null);
+    else navigateToMatches(sq);
+    return;
+  }
+
+  // filterモード（従来の動作）
+  if (!prev && sq) {
+    _preSqSnapshot = {};
+    AN.forEach(n => { if (n.x != null) _preSqSnapshot[n.id] = { x: n.x, y: n.y }; });
+  }
+
+  if (!sq && _preSqSnapshot) {
+    AN.forEach(n => {
+      const s = _preSqSnapshot[n.id];
+      if (s) { n.x = s.x; n.y = s.y; n.vx = 0; n.vy = 0; }
+    });
+    _preSqSnapshot = null;
+    const { nodes, links } = filteredData();
+    redraw(nodes, links);
+  } else {
+    refresh({ freeLayout: true });
+  }
+});
 
 function stopYtIframe() {
   const fr = document.getElementById('yt-iframe');
@@ -3178,6 +3678,7 @@ async function fetchFromNotionAPI() {
 }
 
 document.getElementById('notion-sync-btn').addEventListener('click', fetchFromNotionAPI);
+updateSearchModeBtn();
 window.addEventListener('load', fetchFromNotionAPI);
 </script>
 </body>

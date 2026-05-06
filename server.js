@@ -1111,6 +1111,192 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ─── /notion-create-creator : クリエイターDBに新規クリエイターを作成 ──────────
+  // body: { name, imageUrl? }
+  // レスポンス: { success, creatorPageId, alreadyExists? }
+  if (req.method === 'POST' && req.url === '/notion-create-creator') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { name, imageUrl } = JSON.parse(body);
+        if (!name) throw new Error('name が必要です');
+
+        console.log(`[Notion] クリエイター新規作成: name="${name}"`);
+
+        // 1. クリエイターDBのスキーマを取得してtitleプロパティ名を特定
+        const dbRes = await notionRequest('GET', `/v1/databases/${DB_CREATORS}`);
+        if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
+
+        let titlePropName = 'Name';
+        for (const [propName, prop] of Object.entries(dbRes.body.properties)) {
+          if (prop.type === 'title') { titlePropName = propName; break; }
+        }
+
+        // 2. 同名クリエイターが存在するか確認
+        const searchRes = await notionRequest('POST', `/v1/databases/${DB_CREATORS}/query`, {
+          filter: { property: titlePropName, title: { equals: name } },
+          page_size: 1,
+        });
+        if (searchRes.status === 200 && searchRes.body.results?.length > 0) {
+          const existing = searchRes.body.results[0];
+          console.log(`[Notion] 既存クリエイター発見: ${existing.id}`);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, creatorPageId: existing.id, alreadyExists: true }));
+          return;
+        }
+
+        // 3. 新規ページ作成
+        const createBody = {
+          parent: { database_id: DB_CREATORS },
+          properties: {
+            [titlePropName]: { title: [{ text: { content: name } }] },
+          },
+        };
+        if (imageUrl) {
+          createBody.cover = { type: 'external', external: { url: imageUrl } };
+        }
+
+        const createRes = await notionRequest('POST', '/v1/pages', createBody);
+        if (createRes.status !== 200) throw new Error(`作成失敗: ${createRes.status} ${JSON.stringify(createRes.body)}`);
+
+        const newPageId = createRes.body.id;
+        console.log(`[Notion] クリエイター作成成功: ${newPageId}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, creatorPageId: newPageId }));
+      } catch (e) {
+        console.error('[Notion Create Creator Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ─── /notion-set-creator-cover : クリエイターページのカバー画像を設定 ───────
+  // body: { creatorPageId, imageUrl }
+  if (req.method === 'POST' && req.url === '/notion-set-creator-cover') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { creatorPageId, imageUrl } = JSON.parse(body);
+        if (!creatorPageId || !imageUrl) throw new Error('creatorPageId, imageUrl が必要です');
+
+        console.log(`[Notion] カバー画像設定: creator=${creatorPageId} url=${imageUrl}`);
+
+        const patchRes = await notionRequest('PATCH', `/v1/pages/${creatorPageId}`, {
+          cover: { type: 'external', external: { url: imageUrl } }
+        });
+        if (patchRes.status !== 200) throw new Error(`カバー画像設定失敗: ${patchRes.status}`);
+
+        console.log(`[Notion] カバー画像設定成功: ${creatorPageId}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (e) {
+        console.error('[Notion Cover Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ─── /notion-rename-creator : クリエイターの名前を変更 ──────────────────────
+  // body: { creatorPageId, newName }
+  // レスポンス: { success }
+  if (req.method === 'POST' && req.url === '/notion-rename-creator') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { creatorPageId, newName } = JSON.parse(body);
+        if (!creatorPageId || !newName) throw new Error('creatorPageId, newName が必要です');
+
+        console.log(`[Notion] クリエイター名変更: id=${creatorPageId} newName="${newName}"`);
+
+        // 1. クリエイターDBのtitleプロパティ名を取得
+        const dbRes = await notionRequest('GET', `/v1/databases/${DB_CREATORS}`);
+        if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
+
+        let titlePropName = 'Name';
+        for (const [propName, prop] of Object.entries(dbRes.body.properties)) {
+          if (prop.type === 'title') { titlePropName = propName; break; }
+        }
+
+        // 2. ページのtitleを更新
+        const patchRes = await notionRequest('PATCH', `/v1/pages/${creatorPageId}`, {
+          properties: {
+            [titlePropName]: { title: [{ text: { content: newName } }] }
+          }
+        });
+        if (patchRes.status !== 200) throw new Error(`名前更新失敗: ${patchRes.status} ${JSON.stringify(patchRes.body)}`);
+
+        console.log(`[Notion] クリエイター名変更成功: ${creatorPageId} → "${newName}"`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (e) {
+        console.error('[Notion Rename Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ─── /notion-remove-creator : 作品からクリエイターを削除 ──────────────────
+  // body: { workId, creatorPageId }
+  if (req.method === 'POST' && req.url === '/notion-remove-creator') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { workId, creatorPageId } = JSON.parse(body);
+        if (!workId || !creatorPageId) throw new Error('workId, creatorPageId が必要です');
+
+        console.log(`[Notion] クリエイター削除開始: work=${workId} creator=${creatorPageId}`);
+
+        // 1. 現在のページ情報を取得
+        const pageRes = await notionRequest('GET', `/v1/pages/${workId}`);
+        if (pageRes.status !== 200) throw new Error(`ページ取得失敗: ${pageRes.status}`);
+
+        const props = pageRes.body.properties;
+        let relPropName = await getCreatorRelPropName();
+        if (!relPropName) throw new Error('クリエイターリレーションプロパティが見つかりませんでした');
+
+        const relProp = props[relPropName];
+        let currentIds = [];
+        if (relProp?.type === 'relation') {
+          currentIds = relProp.relation.map(r => r.id);
+        }
+
+        // 対象を除外したIDリスト
+        const newIds = currentIds.filter(id => id.replace(/-/g, '') !== creatorPageId.replace(/-/g, ''));
+
+        // 2. PATCH で更新
+        const updateBody = {
+          properties: {
+            [relPropName]: {
+              relation: newIds.map(id => ({ id }))
+            }
+          }
+        };
+
+        const patchRes = await notionRequest('PATCH', `/v1/pages/${workId}`, updateBody);
+        if (patchRes.status !== 200) throw new Error(`更新失敗: ${patchRes.status}`);
+
+        console.log(`[Notion] 削除成功: ${workId} から ${creatorPageId}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (e) {
+        console.error('[Notion Remove Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // ─── /notion-data : Notion から全データを取得して返す ───────────────────────
   if (req.method === 'POST' && req.url === '/notion-data') {
     let body = '';
