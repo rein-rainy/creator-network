@@ -1202,6 +1202,103 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ─── /notion-role-options : Role プロパティの選択肢一覧を返す ───────────────
+  // レスポンス: { options: [{ id, name, color }] }
+  if (req.method === 'GET' && req.url === '/notion-role-options') {
+    try {
+      const dbRes = await notionRequest('GET', `/v1/databases/${DB_CREATORS}`);
+      if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
+      const props = dbRes.body.properties;
+      const rolePropName = Object.keys(props).find(k => k === 'Role' || k === '役職') || 'Role';
+      const roleProp = props[rolePropName];
+      let options = [];
+      if (roleProp?.type === 'multi_select') {
+        options = roleProp.multi_select.options || [];
+      } else if (roleProp?.type === 'select') {
+        options = roleProp.select.options || [];
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ options: options.map(o => ({ id: o.id, name: o.name, color: o.color })) }));
+    } catch (e) {
+      console.error('[RoleOptions Error]', e.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: e.message }));
+    }
+    return;
+  }
+
+  // ─── /notion-update-creator-meta : 役職・SNS を更新 ────────────────────────
+  // body: { creatorPageId, role?, sns?: string[] }
+  if (req.method === 'POST' && req.url === '/notion-update-creator-meta') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { creatorPageId, role, sns } = JSON.parse(body);
+        if (!creatorPageId) throw new Error('creatorPageId が必要です');
+
+        // クリエイターDBのプロパティ名を取得
+        const dbRes = await notionRequest('GET', `/v1/databases/${DB_CREATORS}`);
+        if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
+        const props = dbRes.body.properties;
+
+        // Role プロパティ名を検出
+        const rolePropName = Object.keys(props).find(k => k === 'Role' || k === '役職') || 'Role';
+        // SNS プロパティ名を検出
+        const snsPropName  = Object.keys(props).find(k => k.toLowerCase() === 'sns') || 'SNS';
+
+        const patchProps = {};
+
+        if (role !== undefined) {
+          const roleProp = props[rolePropName];
+          if (roleProp?.type === 'select') {
+            patchProps[rolePropName] = { select: role ? { name: role } : null };
+          } else if (roleProp?.type === 'multi_select') {
+            // カンマ区切り文字列を複数の multi_select 項目に変換
+            const roleItems = role
+              ? role.split(',').map(r => r.trim()).filter(Boolean).map(r => ({ name: r }))
+              : [];
+            patchProps[rolePropName] = { multi_select: roleItems };
+          } else {
+            // rich_text fallback
+            patchProps[rolePropName] = { rich_text: role ? [{ text: { content: role } }] : [] };
+          }
+          console.log(`[Notion] 役職更新: ${creatorPageId} → "${role}"`);
+        }
+
+        if (sns !== undefined) {
+          // SNS は最初の URL のみ保存（Notion URL 型）
+          const firstUrl = (sns && sns.length > 0) ? sns[0] : null;
+          const snsProp  = props[snsPropName];
+          if (snsProp?.type === 'url') {
+            patchProps[snsPropName] = { url: firstUrl || null };
+          } else {
+            // rich_text fallback
+            patchProps[snsPropName] = { rich_text: firstUrl ? [{ text: { content: firstUrl } }] : [] };
+          }
+          console.log(`[Notion] SNS更新: ${creatorPageId} → ${firstUrl || '(削除)'}`);
+        }
+
+        if (Object.keys(patchProps).length === 0) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, noop: true }));
+          return;
+        }
+
+        const patchRes = await notionRequest('PATCH', `/v1/pages/${creatorPageId}`, { properties: patchProps });
+        if (patchRes.status !== 200) throw new Error(`更新失敗: ${patchRes.status} ${JSON.stringify(patchRes.body)}`);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (e) {
+        console.error('[UpdateCreatorMeta Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
   // ─── /notion-rename-creator : クリエイターの名前を変更 ──────────────────────
   // body: { creatorPageId, newName }
   // レスポンス: { success }
