@@ -19,12 +19,21 @@ const DB_WORKS       = '18860905b37f80358899e51e4e514f92'; // メイン（作品
 const DB_CREATORS    = '18860905b37f8093954fdb1bb9602c18'; // クリエイター (Director / Creator)
 const DB_ARTISTS     = '2d260905b37f80fbae0de6cb61a03091'; // アーティスト (Artist)
 
-// 起動時にトークンの存在を確認
-if (!NOTION_TOKEN) {
-  console.error('[Error] 環境変数 NOTION_TOKEN が設定されていません。');
-  process.exit(1);
-}
+// Check if we're running on Heroku
+const IS_HEROKU = !!process.env.DYNO;
+const isProduction = process.env.NODE_ENV === 'production' || IS_HEROKU;
+
 const HTML_FILE      = path.join(__dirname, 'creator-network.html');
+
+// ⚠️ NOTION_TOKEN は起動時には必須ではなく、エンドポイント呼び出し時に確認される
+// これにより Heroku でアプリが起動に失敗することを回避
+if (!NOTION_TOKEN) {
+  console.warn('[Warning] 環境変数 NOTION_TOKEN が設定されていません。');
+  console.warn('[Warning] /notion-* エンドポイントは動作しません。');
+  if (!isProduction) {
+    console.warn('[Info] ローカル開発の場合: NOTION_TOKEN=your_token node server.js');
+  }
+}
 
 function imdbSuggestionUrl(query) {
   const encoded = encodeURIComponent(query).replace(/%20/g, '_');
@@ -1401,6 +1410,14 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       const { database } = JSON.parse(body || '{}'); // リクエストボディから database パラメータを取得
       try {
+        if (!NOTION_TOKEN) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            error: 'Notion API is not configured. Please set NOTION_TOKEN environment variable.',
+            code: 'NOTION_TOKEN_MISSING'
+          }));
+          return;
+        }
         const { rows, creators, artists, count } = await buildData(database); // database パラメータを渡す
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ results: rows, creators, artists, count }));
@@ -1415,12 +1432,30 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
     try {
+      // Check if HTML file exists
+      if (!fs.existsSync(HTML_FILE)) {
+        res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(`
+          <!DOCTYPE html>
+          <html>
+          <head><title>Error</title></head>
+          <body>
+            <h1>Server Error</h1>
+            <p>HTML file not found at: ${HTML_FILE}</p>
+            <p>Please ensure creator-network.html exists in the application directory.</p>
+          </body>
+          </html>
+        `);
+        return;
+      }
+      
       const html = fs.readFileSync(HTML_FILE, 'utf-8');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(html);
     } catch (e) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end(`ファイルが見つかりません: ${HTML_FILE}\n${e.message}`);
+      console.error('[Static file error]', e.message);
+      res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(`Error reading HTML file: ${e.message}`);
     }
     return;
   }
@@ -1428,20 +1463,61 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404); res.end('Not found');
 });
 
+// ─── エラーハンドリング ────────────────────────────────────────────────────────
+server.on('error', (err) => {
+  console.error('[Server Error]', err.message);
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use`);
+    process.exit(1);
+  }
+});
+
+// ─── 予期しないエラーをキャッチ ────────────────────────────────────────────
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[Unhandled Rejection]', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[Uncaught Exception]', error.message);
+  // Heroku では例外をキャッチしてもプロセスは死ぬため、直ちにexit
+  if (isProduction) {
+    console.error('Fatal error - exiting');
+    process.exit(1);
+  }
+});
+
 server.listen(PORT, () => {
   console.log('');
   console.log('  ✅  Creator Network サーバー起動中');
-  console.log(`  🌐  http://localhost:${PORT} をブラウザで開いてください`);
+  if (isProduction) {
+    console.log(`  🌐  Heroku app running on port ${PORT}`);
+  } else {
+    console.log(`  🌐  http://localhost:${PORT} をブラウザで開いてください`);
+  }
   console.log('');
   console.log('  必要な環境変数:');
-  console.log('    NOTION_TOKEN — Notion 統合トークン');
+  console.log('    NOTION_TOKEN — Notion 統合トークン（必須）');
+  console.log('    DEEPL_API_KEY — DeepL APIキー（オプション）');
+  console.log('    YOUTUBE_API_KEY — YouTube APIキー（オプション）');
   console.log('    ※ YouTube動画検索は youtubei.js (npm install youtubei.js) を使用します（APIキー不要）');
   console.log('');
   console.log('  アーティストアイコンは Deezer API からアーティスト名で取得します（APIキー不要）');
   console.log('');
-  console.log('  起動例:');
-  console.log('    NOTION_TOKEN=xxx node server.js');
+  
+  if (NOTION_TOKEN) {
+    console.log('  ✅ NOTION_TOKEN が設定されています');
+  } else {
+    console.log('  ⚠️  NOTION_TOKEN が設定されていません — /notion-* エンドポイントは使用不可');
+  }
+  
   console.log('');
-  console.log('  Ctrl+C で停止');
+  if (!isProduction) {
+    console.log('  起動例:');
+    console.log('    NOTION_TOKEN=xxx node server.js');
+  }
+  console.log('');
+  if (!isProduction) {
+    console.log('  Ctrl+C で停止');
+  }
   console.log('');
 });
