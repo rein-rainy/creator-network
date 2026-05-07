@@ -1430,6 +1430,48 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ─── /favicon.ico : ファビコンを配信 ──────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/favicon.ico') {
+    const FAVICON_FILE = path.join(__dirname, 'favicon.ico');
+    try {
+      if (fs.existsSync(FAVICON_FILE)) {
+        const favicon = fs.readFileSync(FAVICON_FILE);
+        res.writeHead(200, { 
+          'Content-Type': 'image/x-icon',
+          'Cache-Control': 'public, max-age=31536000'
+        });
+        res.end(favicon);
+      } else {
+        res.writeHead(404); res.end();
+      }
+    } catch (e) {
+      console.error('[Favicon error]', e.message);
+      res.writeHead(500); res.end();
+    }
+    return;
+  }
+
+  // ─── /logo.png : ロゴを配信 ──────────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/logo.png') {
+    const LOGO_FILE = path.join(__dirname, 'logo.png');
+    try {
+      if (fs.existsSync(LOGO_FILE)) {
+        const logo = fs.readFileSync(LOGO_FILE);
+        res.writeHead(200, { 
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=31536000'
+        });
+        res.end(logo);
+      } else {
+        res.writeHead(404); res.end();
+      }
+    } catch (e) {
+      console.error('[Logo error]', e.message);
+      res.writeHead(500); res.end();
+    }
+    return;
+  }
+
   if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
     try {
       // Check if HTML file exists
