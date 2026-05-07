@@ -541,17 +541,38 @@ const server = http.createServer(async (req, res) => {
         console.log(`[YouTube.js] 全体開始 titles=${uniqueTitles.length} (キャッシュ済み=${uniqueTitles.length - uncached.length} 未取得=${uncached.length})`);
 
         // YouTube.js を遅延ロード（初回のみInnerTubeクライアントを初期化）
+        let yt = null;
         if (!global._ytClient) {
-          const { Innertube } = await import('youtubei.js');
-          global._ytClient = await Innertube.create({ retrieve_player: false });
-          console.log('[YouTube.js] Innertube クライアント初期化完了');
+          try {
+            const { Innertube } = await import('youtubei.js');
+            global._ytClient = await Innertube.create({ retrieve_player: false });
+            console.log('[YouTube.js] Innertube クライアント初期化完了');
+          } catch (initError) {
+            console.error('[YouTube.js] クライアント初期化失敗:', initError.message);
+            console.error('[YouTube.js] YouTube検索は利用不可になります');
+            global._ytClient = null;
+          }
         }
-        const yt = global._ytClient;
+        yt = global._ytClient;
+
+        // YouTube検索が利用可能か確認
+        if (!yt) {
+          console.warn('[YouTube.js] YouTube API が初期化されていません。キャッシュを返します。');
+          const totalDuration = Date.now() - startTime;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ results, warning: 'YouTube API unavailable' }));
+          return;
+        }
 
         // 1タイトルを検索して先頭1件の動画情報を返す
         async function ytJsSearch(title) {
           const t0 = Date.now();
           try {
+            if (!yt) {
+              console.warn(`[YouTube.js] "${title}" yt クライアント未初期化`);
+              return null;
+            }
+
             const searchResults = await yt.search(title, { type: 'video' });
             const duration = Date.now() - t0;
             console.log(`[YouTube.js] "${title}" 実行時間: ${duration}ms`);
@@ -570,7 +591,11 @@ const server = http.createServer(async (req, res) => {
               title: video.title?.text ?? title,
             };
           } catch (e) {
-            console.warn(`[YouTube.js] "${title}" 検索失敗: ${e.message}`);
+            const duration = Date.now() - t0;
+            // 詳細なエラー情報をログ出力
+            const errorMsg = e.message || String(e);
+            const errorStatus = e.status || 'unknown';
+            console.warn(`[YouTube.js] "${title}" 検索失敗 (${duration}ms): ${errorMsg} (status: ${errorStatus})`);
             return null;
           }
         }
