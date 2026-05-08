@@ -115,13 +115,8 @@ async function fetchPersonDB(dbId, label) {
       if (snsProp?.type === 'url')             sns = snsProp.url ?? '';
       else if (snsProp?.type === 'rich_text')  sns = snsProp.rich_text.map(t => t.plain_text).join('');
 
-      // Cover画像をアバターとして使用（external / file 両対応）
-      let avatar = '';
-      const cover = page.cover;
-      if (cover?.type === 'external') avatar = cover.external?.url ?? '';
-      else if (cover?.type === 'file') avatar = cover.file?.url ?? '';
-
-      persons.push({ Name: name, Role: role, SNS: sns, Avatar: avatar, notionPageId: page.id });
+      // カバー画像はアバターとして使用しない（Instagram プロフィール画像を優先）
+      persons.push({ Name: name, Role: role, SNS: sns, Avatar: '', notionPageId: page.id });
     }
 
     hasMore = r.body.has_more;
@@ -274,6 +269,101 @@ async function buildData(targetDb = 'all') {
   return { rows, creators, artists, count: rows.length };
 }
 
+
+// ─── Instagram プロフィール画像取得 ──────────────────────────────────────────
+//
+// instagram-scraper.js のロジックをサーバーに統合。
+// ENVから USER_AGENT と X_IG_APP_ID を読み込み、
+// web_profile_info API 経由でプロフィール画像URLを取得する。
+//
+// メモリキャッシュ（igAvatarCache）で同一ユーザーの重複リクエストを防止。
+// キャッシュには { profilePicUrl, expireAt } を格納し、1時間で無効化。
+
+const IG_CACHE_TTL_MS = 60 * 60 * 1000; // 1時間
+const igAvatarCache   = new Map();        // username → { profilePicUrl, expireAt }
+
+const _igHeaders = {
+  'User-Agent':     process.env.USER_AGENT  || '',
+  'X-IG-App-ID':    process.env.X_IG_APP_ID || '',
+  'X-FB-LSD':       'AVqbxe3J_YA',
+  'X-ASBD-ID':      '129477',
+  'Sec-Fetch-Site': 'same-origin',
+};
+
+// Instagram URL → username を抽出
+// 例: https://www.instagram.com/youngji_02/ → "youngji_02"
+function extractIgUsername(url) {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.includes('instagram.com')) return null;
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    return parts[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+// ユーザー名 → プロフィール画像URLを取得（メモリキャッシュ付き）
+async function fetchIgProfilePic(username) {
+  if (!username) return null;
+
+  // キャッシュチェック
+  const cached = igAvatarCache.get(username);
+  if (cached && Date.now() < cached.expireAt) {
+    console.log(`[IG] "${username}": キャッシュヒット`);
+    return cached.profilePicUrl;
+  }
+
+  if (!_igHeaders['User-Agent'] || !_igHeaders['X-IG-App-ID']) {
+    console.warn('[IG] USER_AGENT または X_IG_APP_ID が未設定のためスキップ');
+    return null;
+  }
+
+  return new Promise((resolve) => {
+    const igUrl = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`;
+    const parsed = new URL(igUrl);
+    const options = {
+      hostname: parsed.hostname,
+      path:     parsed.pathname + parsed.search,
+      method:   'GET',
+      headers:  _igHeaders,
+    };
+
+    const req = https.request(options, (igRes) => {
+      let data = '';
+      igRes.on('data', c => data += c);
+      igRes.on('end', () => {
+        try {
+          if (igRes.statusCode !== 200) {
+            console.warn(`[IG] "${username}": HTTP ${igRes.statusCode}`);
+            return resolve(null);
+          }
+          const json = JSON.parse(data);
+          const user = json?.data?.user;
+          if (!user) {
+            console.warn(`[IG] "${username}": ユーザーが見つかりません`);
+            return resolve(null);
+          }
+          // HD画像を優先し、なければ通常画像を使用
+          const profilePicUrl = user.profile_pic_url_hd || user.profile_pic_url || null;
+          console.log(`[IG] "${username}": 取得成功 → ${profilePicUrl}`);
+
+          // キャッシュに保存
+          igAvatarCache.set(username, { profilePicUrl, expireAt: Date.now() + IG_CACHE_TTL_MS });
+          resolve(profilePicUrl);
+        } catch (e) {
+          console.warn(`[IG] "${username}": レスポンス解析失敗: ${e.message}`);
+          resolve(null);
+        }
+      });
+    });
+    req.on('error', (e) => {
+      console.warn(`[IG] "${username}": リクエストエラー: ${e.message}`);
+      resolve(null);
+    });
+    req.end();
+  });
+}
 
 // ─── Deezer API でアーティスト名からアバター画像URLを取得 ────────────────────
 //
@@ -492,6 +582,87 @@ const server = http.createServer(async (req, res) => {
     }
 
     proxyImage(imageUrl, res);
+    return;
+  }
+
+  // ─── /ig-avatar : Instagram URL → プロフィール画像URL を返す ─────────────────
+  // リクエスト body: { instagramUrl: string }  または  { username: string }
+  // レスポンス:     { proxyUrl: string }  ← /avatar-img/<base64> 形式
+  if (req.method === 'POST' && req.url === '/ig-avatar') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { instagramUrl, username: rawUsername } = JSON.parse(body);
+
+        // URL または直接 username のどちらでも受け付ける
+        const username = rawUsername || extractIgUsername(instagramUrl);
+        if (!username) throw new Error('有効な Instagram URL または username が必要です');
+
+        const profilePicUrl = await fetchIgProfilePic(username);
+        if (!profilePicUrl) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `"${username}" のプロフィール画像が見つかりませんでした` }));
+          return;
+        }
+
+        // フロントエンドが /avatar-img/<base64> 形式でプロキシ経由で取得できるようURLを返す
+        const proxyUrl = `/avatar-img/${Buffer.from(profilePicUrl).toString('base64')}`;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ proxyUrl, profilePicUrl, username }));
+      } catch (e) {
+        console.error('[IG Avatar Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+
+  // ─── /ig-avatar-batch : 複数の Instagram URL を一括取得 ──────────────────────
+  // リクエスト body: { items: [{ notionPageId, instagramUrl }] }
+  // レスポンス:     { results: { notionPageId → { proxyUrl } | null } }
+  if (req.method === 'POST' && req.url === '/ig-avatar-batch') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { items = [] } = JSON.parse(body);
+        if (!items.length) throw new Error('items が空です');
+
+        const CONCURRENCY = 3; // Instagram はレート制限が厳しいため低めに設定
+        const DELAY_MS    = 300;
+        console.log(`[IG Batch] ${items.length}件を並列${CONCURRENCY}で取得開始`);
+
+        const results = {};
+        for (let i = 0; i < items.length; i += CONCURRENCY) {
+          const chunk = items.slice(i, i + CONCURRENCY);
+          const settled = await Promise.all(
+            chunk.map(async ({ notionPageId, instagramUrl }) => {
+              const username = extractIgUsername(instagramUrl);
+              if (!username) return { notionPageId, result: null };
+              const profilePicUrl = await fetchIgProfilePic(username).catch(() => null);
+              if (!profilePicUrl) return { notionPageId, result: null };
+              const proxyUrl = `/avatar-img/${Buffer.from(profilePicUrl).toString('base64')}`;
+              return { notionPageId, result: { proxyUrl, profilePicUrl, username } };
+            })
+          );
+          settled.forEach(({ notionPageId, result }) => { results[notionPageId] = result; });
+          if (i + CONCURRENCY < items.length) {
+            await new Promise(r => setTimeout(r, DELAY_MS));
+          }
+        }
+
+        const successCount = Object.values(results).filter(Boolean).length;
+        console.log(`[IG Batch] 完了 — 取得成功: ${successCount}/${items.length}件`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ results }));
+      } catch (e) {
+        console.error('[IG Batch Error]', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
 
@@ -1569,6 +1740,14 @@ server.listen(PORT, () => {
   console.log('    ※ YouTube動画検索は youtubei.js (npm install youtubei.js) を使用します（APIキー不要）');
   console.log('');
   console.log('  アーティストアイコンは Deezer API からアーティスト名で取得します（APIキー不要）');
+  console.log('  クリエイターアイコンは Notion SNS欄の Instagram URL から自動取得します');
+  console.log('    USER_AGENT — Instagram スクレイパー用 User-Agent（オプション）');
+  console.log('    X_IG_APP_ID — Instagram App ID（オプション）');
+  if (process.env.USER_AGENT && process.env.X_IG_APP_ID) {
+    console.log('  ✅ Instagram スクレイパーが有効です（/ig-avatar エンドポイント使用可）');
+  } else {
+    console.log('  ⚠️  USER_AGENT または X_IG_APP_ID 未設定 — Instagram アバター取得は無効');
+  }
   console.log('');
   
   if (NOTION_TOKEN) {

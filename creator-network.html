@@ -1336,6 +1336,15 @@ function draw(nodes, links, { freeLayout = false } = {}) {
         }
       }
     }
+    if (_igObserver) {
+      const uncached = AN.filter(n => n.type === 'director' && !n.avatar && !_igFetching.has(n.id) && extractInstagramUrl(n.sns));
+      for (const node of uncached) {
+        const cardEl = document.querySelector(`.pnode-card[data-id="${node.id}"]`);
+        if (cardEl && !_igQueue.find(n => n.id === node.id)) {
+          _igObserver.observe(cardEl);
+        }
+      }
+    }
   }));
   svg.on('click', e => {
     if (e.target.tagName === 'svg' || e.target.tagName === 'SVG') {
@@ -3474,6 +3483,31 @@ function saveAvatarCache(cache) {
   try { localStorage.setItem(AVATAR_CACHE_KEY, JSON.stringify(cache)); } catch {}
 }
 
+// ── Instagram アバターキャッシュ ────────────────────────────────────────────
+// localStorage に保存するオブジェクト:
+//   { notionPageId → proxyUrl }
+// ※ キーは notionPageId（名前ではなく ID）で管理。Instagram URL が変更されても
+//   Notion側のページIDは不変のため、古いキャッシュが残るリスクが少ない。
+
+const IG_AVATAR_CACHE_KEY = 'creator_avatar_instagram_v1';
+
+function loadIgAvatarCache() {
+  try {
+    return JSON.parse(localStorage.getItem(IG_AVATAR_CACHE_KEY) || '{}');
+  } catch { return {}; }
+}
+
+function saveIgAvatarCache(cache) {
+  try { localStorage.setItem(IG_AVATAR_CACHE_KEY, JSON.stringify(cache)); } catch {}
+}
+
+// Instagram SNSリンクを sns 配列から抽出
+function extractInstagramUrl(snsArray) {
+  if (!Array.isArray(snsArray)) return null;
+  const igEntry = snsArray.find(s => s && s.label === 'Instagram' && s.url);
+  return igEntry ? igEntry.url : null;
+}
+
 // DOM のアバター欄を画像にフェードインで差し替える
 function applyAvatarToDOM(node) {
   const cardEl = document.querySelector(`.pnode-card[data-id="${node.id}"]`);
@@ -3681,6 +3715,120 @@ function fetchArtistAvatars() {
   // rAF 後に DOM が確定してから監視を開始
   requestAnimationFrame(() => setupAvatarObserver());
 }
+
+// ── Director/Creator の Instagram アバター取得 ─────────────────────────────
+// Deezer と同じ IntersectionObserver ベースの遅延取得。
+// 画面内に入ったノードをキューに積み、3秒間隔で1件ずつ /ig-avatar を叩く。
+//
+// フロー:
+//   1. director ノードのうち Instagram URL あり を監視対象に登録
+//   2. キャッシュヒット → 即反映
+//   3. 画面内に入ったノードをキューに追加
+//   4. 3秒間隔でキューから1件取り出し → /ig-avatar → node.avatar にセット → DOM反映
+
+let _igObserver     = null;          // IntersectionObserver
+const _igFetching   = new Set();     // 処理中 nodeId（重複防止）
+const _igQueue      = [];            // 可視になった順の待機キュー
+let _igQueueTimer   = null;          // インターバルタイマー
+
+const IG_FETCH_INTERVAL_MS = 3000;   // Instagram は3秒間隔
+
+// キューから1件取り出して /ig-avatar を叩く
+async function _processIgQueue() {
+  if (!_igQueue.length) {
+    clearInterval(_igQueueTimer);
+    _igQueueTimer = null;
+    return;
+  }
+
+  const node = _igQueue.shift();
+  if (!node || _igFetching.has(node.id) || node.avatar) return;
+
+  _igFetching.add(node.id);
+  const igUrl = extractInstagramUrl(node.sns);
+  const key   = node.notionPageId || node.id;
+
+  console.log(`[IG Avatar] ${node.label}: 取得開始`);
+  try {
+    const res = await fetch('/ig-avatar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ instagramUrl: igUrl }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+
+    node.avatar = data.proxyUrl;
+    const cache = loadIgAvatarCache();
+    cache[key] = data.proxyUrl;
+    saveIgAvatarCache(cache);
+    console.log(`[IG Avatar] ${node.label}: 完了 (${data.username})`);
+    applyAvatarToDOM(node);
+  } catch (e) {
+    console.warn(`[IG Avatar] ${node.label}: 取得失敗 — ${e.message}`);
+  } finally {
+    _igFetching.delete(node.id);
+  }
+}
+
+function _startIgQueueTimer() {
+  if (_igQueueTimer) return;
+  // 最初の1件はすぐ処理、以降は3秒間隔
+  _processIgQueue();
+  _igQueueTimer = setInterval(_processIgQueue, IG_FETCH_INTERVAL_MS);
+}
+
+// draw() 後に呼ぶエントリポイント（Deezer の fetchArtistAvatars に相当）
+function fetchDirectorIgAvatars() {
+  requestAnimationFrame(() => _setupIgObserver());
+}
+
+function _setupIgObserver() {
+  if (_igObserver) { _igObserver.disconnect(); _igObserver = null; }
+  _igQueue.length = 0;
+  if (_igQueueTimer) { clearInterval(_igQueueTimer); _igQueueTimer = null; }
+
+  const cache = loadIgAvatarCache();
+
+  // Instagram URL を持つ director ノードが対象
+  const targets = AN.filter(n => n.type === 'director' && extractInstagramUrl(n.sns));
+  if (!targets.length) { console.log('[IG Avatar] 取得対象なし'); return; }
+  console.log(`[IG Avatar] ${targets.length}件を監視開始`);
+
+  // キャッシュヒット → 即反映
+  for (const node of targets) {
+    const key = node.notionPageId || node.id;
+    if (cache[key]) {
+      node.avatar = cache[key];
+      console.log(`[IG Avatar] ${node.label}: キャッシュヒット`);
+      applyAvatarToDOM(node);
+    }
+  }
+
+  const uncached = targets.filter(n => !n.avatar);
+  if (!uncached.length) { console.log('[IG Avatar] 全キャッシュヒット'); return; }
+
+  _igObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const id   = entry.target.dataset.id;
+      const node = AN.find(n => n.id === id);
+      if (!node || node.avatar || _igFetching.has(id)) continue;
+      if (!_igQueue.find(n => n.id === id)) {
+        _igQueue.push(node);
+        _startIgQueueTimer();
+      }
+      _igObserver.unobserve(entry.target);
+    }
+  }, { root: null, rootMargin: '60px', threshold: 0 });
+
+  for (const node of uncached) {
+    const cardEl = document.querySelector(`.pnode-card[data-id="${node.id}"]`);
+    if (cardEl) _igObserver.observe(cardEl);
+  }
+}
 /* ═══════════════════════════════════════════
    REFRESH / INIT
 ═══════════════════════════════════════════ */
@@ -3725,6 +3873,8 @@ function init(rows) {
   refresh();
   updateHiddenUI();
   fetchArtistAvatars();
+  // Director/Creator の Instagram アバターを取得（Notionカバー画像がない場合）
+  requestAnimationFrame(() => fetchDirectorIgAvatars());
 }
 
 /* ═══════════════════════════════════════════
