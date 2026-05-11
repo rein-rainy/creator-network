@@ -695,7 +695,7 @@ const server = http.createServer(async (req, res) => {
         if (!global._ytClient) {
           try {
             const { Innertube } = await import('youtubei.js');
-            global._ytClient = await Innertube.create({ retrieve_player: false });
+            global._ytClient = await Innertube.create({client_name: 'WEB',client_version: '2.20240501.00.00',retrieve_player: false});
             console.log('[YouTube.js] Innertube クライアント初期化完了');
           } catch (initError) {
             console.error('[YouTube.js] クライアント初期化失敗:', initError.message);
