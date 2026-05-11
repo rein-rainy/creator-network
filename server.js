@@ -314,6 +314,10 @@ async function fetchIgProfilePic(username) {
   // キャッシュチェック
   const cached = igAvatarCache.get(username);
   if (cached && Date.now() < cached.expireAt) {
+    if (cached.profilePicUrl === null) {
+      console.log(`[IG] "${username}": キャッシュされたエラー (HTTP ${cached.status || '500'}) のためスキップ`);
+      return null;
+    }
     console.log(`[IG] "${username}": キャッシュヒット`);
     return cached.profilePicUrl;
   }
@@ -344,12 +348,15 @@ async function fetchIgProfilePic(username) {
         try {
           if (igRes.statusCode !== 200) {
             console.warn(`[IG] "${username}": HTTP ${igRes.statusCode}`);
+            // エラーをキャッシュ（1時間は再試行しない）
+            igAvatarCache.set(username, { profilePicUrl: null, status: igRes.statusCode, expireAt: Date.now() + IG_CACHE_TTL_MS });
             return resolve(null);
           }
           const json = JSON.parse(data);
           const user = json?.result;
           if (!user) {
             console.warn(`[IG] "${username}": ユーザーが見つかりません`);
+            igAvatarCache.set(username, { profilePicUrl: null, status: 404, expireAt: Date.now() + IG_CACHE_TTL_MS });
             return resolve(null);
           }
           // HD画像を優先し、なければ通常画像を使用
@@ -438,14 +445,15 @@ async function searchArtistImage(artistName, workTitles = []) {
 }
 
 // 画像URLをプロキシして返す（CORS回避）
-function proxyImage(imageUrl, res) {
+function proxyImage(imageUrl, res, endpoint = 'unknown') {
   try {
     const parsed = new URL(imageUrl);
-    https.request(
+    const req = https.request(
       { hostname: parsed.hostname, path: parsed.pathname + parsed.search, method: 'GET' },
       (upstream) => {
         if (upstream.statusCode >= 300 && upstream.statusCode < 400 && upstream.headers.location) {
-          proxyImage(upstream.headers.location, res);
+          console.log(`[Img Proxy:${endpoint}] Redirecting from ${imageUrl} to ${upstream.headers.location}`);
+          proxyImage(upstream.headers.location, res, endpoint); // リダイレクト先を再プロキシ
           return;
         }
         res.writeHead(upstream.statusCode === 200 ? 200 : upstream.statusCode, {
@@ -453,9 +461,22 @@ function proxyImage(imageUrl, res) {
           'Cache-Control': 'public, max-age=86400',
         });
         upstream.pipe(res);
+        upstream.on('error', (e) => {
+          console.error(`[Img Proxy:${endpoint}] Upstream stream error for ${imageUrl}:`, e.message);
+          if (!res.headersSent) {
+            res.writeHead(502);
+            res.end('Proxy stream error');
+          }
+        });
       }
-    ).on('error', (e) => {
-      console.error('[Img] プロキシエラー:', e.message);
+    );
+
+    req.on('timeout', () => {
+      req.destroy(new Error('Upstream request timed out'));
+    });
+    req.setTimeout(10000); // 10秒でタイムアウト
+    req.on('error', (e) => {
+      console.error(`[Img Proxy:${endpoint}] Request error for ${imageUrl}:`, e.message);
       res.writeHead(502); res.end();
     }).end();
   } catch (e) {
@@ -559,7 +580,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(400); res.end('invalid imageUrl'); return;
     }
 
-    proxyImage(imageUrl, res);
+    proxyImage(imageUrl, res, 'avatar-img');
     return;
   }
 
@@ -657,7 +678,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(400); res.end('invalid imageUrl'); return;
     }
 
-    proxyImage(imageUrl, res);
+    proxyImage(imageUrl, res, 'imdb-img');
     return;
   }
 
