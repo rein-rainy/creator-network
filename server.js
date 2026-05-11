@@ -15,8 +15,7 @@ const PORT              = process.env.PORT || 3000;
 const NOTION_TOKEN      = process.env.NOTION_TOKEN;
 const DEEPL_API_KEY     = process.env.DEEPL_API_KEY;
 const YOUTUBE_API_KEY   = process.env.YOUTUBE_API_KEY;
-const INSTAGRAM_RAPIDAPI_KEY      = process.env.INSTAGRAM_RAPIDAPI_KEY;
-const SPOTIFY_RAPIDAPI_KEY        = process.env.SPOTIFY_RAPIDAPI_KEY;
+const RAPIDAPI_KEY      = process.env.RAPIDAPI_KEY;
 const DB_WORKS       = '18860905b37f80358899e51e4e514f92'; // メイン（作品）
 const DB_CREATORS    = '18860905b37f8093954fdb1bb9602c18'; // クリエイター (Director / Creator)
 const DB_ARTISTS     = '2d260905b37f80fbae0de6cb61a03091'; // アーティスト (Artist)
@@ -275,7 +274,7 @@ async function buildData(targetDb = 'all') {
 // ─── Instagram プロフィール画像取得 ──────────────────────────────────────────
 //
 // RapidAPI (instagram120.p.rapidapi.com) を使用してプロフィール画像URLを取得する。
-// 環境変数 INSTAGRAM_RAPIDAPI_KEY が必要。
+// 環境変数 RAPIDAPI_KEY が必要。
 //
 // メモリキャッシュ（igAvatarCache）で同一ユーザーの重複リクエストを防止。
 // キャッシュには { profilePicUrl, expireAt } を格納し、1時間で無効化。
@@ -320,8 +319,8 @@ async function fetchIgProfilePic(username) {
     return cached.profilePicUrl;
   }
 
-  if (!INSTAGRAM_RAPIDAPI_KEY) {
-    console.warn('[IG] INSTAGRAM_RAPIDAPI_KEY が未設定のためスキップ');
+  if (!RAPIDAPI_KEY) {
+    console.warn('[IG] RAPIDAPI_KEY が未設定のためスキップ');
     return null;
   }
 
@@ -335,7 +334,7 @@ async function fetchIgProfilePic(username) {
         'Content-Type':    'application/json',
         'Content-Length':  Buffer.byteLength(postData),
         'x-rapidapi-host': 'instagram120.p.rapidapi.com',
-        'x-rapidapi-key':  INSTAGRAM_RAPIDAPI_KEY,
+        'x-rapidapi-key':  RAPIDAPI_KEY,
       },
     };
 
@@ -399,7 +398,7 @@ async function searchArtistImage(artistName, workTitles = []) {
       method: 'GET',
       headers: {
         'x-rapidapi-host': 'spotify23.p.rapidapi.com',
-        'x-rapidapi-key':  SPOTIFY_RAPIDAPI_KEY,
+        'x-rapidapi-key':  RAPIDAPI_KEY,
       },
     };
 
@@ -1720,11 +1719,11 @@ server.listen(PORT, () => {
   console.log('');
     console.log('  アーティストアイコンは Spotify API (RapidAPI) からアーティスト名で取得します');
   console.log('  クリエイターアイコンは Notion SNS欄の Instagram URL から自動取得します');
-  console.log('    INSTAGRAM_RAPIDAPI_KEY — RapidAPI キー（instagram120.p.rapidapi.com）');
-  if (INSTAGRAM_RAPIDAPI_KEY) {
+  console.log('    RAPIDAPI_KEY — RapidAPI キー（instagram120.p.rapidapi.com）');
+  if (RAPIDAPI_KEY) {
     console.log('  ✅ Instagram アバター取得が有効です（RapidAPI経由）');
   } else {
-    console.log('  ⚠️  INSTAGRAM_RAPIDAPI_KEY 未設定 — Instagram アバター取得は無効');
+    console.log('  ⚠️  RAPIDAPI_KEY 未設定 — Instagram アバター取得は無効');
   }
   console.log('');
   
