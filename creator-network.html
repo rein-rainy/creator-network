@@ -3475,8 +3475,8 @@ document.addEventListener('click', e => {
 // ── キャッシュ構造 ──────────────────────────────────────────────────────────
 // localStorage に保存するオブジェクト:
 //   { artistName → proxyUrl }
-
-const AVATAR_CACHE_KEY = 'creator_avatar_deezer_v1';
+// キー名を更新することで古い Deezer キャッシュを無効化
+const AVATAR_CACHE_KEY = 'creator_avatar_spotify_v1';
 
 function loadAvatarCache() {
   try {
