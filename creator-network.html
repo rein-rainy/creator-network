@@ -3462,10 +3462,10 @@ document.addEventListener('click', e => {
 });
 
 /* ═══════════════════════════════════════════
-   ARTIST AVATAR (Deezer)
+   ARTIST AVATAR (Spotify via RapidAPI)
    フロー:
      1. アーティスト名 → サーバー /avatar へ POST
-        → Deezer Search API でアーティスト検索
+        → サーバーのキャッシュまたは Spotify API で検索
         → { imageUrl, artistName } を返す
      2. /avatar-img/<base64(imageUrl)> でプロキシ取得
      3. cache[artistName] = proxyUrl で保存

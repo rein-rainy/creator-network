@@ -15,7 +15,8 @@ const PORT              = process.env.PORT || 3000;
 const NOTION_TOKEN      = process.env.NOTION_TOKEN;
 const DEEPL_API_KEY     = process.env.DEEPL_API_KEY;
 const YOUTUBE_API_KEY   = process.env.YOUTUBE_API_KEY;
-const RAPIDAPI_KEY      = process.env.RAPIDAPI_KEY;
+const INSTAGRAM_RAPIDAPI_KEY      = process.env.INSTAGRAM_RAPIDAPI_KEY;
+const SPOTIFY_RAPIDAPI_KEY        = process.env.SPOTIFY_RAPIDAPI_KEY;
 const DB_WORKS       = '18860905b37f80358899e51e4e514f92'; // メイン（作品）
 const DB_CREATORS    = '18860905b37f8093954fdb1bb9602c18'; // クリエイター (Director / Creator)
 const DB_ARTISTS     = '2d260905b37f80fbae0de6cb61a03091'; // アーティスト (Artist)
@@ -274,7 +275,7 @@ async function buildData(targetDb = 'all') {
 // ─── Instagram プロフィール画像取得 ──────────────────────────────────────────
 //
 // RapidAPI (instagram120.p.rapidapi.com) を使用してプロフィール画像URLを取得する。
-// 環境変数 RAPIDAPI_KEY が必要。
+// 環境変数 INSTAGRAM_RAPIDAPI_KEY が必要。
 //
 // メモリキャッシュ（igAvatarCache）で同一ユーザーの重複リクエストを防止。
 // キャッシュには { profilePicUrl, expireAt } を格納し、1時間で無効化。
@@ -319,8 +320,8 @@ async function fetchIgProfilePic(username) {
     return cached.profilePicUrl;
   }
 
-  if (!RAPIDAPI_KEY) {
-    console.warn('[IG] RAPIDAPI_KEY が未設定のためスキップ');
+  if (!INSTAGRAM_RAPIDAPI_KEY) {
+    console.warn('[IG] INSTAGRAM_RAPIDAPI_KEY が未設定のためスキップ');
     return null;
   }
 
@@ -334,7 +335,7 @@ async function fetchIgProfilePic(username) {
         'Content-Type':    'application/json',
         'Content-Length':  Buffer.byteLength(postData),
         'x-rapidapi-host': 'instagram120.p.rapidapi.com',
-        'x-rapidapi-key':  RAPIDAPI_KEY,
+        'x-rapidapi-key':  INSTAGRAM_RAPIDAPI_KEY,
       },
     };
 
@@ -374,96 +375,64 @@ async function fetchIgProfilePic(username) {
     req.end();
   });
 }
-
-// ─── Deezer API でアーティスト名からアバター画像URLを取得 ────────────────────
+// ─── Spotify API (RapidAPI) でアーティスト名からアバター画像URLを取得 ─────────
 //
 // フロー:
-//   1. https://api.deezer.com/search/artist?q=<name>&limit=1 でアーティスト検索
-//   2. 以下のいずれかを満たせば画像を返す:
-//        a. nb_fan > 1000
-//        b. genre_id が K-Pop(129) または J-Pop(52)
-//        c. tracklist の曲タイトルと workTitles のいずれかが部分一致
-//   3. どれも満たさなければ null を返す
+//   1. Spotify Search API (RapidAPI) でアーティストを検索し、
+//      最初に見つかったアーティストの画像URLを返す。
 
-const ALLOWED_GENRE_IDS = new Set([52, 129]); // J-Pop=52, K-Pop=129
+const SPOTIFY_CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24時間
+const spotifyAvatarCache   = new Map();         // artistName -> { imageUrl, artistName, expireAt }
 
-// tracklist URL から曲タイトル一覧を取得
-function fetchTracklist(tracklistUrl) {
-  return new Promise((resolve) => {
-    https.get(tracklistUrl, { headers: { 'Accept': 'application/json' } }, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          const titles = (json.data || []).map(t => (t.title || '').toLowerCase());
-          resolve(titles);
-        } catch {
-          resolve([]);
-        }
-      });
-    }).on('error', () => resolve([]));
-  });
-}
-
-// アーティスト名 → { imageUrl, artistName } を返す
-// workTitles: アーティストが参加する作品タイトルの配列（tracklist照合用）
 async function searchArtistImage(artistName, workTitles = []) {
+  // キャッシュチェック
+  const cached = spotifyAvatarCache.get(artistName);
+  if (cached && Date.now() < cached.expireAt) {
+    console.log(`[Spotify] "${artistName}": キャッシュヒット`);
+    return { imageUrl: cached.imageUrl, artistName: cached.artistName };
+  }
+
   return new Promise((resolve) => {
-    const url = `https://api.deezer.com/search/artist?q=${encodeURIComponent(artistName)}&limit=1`;
-    https.get(url, { headers: { 'Accept': 'application/json' } }, (res) => {
+    const options = {
+      hostname: 'spotify23.p.rapidapi.com',
+      path: `/search/?q=${encodeURIComponent(artistName)}&type=artists&offset=0&limit=1`,
+      method: 'GET',
+      headers: {
+        'x-rapidapi-host': 'spotify23.p.rapidapi.com',
+        'x-rapidapi-key':  SPOTIFY_RAPIDAPI_KEY,
+      },
+    };
+
+    https.get(options, (res) => {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', async () => {
         try {
           const json = JSON.parse(data);
-          const artist = json.data?.[0];
+          const artist = json.artists?.items?.[0];
           if (!artist) {
-            console.warn(`[Deezer] "${artistName}" が見つかりませんでした`);
+            console.warn(`[Spotify] "${artistName}" が見つかりませんでした`);
             return resolve(null);
           }
-
-          const nbFan    = artist.nb_fan ?? 0;
-          const genreId  = artist.genre_id ?? -1;
-          console.log(`[Deezer] "${artistName}" nb_fan=${nbFan} genre_id=${genreId}`);
-
-          // 条件a: nb_fan > 1000
-          if (nbFan > 1000) {
-            const imageUrl = artist.picture_medium || artist.picture;
-            console.log(`[Deezer] "${artistName}" nb_fan条件OK → ${imageUrl}`);
+          const imageUrl = artist.images?.[0]?.url;
+          if (imageUrl) {
+            console.log(`[Spotify] "${artistName}" 取得成功 → ${imageUrl}`);
+            spotifyAvatarCache.set(artistName, {
+              imageUrl,
+              artistName: artist.name,
+              expireAt: Date.now() + SPOTIFY_CACHE_TTL_MS
+            });
             return resolve({ imageUrl, artistName: artist.name });
           }
-
-          // 条件b: genre_id が K-Pop / J-Pop
-          if (ALLOWED_GENRE_IDS.has(genreId)) {
-            const imageUrl = artist.picture_medium || artist.picture;
-            console.log(`[Deezer] "${artistName}" genre_id=${genreId}(K/J-Pop)条件OK → ${imageUrl}`);
-            return resolve({ imageUrl, artistName: artist.name });
-          }
-
-          // 条件c: tracklist と workTitles の部分一致
-          if (artist.tracklist && workTitles.length > 0) {
-            const trackTitles = await fetchTracklist(artist.tracklist);
-            const normWork = workTitles.map(t => t.toLowerCase());
-            const matched = trackTitles.some(track =>
-              normWork.some(work => track.includes(work) || work.includes(track))
-            );
-            if (matched) {
-              const imageUrl = artist.picture_medium || artist.picture;
-              console.log(`[Deezer] "${artistName}" tracklist一致条件OK → ${imageUrl}`);
-              return resolve({ imageUrl, artistName: artist.name });
-            }
-          }
-
-          console.warn(`[Deezer] "${artistName}" 全条件不一致 → スキップ`);
+          console.warn(`[Spotify] "${artistName}" 画像が見つかりませんでした`);
           resolve(null);
         } catch (e) {
-          console.warn(`[Deezer] "${artistName}" レスポンス解析失敗: ${e.message}`);
+          console.warn(`[Spotify] "${artistName}" レスポンス解析失敗: ${e.message}`);
           resolve(null);
         }
       });
     }).on('error', (e) => {
-      console.warn(`[Deezer] "${artistName}" リクエストエラー: ${e.message}`);
+      console.warn(`[Spotify] "${artistName}" リクエストエラー: ${e.message}`);
       resolve(null);
     });
   });
@@ -504,7 +473,7 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
 
-  // ─── /avatar : アーティスト名 → Deezer画像URL を返す ────────────────────────
+  // ─── /avatar : アーティスト名 → Spotify画像URL を返す ───────────────────────
   // リクエスト body: { artistName: string, workTitles?: string[] }
   // レスポンス:     { imageUrl, artistName }
   if (req.method === 'POST' && req.url === '/avatar') {
@@ -1749,13 +1718,13 @@ server.listen(PORT, () => {
   console.log('    YOUTUBE_API_KEY — YouTube APIキー（オプション）');
   console.log('    ※ YouTube動画検索は youtubei.js (npm install youtubei.js) を使用します（APIキー不要）');
   console.log('');
-  console.log('  アーティストアイコンは Deezer API からアーティスト名で取得します（APIキー不要）');
+    console.log('  アーティストアイコンは Spotify API (RapidAPI) からアーティスト名で取得します');
   console.log('  クリエイターアイコンは Notion SNS欄の Instagram URL から自動取得します');
-  console.log('    RAPIDAPI_KEY — RapidAPI キー（instagram120.p.rapidapi.com）');
-  if (RAPIDAPI_KEY) {
+  console.log('    INSTAGRAM_RAPIDAPI_KEY — RapidAPI キー（instagram120.p.rapidapi.com）');
+  if (INSTAGRAM_RAPIDAPI_KEY) {
     console.log('  ✅ Instagram アバター取得が有効です（RapidAPI経由）');
   } else {
-    console.log('  ⚠️  RAPIDAPI_KEY 未設定 — Instagram アバター取得は無効');
+    console.log('  ⚠️  INSTAGRAM_RAPIDAPI_KEY 未設定 — Instagram アバター取得は無効');
   }
   console.log('');
   
