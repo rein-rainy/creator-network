@@ -753,7 +753,7 @@ const server = http.createServer(async (req, res) => {
               return null;
             }
 
-        const searchResults = await yt.search(`${title} MV`, { type: 'video' });
+        const searchResults = await yt.search(title, { type: 'video' });
             const duration = Date.now() - t0;
             console.log(`[YouTube.js] "${title}" 実行時間: ${duration}ms`);
 
