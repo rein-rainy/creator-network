@@ -691,19 +691,20 @@ const server = http.createServer(async (req, res) => {
         console.log(`[YouTube.js] 全体開始 titles=${uniqueTitles.length} (キャッシュ済み=${uniqueTitles.length - uncached.length} 未取得=${uncached.length})`);
 
         // YouTube.js を遅延ロード（初回のみInnerTubeクライアントを初期化）
-        let yt = null;
-        if (!global._ytClient) {
-          try {
-            const { Innertube } = await import('youtubei.js');
-            global._ytClient = await Innertube.create({client_name: 'WEB',client_version: '2.20240501.00.00',retrieve_player: false});
-            console.log('[YouTube.js] Innertube クライアント初期化完了');
-          } catch (initError) {
-            console.error('[YouTube.js] クライアント初期化失敗:', initError.message);
-            console.error('[YouTube.js] YouTube検索は利用不可になります');
-            global._ytClient = null;
-          }
+        if (!global._ytInitPromise) {
+          global._ytInitPromise = (async () => {
+            try {
+              const { Innertube } = await import('youtubei.js');
+              const client = await Innertube.create({ retrieve_player: false });
+              console.log('[YouTube.js] Innertube クライアント初期化完了');
+              return client;
+            } catch (initError) {
+              console.error('[YouTube.js] クライアント初期化失敗:', initError.message);
+              return null;
+            }
+          })();
         }
-        yt = global._ytClient;
+        const yt = await global._ytInitPromise;
 
         // YouTube検索が利用可能か確認
         if (!yt) {
