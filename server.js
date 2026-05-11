@@ -15,6 +15,7 @@ const PORT              = process.env.PORT || 3000;
 const NOTION_TOKEN      = process.env.NOTION_TOKEN;
 const DEEPL_API_KEY     = process.env.DEEPL_API_KEY;
 const YOUTUBE_API_KEY   = process.env.YOUTUBE_API_KEY;
+const RAPIDAPI_KEY      = process.env.RAPIDAPI_KEY;
 const DB_WORKS       = '18860905b37f80358899e51e4e514f92'; // メイン（作品）
 const DB_CREATORS    = '18860905b37f8093954fdb1bb9602c18'; // クリエイター (Director / Creator)
 const DB_ARTISTS     = '2d260905b37f80fbae0de6cb61a03091'; // アーティスト (Artist)
@@ -272,23 +273,14 @@ async function buildData(targetDb = 'all') {
 
 // ─── Instagram プロフィール画像取得 ──────────────────────────────────────────
 //
-// instagram-scraper.js のロジックをサーバーに統合。
-// ENVから USER_AGENT と X_IG_APP_ID を読み込み、
-// web_profile_info API 経由でプロフィール画像URLを取得する。
+// RapidAPI (instagram120.p.rapidapi.com) を使用してプロフィール画像URLを取得する。
+// 環境変数 RAPIDAPI_KEY が必要。
 //
 // メモリキャッシュ（igAvatarCache）で同一ユーザーの重複リクエストを防止。
 // キャッシュには { profilePicUrl, expireAt } を格納し、1時間で無効化。
 
 const IG_CACHE_TTL_MS = 60 * 60 * 1000; // 1時間
 const igAvatarCache   = new Map();        // username → { profilePicUrl, expireAt }
-
-const _igHeaders = {
-  'User-Agent':     process.env.USER_AGENT  || '',
-  'X-IG-App-ID':    process.env.X_IG_APP_ID || '',
-  'X-FB-LSD':       'AVqbxe3J_YA',
-  'X-ASBD-ID':      '129477',
-  'Sec-Fetch-Site': 'same-origin',
-};
 
 // Instagram URL → username を抽出
 // 例: https://www.instagram.com/youngji_02/ → "youngji_02"
@@ -303,7 +295,20 @@ function extractIgUsername(url) {
   }
 }
 
-// ユーザー名 → プロフィール画像URLを取得（メモリキャッシュ付き）
+// Instagram URL → username を抽出
+// 例: https://www.instagram.com/youngji_02/ → "youngji_02"
+function extractIgUsername(url) {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname.includes('instagram.com')) return null;
+    const parts = parsed.pathname.split('/').filter(Boolean);
+    return parts[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+// ユーザー名 → プロフィール画像URLを取得（RapidAPI経由・メモリキャッシュ付き）
 async function fetchIgProfilePic(username) {
   if (!username) return null;
 
@@ -314,19 +319,23 @@ async function fetchIgProfilePic(username) {
     return cached.profilePicUrl;
   }
 
-  if (!_igHeaders['User-Agent'] || !_igHeaders['X-IG-App-ID']) {
-    console.warn('[IG] USER_AGENT または X_IG_APP_ID が未設定のためスキップ');
+  if (!RAPIDAPI_KEY) {
+    console.warn('[IG] RAPIDAPI_KEY が未設定のためスキップ');
     return null;
   }
 
   return new Promise((resolve) => {
-    const igUrl = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`;
-    const parsed = new URL(igUrl);
+    const postData = JSON.stringify({ username });
     const options = {
-      hostname: parsed.hostname,
-      path:     parsed.pathname + parsed.search,
-      method:   'GET',
-      headers:  _igHeaders,
+      hostname: 'instagram120.p.rapidapi.com',
+      path:     '/api/instagram/profile',
+      method:   'POST',
+      headers: {
+        'Content-Type':    'application/json',
+        'Content-Length':  Buffer.byteLength(postData),
+        'x-rapidapi-host': 'instagram120.p.rapidapi.com',
+        'x-rapidapi-key':  RAPIDAPI_KEY,
+      },
     };
 
     const req = https.request(options, (igRes) => {
@@ -339,7 +348,7 @@ async function fetchIgProfilePic(username) {
             return resolve(null);
           }
           const json = JSON.parse(data);
-          const user = json?.data?.user;
+          const user = json?.result;
           if (!user) {
             console.warn(`[IG] "${username}": ユーザーが見つかりません`);
             return resolve(null);
@@ -361,6 +370,7 @@ async function fetchIgProfilePic(username) {
       console.warn(`[IG] "${username}": リクエストエラー: ${e.message}`);
       resolve(null);
     });
+    req.write(postData);
     req.end();
   });
 }
@@ -877,7 +887,7 @@ const server = http.createServer(async (req, res) => {
           // C) 括弧内テキスト（英数字中心のもの）を曲タイトル候補として追加
           for (const m of norm.matchAll(/(([^)]{2,}))/g)) {
             const inner = m[1].trim();
-            const nonAscii = (inner.match(/[^ -]/g) || []).length;
+            const nonAscii = (inner.match(/[^-]/g) || []).length;
             if (nonAscii < inner.length * 0.4) queries.add(inner);
           }
 
@@ -1741,12 +1751,11 @@ server.listen(PORT, () => {
   console.log('');
   console.log('  アーティストアイコンは Deezer API からアーティスト名で取得します（APIキー不要）');
   console.log('  クリエイターアイコンは Notion SNS欄の Instagram URL から自動取得します');
-  console.log('    USER_AGENT — Instagram スクレイパー用 User-Agent（オプション）');
-  console.log('    X_IG_APP_ID — Instagram App ID（オプション）');
-  if (process.env.USER_AGENT && process.env.X_IG_APP_ID) {
-    console.log('  ✅ Instagram スクレイパーが有効です（/ig-avatar エンドポイント使用可）');
+  console.log('    RAPIDAPI_KEY — RapidAPI キー（instagram120.p.rapidapi.com）');
+  if (RAPIDAPI_KEY) {
+    console.log('  ✅ Instagram アバター取得が有効です（RapidAPI経由）');
   } else {
-    console.log('  ⚠️  USER_AGENT または X_IG_APP_ID 未設定 — Instagram アバター取得は無効');
+    console.log('  ⚠️  RAPIDAPI_KEY 未設定 — Instagram アバター取得は無効');
   }
   console.log('');
   

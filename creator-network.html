@@ -1336,13 +1336,18 @@ function draw(nodes, links, { freeLayout = false } = {}) {
         }
       }
     }
-    if (_igObserver) {
+    // ズーム後に新たに画面内に入ったノードを並列取得
+    {
       const uncached = AN.filter(n => n.type === 'director' && !n.avatar && !_igFetching.has(n.id) && extractInstagramUrl(n.sns));
-      for (const node of uncached) {
+      const nowVisible = uncached.filter(node => {
         const cardEl = document.querySelector(`.pnode-card[data-id="${node.id}"]`);
-        if (cardEl && !_igQueue.find(n => n.id === node.id)) {
-          _igObserver.observe(cardEl);
-        }
+        if (!cardEl) return false;
+        const rect = cardEl.getBoundingClientRect();
+        return rect.top < window.innerHeight + 60 && rect.bottom > -60
+            && rect.left < window.innerWidth  + 60 && rect.right  > -60;
+      });
+      if (nowVisible.length) {
+        Promise.all(nowVisible.map(node => _fetchOneIgAvatar(node)));
       }
     }
   }));
@@ -3717,33 +3722,20 @@ function fetchArtistAvatars() {
 }
 
 // ── Director/Creator の Instagram アバター取得 ─────────────────────────────
-// Deezer と同じ IntersectionObserver ベースの遅延取得。
-// 画面内に入ったノードをキューに積み、3秒間隔で1件ずつ /ig-avatar を叩く。
+// 画面内に表示されている全ノードを一括取得（クールダウンなし）。
+// キャッシュ済みはスキップ（永久保存）。
 //
 // フロー:
-//   1. director ノードのうち Instagram URL あり を監視対象に登録
-//   2. キャッシュヒット → 即反映
-//   3. 画面内に入ったノードをキューに追加
-//   4. 3秒間隔でキューから1件取り出し → /ig-avatar → node.avatar にセット → DOM反映
+//   1. director ノードのうち Instagram URL あり を対象に登録
+//   2. キャッシュヒット → 即反映（スキップ）
+//   3. 画面内（IntersectionObserver で可視）のノードを全収集
+//   4. 未取得ノードをまとめて並列フェッチ → node.avatar にセット → DOM反映
 
-let _igObserver     = null;          // IntersectionObserver
 const _igFetching   = new Set();     // 処理中 nodeId（重複防止）
-const _igQueue      = [];            // 可視になった順の待機キュー
-let _igQueueTimer   = null;          // インターバルタイマー
 
-const IG_FETCH_INTERVAL_MS = 3000;   // Instagram は3秒間隔
-
-// キューから1件取り出して /ig-avatar を叩く
-async function _processIgQueue() {
-  if (!_igQueue.length) {
-    clearInterval(_igQueueTimer);
-    _igQueueTimer = null;
-    return;
-  }
-
-  const node = _igQueue.shift();
-  if (!node || _igFetching.has(node.id) || node.avatar) return;
-
+// 1件 /ig-avatar を叩いて結果を返す（クールダウンなし）
+async function _fetchOneIgAvatar(node) {
+  if (_igFetching.has(node.id) || node.avatar) return;
   _igFetching.add(node.id);
   const igUrl = extractInstagramUrl(node.sns);
   const key   = node.notionPageId || node.id;
@@ -3762,7 +3754,7 @@ async function _processIgQueue() {
 
     node.avatar = data.proxyUrl;
     const cache = loadIgAvatarCache();
-    cache[key] = data.proxyUrl;
+    cache[key] = data.proxyUrl;   // 永久キャッシュ（有効期限なし）
     saveIgAvatarCache(cache);
     console.log(`[IG Avatar] ${node.label}: 完了 (${data.username})`);
     applyAvatarToDOM(node);
@@ -3773,60 +3765,75 @@ async function _processIgQueue() {
   }
 }
 
-function _startIgQueueTimer() {
-  if (_igQueueTimer) return;
-  // 最初の1件はすぐ処理、以降は3秒間隔
-  _processIgQueue();
-  _igQueueTimer = setInterval(_processIgQueue, IG_FETCH_INTERVAL_MS);
-}
-
-// draw() 後に呼ぶエントリポイント（Deezer の fetchArtistAvatars に相当）
+// draw() 後に呼ぶエントリポイント
 function fetchDirectorIgAvatars() {
   requestAnimationFrame(() => _setupIgObserver());
 }
 
 function _setupIgObserver() {
-  if (_igObserver) { _igObserver.disconnect(); _igObserver = null; }
-  _igQueue.length = 0;
-  if (_igQueueTimer) { clearInterval(_igQueueTimer); _igQueueTimer = null; }
-
   const cache = loadIgAvatarCache();
 
   // Instagram URL を持つ director ノードが対象
   const targets = AN.filter(n => n.type === 'director' && extractInstagramUrl(n.sns));
   if (!targets.length) { console.log('[IG Avatar] 取得対象なし'); return; }
-  console.log(`[IG Avatar] ${targets.length}件を監視開始`);
+  console.log(`[IG Avatar] ${targets.length}件を確認`);
 
-  // キャッシュヒット → 即反映
+  // キャッシュヒット → 即反映（スキップ）
   for (const node of targets) {
     const key = node.notionPageId || node.id;
     if (cache[key]) {
       node.avatar = cache[key];
-      console.log(`[IG Avatar] ${node.label}: キャッシュヒット`);
+      console.log(`[IG Avatar] ${node.label}: キャッシュヒット（スキップ）`);
       applyAvatarToDOM(node);
     }
   }
 
   const uncached = targets.filter(n => !n.avatar);
   if (!uncached.length) { console.log('[IG Avatar] 全キャッシュヒット'); return; }
+  console.log(`[IG Avatar] 未キャッシュ ${uncached.length}件を一括取得`);
 
-  _igObserver = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      if (!entry.isIntersecting) continue;
-      const id   = entry.target.dataset.id;
-      const node = AN.find(n => n.id === id);
-      if (!node || node.avatar || _igFetching.has(id)) continue;
-      if (!_igQueue.find(n => n.id === id)) {
-        _igQueue.push(node);
-        _startIgQueueTimer();
-      }
-      _igObserver.unobserve(entry.target);
-    }
-  }, { root: null, rootMargin: '60px', threshold: 0 });
+  // 画面内に見えているノードを収集し、全件を並列フェッチ（クールダウンなし）
+  const visibleNodes = [];
+  const hiddenNodes  = [];
 
   for (const node of uncached) {
     const cardEl = document.querySelector(`.pnode-card[data-id="${node.id}"]`);
-    if (cardEl) _igObserver.observe(cardEl);
+    if (!cardEl) continue;
+    const rect = cardEl.getBoundingClientRect();
+    const inView = rect.top < window.innerHeight + 60 && rect.bottom > -60
+                && rect.left < window.innerWidth  + 60 && rect.right  > -60;
+    if (inView) visibleNodes.push(node);
+    else        hiddenNodes.push(node);
+  }
+
+  // 画面内ノードを並列で一括取得
+  if (visibleNodes.length) {
+    console.log(`[IG Avatar] 画面内 ${visibleNodes.length}件を並列取得`);
+    Promise.all(visibleNodes.map(node => _fetchOneIgAvatar(node)));
+  }
+
+  // 画面外ノードは IntersectionObserver で可視化したタイミングで並列取得
+  if (hiddenNodes.length) {
+    const obs = new IntersectionObserver((entries) => {
+      const toFetch = [];
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        const id   = entry.target.dataset.id;
+        const node = AN.find(n => n.id === id);
+        if (!node || node.avatar || _igFetching.has(id)) continue;
+        toFetch.push(node);
+        obs.unobserve(entry.target);
+      }
+      if (toFetch.length) {
+        console.log(`[IG Avatar] 新たに画面内 ${toFetch.length}件を並列取得`);
+        Promise.all(toFetch.map(node => _fetchOneIgAvatar(node)));
+      }
+    }, { root: null, rootMargin: '60px', threshold: 0 });
+
+    for (const node of hiddenNodes) {
+      const cardEl = document.querySelector(`.pnode-card[data-id="${node.id}"]`);
+      if (cardEl) obs.observe(cardEl);
+    }
   }
 }
 /* ═══════════════════════════════════════════
