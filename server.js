@@ -295,19 +295,6 @@ function extractIgUsername(url) {
   }
 }
 
-// Instagram URL → username を抽出
-// 例: https://www.instagram.com/youngji_02/ → "youngji_02"
-function extractIgUsername(url) {
-  try {
-    const parsed = new URL(url);
-    if (!parsed.hostname.includes('instagram.com')) return null;
-    const parts = parsed.pathname.split('/').filter(Boolean);
-    return parts[0] || null;
-  } catch {
-    return null;
-  }
-}
-
 // ユーザー名 → プロフィール画像URLを取得（RapidAPI経由・メモリキャッシュ付き）
 async function fetchIgProfilePic(username) {
   if (!username) return null;
@@ -695,10 +682,11 @@ const server = http.createServer(async (req, res) => {
           global._ytInitPromise = (async () => {
             try {
               const { Innertube } = await import('youtubei.js');
+              // client_name / client_version を手動指定しない。
+              // 手動で version を渡すと内部 URL が /youtubei/vnull/search になり
+              // 400 エラーが発生するため、デフォルト設定（WEB クライアント自動取得）を使用する。
               const client = await Innertube.create({
-                client_name: 'WEB',
-                client_version: '2.20241121.01.00', // 動作確認済みの有効な固定バージョン
-                retrieve_player: false
+                retrieve_player: false,
               });
               console.log('[YouTube.js] Innertube クライアント初期化完了');
               return client;
