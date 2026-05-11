@@ -266,6 +266,18 @@ async function buildData(targetDb = 'all') {
     return row;
   });
 
+  // タイトルプロパティ名を特定して名前順にソート
+  let titlePropName = null;
+  if (works.length > 0) {
+    for (const [name, prop] of Object.entries(works[0].properties)) {
+      if (prop.type === 'title') { titlePropName = name; break; }
+    }
+  }
+  if (titlePropName) {
+    rows.sort((a, b) => (a[titlePropName] || '').localeCompare(b[titlePropName] || '', 'ja'));
+    console.log(`[Notion] 作品を名前順にソート (key: "${titlePropName}")`);
+  }
+
   console.log(`[Notion] 完了 — 作品 ${rows.length} 件 / Creator ${creators.length} 件 / Artist ${artists.length} 件`);
   return { rows, creators, artists, count: rows.length };
 }
