@@ -408,20 +408,21 @@ async function searchArtistImage(artistName, workTitles = []) {
       res.on('end', async () => {
         try {
           const json = JSON.parse(data);
-          const artist = json.artists?.items?.[0];
-          if (!artist) {
+          const artistData = json.artists?.items?.[0]?.data;
+          if (!artistData) {
             console.warn(`[Spotify] "${artistName}" が見つかりませんでした`);
             return resolve(null);
           }
-          const imageUrl = artist.images?.[0]?.url;
+          const imageUrl = artistData.visuals?.avatarImage?.sources?.[0]?.url;
+          const nameInApi = artistData.profile?.name || artistName;
           if (imageUrl) {
             console.log(`[Spotify] "${artistName}" 取得成功 → ${imageUrl}`);
             spotifyAvatarCache.set(artistName, {
               imageUrl,
-              artistName: artist.name,
+              artistName: nameInApi,
               expireAt: Date.now() + SPOTIFY_CACHE_TTL_MS
             });
-            return resolve({ imageUrl, artistName: artist.name });
+            return resolve({ imageUrl, artistName: nameInApi });
           }
           console.warn(`[Spotify] "${artistName}" 画像が見つかりませんでした`);
           resolve(null);
