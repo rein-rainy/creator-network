@@ -678,14 +678,16 @@ const server = http.createServer(async (req, res) => {
         console.log(`[YouTube.js] 全体開始 titles=${uniqueTitles.length} (キャッシュ済み=${uniqueTitles.length - uncached.length} 未取得=${uncached.length})`);
 
         // YouTube.js を遅延ロード（初回のみInnerTubeクライアントを初期化）
+        // generate_session_locally: true でYouTubeへの初期リクエストを回避。
+        // これにより Heroku など外向きリクエストが制限される環境でも初期化できる。
+        // client_version を手動指定すると api_version が null になり
+        // /youtubei/vnull/search という不正URLが生成されるため指定しない。
         if (!global._ytInitPromise) {
           global._ytInitPromise = (async () => {
             try {
               const { Innertube } = await import('youtubei.js');
-              // client_name / client_version を手動指定しない。
-              // 手動で version を渡すと内部 URL が /youtubei/vnull/search になり
-              // 400 エラーが発生するため、デフォルト設定（WEB クライアント自動取得）を使用する。
               const client = await Innertube.create({
+                generate_session_locally: true, // ネットワーク不要でセッション生成
                 retrieve_player: false,
               });
               console.log('[YouTube.js] Innertube クライアント初期化完了');
@@ -697,6 +699,8 @@ const server = http.createServer(async (req, res) => {
           })();
         }
         const yt = await global._ytInitPromise;
+        // 初期化に失敗していた場合は次回リクエスト時に再試行できるようリセット
+        if (!yt) global._ytInitPromise = null;
 
         // YouTube検索が利用可能か確認
         if (!yt) {
