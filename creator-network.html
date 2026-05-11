@@ -3752,9 +3752,27 @@ async function _fetchOneIgAvatar(node) {
     const data = await res.json();
     if (data.error) throw new Error(data.error);
 
-    node.avatar = data.proxyUrl;
+    // proxyUrl から画像をフェッチして Base64 データURIに変換してキャッシュ
+    // （インスタの画像URLは数日で失効するため、画像データ自体を保存する）
+    let avatarData = data.proxyUrl; // フォールバック用に URL も保持
+    try {
+      const imgRes = await fetch(data.proxyUrl, { signal: AbortSignal.timeout(10000) });
+      if (imgRes.ok) {
+        const blob = await imgRes.blob();
+        avatarData = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload  = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('FileReader失敗'));
+          reader.readAsDataURL(blob);
+        });
+      }
+    } catch (imgErr) {
+      console.warn(`[IG Avatar] ${node.label}: 画像Base64変換失敗（URLをフォールバック使用）`, imgErr.message);
+    }
+
+    node.avatar = avatarData;
     const cache = loadIgAvatarCache();
-    cache[key] = data.proxyUrl;   // 永久キャッシュ（有効期限なし）
+    cache[key] = avatarData;   // 永久キャッシュ（Base64データURIで保存）
     saveIgAvatarCache(cache);
     console.log(`[IG Avatar] ${node.label}: 完了 (${data.username})`);
     applyAvatarToDOM(node);
@@ -3779,14 +3797,22 @@ function _setupIgObserver() {
   console.log(`[IG Avatar] ${targets.length}件を確認`);
 
   // キャッシュヒット → 即反映（スキップ）
+  // data: URI のみ有効。URL文字列は失効している可能性があるため破棄して再取得
   for (const node of targets) {
     const key = node.notionPageId || node.id;
     if (cache[key]) {
-      node.avatar = cache[key];
-      console.log(`[IG Avatar] ${node.label}: キャッシュヒット（スキップ）`);
-      applyAvatarToDOM(node);
+      if (cache[key].startsWith('data:')) {
+        node.avatar = cache[key];
+        console.log(`[IG Avatar] ${node.label}: キャッシュヒット（スキップ）`);
+        applyAvatarToDOM(node);
+      } else {
+        // 旧形式（URL）は削除して再取得
+        console.log(`[IG Avatar] ${node.label}: 旧URLキャッシュを破棄して再取得`);
+        delete cache[key];
+      }
     }
   }
+  saveIgAvatarCache(cache); // 旧形式を削除した場合に備えて保存
 
   const uncached = targets.filter(n => !n.avatar);
   if (!uncached.length) { console.log('[IG Avatar] 全キャッシュヒット'); return; }
