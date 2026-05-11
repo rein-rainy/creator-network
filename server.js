@@ -695,7 +695,11 @@ const server = http.createServer(async (req, res) => {
           global._ytInitPromise = (async () => {
             try {
               const { Innertube } = await import('youtubei.js');
-              const client = await Innertube.create({ retrieve_player: false });
+              const client = await Innertube.create({
+                client_name: 'WEB',
+                client_version: '2.20260501.00.00', // 固定バージョンを設定
+                retrieve_player: false
+              });
               console.log('[YouTube.js] Innertube クライアント初期化完了');
               return client;
             } catch (initError) {
