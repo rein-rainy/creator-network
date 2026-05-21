@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Creator Network</title>
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="apple-touch-icon" href="/logo.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<link rel="stylesheet" href="/css/styles.css">
+</head>
+<body data-theme="dark">
+
+<div id="bg-grid"></div>
+
+<div id="topbar">
+  <div class="logo">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1361 209.15" height="16" aria-label="Creator Net" role="img">
+      <g fill="currentColor">
+        <path d="M141.2,149.97c-4.38,19.07-12.72,33.72-25.03,43.96-12.67,10.15-27.67,15.22-44.99,15.22-15.67-.38-28.74-4.33-39.21-11.85-10.66-7.24-18.4-15.62-23.23-25.12-1.46-3.1-2.78-6.07-3.96-8.89-1.09-2.92-2.01-6.58-2.73-11.01-1.37-8.28-2.05-24.18-2.05-47.7s.68-39.89,2.05-47.98c1.46-8.09,3.69-14.63,6.7-19.62,4.83-9.5,12.58-17.97,23.24-25.4C42.46,4.05,55.54.19,71.22,0c19.23.19,34.9,6.06,47.02,17.61,12.12,11.65,19.77,26.07,22.96,43.26h-32.04c-2.47-8.3-6.94-15.37-13.42-21.21-6.75-5.56-14.97-8.44-24.64-8.63-7.12.19-13.23,1.65-18.35,4.38-5.2,2.83-9.4,6.36-12.6,10.61-3.93,4.43-6.52,10.14-7.8,17.11-1.46,7.35-2.19,21.17-2.19,41.44s.73,33.99,2.19,41.15c1.28,7.17,3.88,12.96,7.81,17.4,3.19,4.24,7.4,7.68,12.6,10.32,5.11,3.11,11.23,4.67,18.35,4.67,16.98,0,29.68-9.38,38.08-28.14h32Z"/>
+        <path d="M164.97,60.97h28.48v15.52h.6c9.39-11.57,21.7-17.36,36.92-17.36,11.4.19,21.33,3.94,29.81,11.25l-20.8,25.45c-6.02-4.9-12.27-7.36-18.75-7.36-7.3,0-13.55,2.45-18.75,7.35-5.84,4.81-8.85,12.58-9.03,23.32v88.32h-28.48V60.97Z"/>
+        <path d="M293.65,145.34c0,11.77,3.28,20.71,9.85,26.83,6.11,6.21,14.13,9.32,24.07,9.32,11.58,0,21.93-4.75,31.05-14.26l20.65,18.21c-14.48,15.99-31.52,23.89-51.11,23.7-7.47,0-14.76-1.13-21.87-3.39-3.55-1.22-7.01-2.87-10.38-4.94-3.55-1.79-6.88-4-9.98-6.63-6.01-5.46-10.89-13.08-14.62-22.86-4.1-9.41-6.15-21.64-6.15-36.69s1.77-26.53,5.33-36.13c3.55-9.78,8.11-17.5,13.66-23.14,5.65-5.74,11.98-9.88,18.99-12.42,6.92-2.54,13.75-3.81,20.5-3.81,16.21.19,29.92,5.69,41.13,16.52,11.39,11.01,17.17,26.16,17.35,45.45v24.25h-88.48ZM353.66,121.1c-.37-11.44-3.33-20.09-8.9-25.95-5.48-5.58-12.51-8.37-21.1-8.37s-15.62,2.79-21.1,8.37c-5.39,5.86-8.36,14.51-8.9,25.95h60Z"/>
+        <path d="M491.25,194.48h-.55c-2.64,4.98-6.74,8.65-12.3,11-5.47,2.44-13.03,3.67-22.68,3.67-15.85-.19-28.05-4.51-36.61-12.98-9.02-8.28-13.53-18.86-13.53-31.75s3.92-22.53,11.75-30.62c7.83-8.28,19.31-12.51,34.43-12.7h39.48v-15.46c.19-12.95-9.52-19.24-29.11-18.86-7.11,0-12.71.76-16.81,2.27-4.28,1.8-7.66,4.82-10.11,9.08l-22.42-17.66c10.83-14.6,26.81-21.71,47.94-21.33,17.84-.19,32.09,3.29,42.75,10.44,10.65,7.34,16.07,19.95,16.25,37.82v100.06h-28.48v-12.98ZM491.25,145.34h-34.23c-16.62.38-24.84,6.26-24.65,17.65,0,4.99,2.14,9.23,6.43,12.71,4.11,3.86,10.91,5.79,20.4,5.79,11.96.19,20.4-1.27,25.33-4.38,4.47-3.11,6.71-10.17,6.71-21.18v-10.59Z"/>
+        <path d="M562.94,16.37h28.48v44.59h20.78v22.57h-20.78v85.4c-.19,7.44,3.18,11.06,10.12,10.87h10.66v27.65h-14.87c-10.01,0-18.2-3.2-24.56-9.59-6.55-6.11-9.83-14.94-9.83-26.5v-87.83h-14.3v-22.57h14.3V16.37Z"/>
+        <path d="M634.49,134.07c0-15.46,1.23-27.33,3.69-35.63,2.55-8.1,6.47-14.94,11.76-20.5,3.92-4.87,9.39-9.22,16.4-13.06,6.93-3.65,15.81-5.57,26.66-5.76,11.21.19,20.28,2.12,27.2,5.79,6.83,3.86,12.12,8.23,15.86,13.12,5.63,5.55,9.63,12.37,11.99,20.46,2.27,8.28,3.41,20.13,3.41,35.56s-1.14,27.19-3.42,35.28c-2.37,8.09-6.38,15.1-12.02,21.03-1.82,2.17-4.06,4.28-6.7,6.35-2.37,2.35-5.42,4.38-9.16,6.07-6.92,4.05-15.99,6.16-27.19,6.35-10.84-.19-19.72-2.3-26.65-6.35-7.01-3.67-12.48-7.81-16.4-12.42-5.28-5.93-9.2-12.93-11.75-21.03-2.46-8.09-3.69-19.85-3.69-35.28ZM722.98,134.35c0-10.48-.46-18.12-1.37-22.94-.92-4.63-2.79-8.69-5.62-12.18-2.1-3.3-5.2-5.9-9.31-7.79-3.93-1.98-8.5-2.97-13.7-2.97-4.84,0-9.32.99-13.43,2.97-3.93,1.89-7.12,4.48-9.59,7.79-2.47,3.5-4.25,7.55-5.34,12.18-1.1,4.82-1.65,12.37-1.65,22.66s.55,17.65,1.65,22.37c1.09,4.82,2.88,9.06,5.34,12.75,2.47,2.83,5.66,5.33,9.59,7.5,4.11,2.08,8.58,3.12,13.43,3.12,5.2,0,9.77-1.04,13.7-3.12,4.11-2.17,7.22-4.67,9.31-7.5,2.83-3.68,4.7-7.93,5.62-12.75.91-4.72,1.37-12.08,1.37-22.09Z"/>
+        <path d="M786.06,60.97h28.48v15.52h.6c9.39-11.57,21.7-17.36,36.92-17.36,11.4.19,21.33,3.94,29.81,11.25l-20.8,25.45c-6.02-4.9-12.27-7.36-18.75-7.36-7.3,0-13.55,2.45-18.75,7.35-5.84,4.81-8.85,12.58-9.03,23.32v88.32h-28.48V60.97Z"/>
+        <path d="M970.36,1.69h28.45l90.26,146.27h.55V1.69h30.17v205.76h-28.58l-90.12-146.27h-.55v146.27h-30.17V1.69Z"/>
+        <path d="M1186.96,145.34c0,11.77,3.28,20.71,9.85,26.83,6.11,6.21,14.13,9.32,24.07,9.32,11.58,0,21.93-4.75,31.05-14.26l20.65,18.21c-14.48,15.99-31.52,23.89-51.11,23.7-7.47,0-14.76-1.13-21.87-3.39-3.55-1.22-7.01-2.87-10.38-4.94-3.55-1.79-6.88-4-9.98-6.63-6.01-5.46-10.89-13.08-14.62-22.86-4.1-9.41-6.15-21.64-6.15-36.69s1.77-26.53,5.33-36.13c3.55-9.78,8.11-17.5,13.66-23.14,5.65-5.74,11.98-9.88,18.99-12.42,6.92-2.54,13.75-3.81,20.5-3.81,16.21.19,29.92,5.69,41.13,16.52,11.39,11.01,17.17,26.16,17.35,45.45v24.25h-88.48ZM1246.97,121.1c-.37-11.44-3.33-20.09-8.9-25.95-5.48-5.58-12.51-8.37-21.1-8.37s-15.62,2.79-21.1,8.37c-5.39,5.86-8.36,14.51-8.9,25.95h60Z"/>
+        <path d="M1311.74,16.37h28.48v44.59h20.78v22.57h-20.78v85.4c-.19,7.44,3.18,11.06,10.12,10.87h10.66v27.65h-14.87c-10.01,0-18.2-3.2-24.56-9.59-6.55-6.11-9.83-14.94-9.83-26.5v-87.83h-14.3v-22.57h14.3V16.37Z"/>
+      </g>
+    </svg>
+  </div>
+  <div class="sep"></div>
+  <button id="search-mode-btn" title="検索モード切替：フィルター / 移動" style="
+    width:32px;height:32px;flex-shrink:0;
+    background:var(--bg3);border:1.5px solid transparent;color:var(--text-2);
+    border-radius:var(--r-sm);cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:all .18s;padding:0;">
+    <!-- filter icon (default) -->
+    <svg id="smb-icon-filter" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/>
+    </svg>
+    <!-- navigate icon (hidden by default) -->
+    <svg id="smb-icon-nav" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+      <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+    </svg>
+  </button>
+  <input type="text" id="search-box" placeholder="検索...">
+  <div id="tag-filter-wrap">
+    <button id="tag-filter-btn" title="タグで絞り込み">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+      </svg>
+    </button>
+    <div id="tag-filter-dropdown"></div>
+  </div>
+  <div class="topbar-right">
+    <div class="sep"></div>
+    <label class="tog-wrap" id="depth-tog" title="関連人物の別作品も展開">
+      <div class="tog"></div><span>2次展開</span>
+    </label>
+    <div class="sep"></div>
+    <button class="icon-btn" id="filter-modal-btn" title="表示フィルター" style="font-size:16px;display:none">⊞</button>
+    <button class="icon-btn" id="theme-btn" title="ダーク/ライト切替">◐</button>
+    <button class="icon-btn" id="hidden-btn" title="非表示リスト">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/>
+      </svg>
+    </button>
+    <button id="notion-sync-btn" title="Notionから自動取得"><span class="nsb-dot"></span><span>更新</span></button>
+  </div>
+</div>
+
+<div id="ctx-menu">
+  <div class="ctx-item" id="ctx-hide">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/>
+    </svg>
+    このノードを非表示
+  </div>
+  <div class="ctx-item" id="ctx-hide-connected">🔗 関連作品ごと非表示</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-open">▶ YouTubeで開く</div>
+</div>
+
+<div id="hidden-panel">
+  <div class="hp-header">
+    <div class="hp-title">非表示リスト <span id="hp-count"></span></div>
+    <div><button class="hp-btn" id="hp-restore-all">すべて復元</button></div>
+  </div>
+  <div id="hp-list"></div>
+</div>
+
+<div id="filter-modal">
+  <div class="fm-box">
+    <button class="fm-close" id="fm-close">✕</button>
+    <div class="fm-title">表示フィルター</div>
+    <div class="fm-tabs">
+      <button class="fm-tab active" id="fm-tab-work">作品</button>
+      <button class="fm-tab" id="fm-tab-director">Creator</button>
+      <button class="fm-tab" id="fm-tab-artist">Artist</button>
+    </div>
+    <input class="fm-search" id="fm-search" type="text" placeholder="名前で絞り込み...">
+    <div class="fm-list" id="fm-list"></div>
+    <div class="fm-footer">
+      <span class="fm-count" id="fm-count"></span>
+      <button class="fm-close-btn" id="fm-done">完了</button>
+    </div>
+  </div>
+</div>
+
+<div id="filmography-overlay">
+  <div id="filmography-modal">
+    <div class="fm2-header">
+      <div class="fm2-avatar" id="fm2-avatar"></div>
+      <div class="fm2-title-wrap">
+        <div class="fm2-name" id="fm2-name"></div>
+        <div class="fm2-sub" id="fm2-sub"></div>
+      </div>
+      <button class="fm2-google" id="fm2-google" title="Googleで検索">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+      <button class="fm2-close" id="fm2-close">✕</button>
+    </div>
+    <div class="fm2-tabs" id="fm2-tabs"></div>
+    <div class="fm2-body" id="fm2-body"></div>
+  </div>
+</div>
+
+<div id="notion-toast"></div>
+<div id="graph-loading-overlay">
+  <div class="glo-spinner"></div>
+  <div class="glo-label">読み込み中…</div>
+</div>
+
+<div id="add-creator-dropdown">
+  <input type="text" class="acd-search" placeholder="クリエイターを検索...">
+  <div class="acd-list"></div>
+</div>
+
+<input type="file" id="fi0" accept=".csv" style="display:none">
+<svg id="canvas"></svg>
+
+<div id="legend">
+  <div class="leg"><div class="ldot" style="background:var(--node-dir)"></div>Creator</div>
+  <div class="leg"><div class="ldot" style="background:var(--node-art)"></div>Artist</div>
+  <div class="leg"><div class="lline" style="background:var(--link-dir)"></div>制作</div>
+  <div class="leg"><div class="lline" style="background:var(--link-art);height:1px"></div>出演</div>
+</div>
+
+<div id="stats"></div>
+
+<div id="info-overlay"></div>
+<div id="info-panel">
+  <div class="ph">
+    <div id="ph-avatar" style="display:none;width:40px;height:40px;border-radius:50%;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff"></div>
+    <div style="flex:1;min-width:0">
+      <div class="ph-type" id="pt"></div>
+      <div class="ph-name" id="pn"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+      <button class="ph-close" id="pc-notion" title="Notionで開く" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+        </svg>
+      </button>
+      <button class="ph-close" id="pc-search" title="このクリエイターを検索" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+      </button>
+      <button class="ph-close" id="pc-hide" title="このノードを非表示" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/>
+        </svg>
+      </button>
+      <button class="ph-close" id="pc">✕</button>
+    </div>
+  </div>
+  <div id="pc2"></div>
+</div>
+
+<script src="/js/core.js"></script>
+<script src="/js/filters.js"></script>
+<script src="/js/graph.js"></script>
+<script src="/js/panel.js"></script>
+<script src="/js/imdb.js"></script>
+<script src="/js/tag-filter.js"></script>
+<script src="/js/avatars.js"></script>
+<script src="/js/main.js"></script>
+<!-- ── Role Picker Popover ── -->
+<div id="role-picker-popover" class="picker-popover">
+  <div class="picker-popover-header">
+    <span class="picker-popover-label">役職を選択</span>
+    <button class="picker-popover-close" id="role-popover-close">✕</button>
+  </div>
+  <div class="picker-popover-body">
+    <div class="role-picker-tags" id="role-popover-tags" style="max-height:180px;overflow-y:auto"></div>
+    <button class="cmeta-save-btn" id="role-popover-save" style="height:28px;font-size:12px;width:100%">保存</button>
+  </div>
+</div>
+
+<!-- ── SNS Picker Popover ── -->
+<div id="sns-picker-popover" class="picker-popover">
+  <div class="picker-popover-header">
+    <span class="picker-popover-label">SNS リンク</span>
+    <button class="picker-popover-close" id="sns-popover-close">✕</button>
+  </div>
+  <div class="picker-popover-body">
+    <div class="cmeta-sns-list" id="sns-popover-list"></div>
+  </div>
+</div>
+
+</body>
+</html>
