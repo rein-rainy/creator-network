@@ -8,6 +8,7 @@
 <link rel="apple-touch-icon" href="/logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <link rel="stylesheet" href="/css/styles.css">
+<link rel="stylesheet" href="/css/gallery.css">
 </head>
 <body data-theme="dark">
 
@@ -56,6 +57,8 @@
     <div id="tag-filter-dropdown"></div>
   </div>
   <div class="topbar-right">
+    <div class="sep"></div>
+    <button class="icon-btn" id="view-mode-btn" title="ビューモード切替" style="font-size:14px">📊</button>
     <div class="sep"></div>
     <label class="tog-wrap" id="depth-tog" title="関連人物の別作品も展開">
       <div class="tog"></div><span>2次展開</span>
@@ -144,6 +147,27 @@
 <input type="file" id="fi0" accept=".csv" style="display:none">
 <svg id="canvas"></svg>
 
+<!-- Gallery View Container -->
+<div id="gallery-container">
+  <div id="gallery-controls">
+    <div class="gallery-ctrl-group">
+      <span class="gallery-ctrl-label">ソート:</span>
+      <button class="gallery-sort-btn active" id="gallery-sort-latest">最新順</button>
+      <button class="gallery-sort-btn" id="gallery-sort-oldest">古い順</button>
+    </div>
+    <div class="gallery-sep"></div>
+    <div class="gallery-ctrl-group">
+      <span class="gallery-ctrl-label">表示:</span>
+      <button class="gallery-filter-btn" id="gallery-filter-director">監督毎</button>
+      <button class="gallery-filter-btn" id="gallery-filter-tag">タグ毎</button>
+      <button class="gallery-filter-btn" id="gallery-filter-artist">アーティスト毎</button>
+      <button class="gallery-filter-btn" id="gallery-filter-btn" style="display: none;">フィルタ</button>
+    </div>
+    <div id="gallery-filter-dropdown"></div>
+  </div>
+  <div id="gallery-content"></div>
+</div>
+
 <div id="legend">
   <div class="leg"><div class="ldot" style="background:var(--node-dir)"></div>Creator</div>
   <div class="leg"><div class="ldot" style="background:var(--node-art)"></div>Artist</div>
@@ -190,6 +214,7 @@
 <script src="/js/imdb.js"></script>
 <script src="/js/tag-filter.js"></script>
 <script src="/js/avatars.js"></script>
+<script src="/js/gallery.js"></script>
 <script src="/js/main.js"></script>
 <!-- ── Role Picker Popover ── -->
 <div id="role-picker-popover" class="picker-popover">

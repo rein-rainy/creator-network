@@ -24,7 +24,7 @@ function hideGraphOverlay(delayMs = 2000) {
   }, delayMs);
 }
 
-function init(rows) {
+function init(rows, creators = [], artists = []) {
   const data = buildGraph(rows);
   AN = data.nodes; AL = data.links;
 
@@ -44,6 +44,10 @@ function init(rows) {
   fetchArtistAvatars();
   // Director/Creator の Instagram アバターを取得（Notionカバー画像がない場合）
   requestAnimationFrame(() => fetchDirectorIgAvatars());
+  
+  // Initialize gallery view
+  initGallery(rows, creators, artists);
+  setupGalleryControls();
 }
 
 /* ═══════════════════════════════════════════
@@ -315,6 +319,38 @@ document.getElementById('search-box').addEventListener('input', e => {
   }
 });
 
+/* ═══════════════════════════════════════════
+   VIEW MODE TOGGLE
+═══════════════════════════════════════════ */
+let currentViewMode = 'graph'; // 'graph' or 'gallery'
+
+function switchViewMode(mode) {
+  currentViewMode = mode;
+  const canvas = document.getElementById('canvas');
+  const gallery = document.getElementById('gallery-container');
+  const legend = document.getElementById('legend');
+  const stats = document.getElementById('stats');
+  const viewBtn = document.getElementById('view-mode-btn');
+
+  if (mode === 'gallery') {
+    canvas.style.display = 'none';
+    gallery.classList.add('active');
+    legend.style.display = 'none';
+    stats.style.display = 'none';
+    viewBtn.style.opacity = '0.6';
+  } else {
+    canvas.style.display = 'block';
+    gallery.classList.remove('active');
+    legend.style.display = 'block';
+    stats.style.display = 'block';
+    viewBtn.style.opacity = '1';
+  }
+}
+
+document.getElementById('view-mode-btn').addEventListener('click', () => {
+  switchViewMode(currentViewMode === 'graph' ? 'gallery' : 'graph');
+});
+
 function stopYtIframe() {
   const fr = document.getElementById('yt-iframe');
   if (fr) { const s = fr.src; fr.src = ''; fr.src = s; }
@@ -353,7 +389,7 @@ document.getElementById('hp-restore-all').addEventListener('click', () => {
 
 document.getElementById('fi0').addEventListener('change', e => {
   const f = e.target.files[0]; if (!f) return;
-  const r = new FileReader(); r.onload = ev => init(parseCSV(ev.target.result)); r.readAsText(f, 'UTF-8');
+  const r = new FileReader(); r.onload = ev => init(parseCSV(ev.target.result), [], []); r.readAsText(f, 'UTF-8');
 });
 
 window.addEventListener('resize', () => { if (AN.length) { const { nodes, links } = filteredData(); draw(nodes, links); } });
@@ -389,7 +425,7 @@ async function fetchFromNotionAPI() {
     const allPersons = [...ALL_CREATORS, ...(data.artists ?? [])];
 
     if (allPersons.length) loadCreatorMeta(allPersons);
-    init(data.results);
+    init(data.results, ALL_CREATORS, data.artists || []);
     localStorage.setItem('notion_last_sync', new Date().toLocaleString('ja-JP'));
   } catch (e) {
     console.error('[Notion]', e);
