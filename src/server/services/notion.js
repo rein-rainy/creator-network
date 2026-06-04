@@ -29,6 +29,24 @@ function notionRequest(method, apiPath, body) {
   });
 }
 
+/** Name of the title-type property, or `fallback` if none found. */
+function findTitleProp(props, fallback = 'Name') {
+  for (const [name, prop] of Object.entries(props)) {
+    if (prop.type === 'title') return name;
+  }
+  return fallback;
+}
+
+/** Name of the Role property (English or Japanese), defaulting to 'Role'. */
+function findRoleProp(props) {
+  return Object.keys(props).find(key => key === 'Role' || key === '役職') || 'Role';
+}
+
+/** Name of the SNS property (case-insensitive), defaulting to 'SNS'. */
+function findSnsProp(props) {
+  return Object.keys(props).find(key => key.toLowerCase() === 'sns') || 'SNS';
+}
+
 async function fetchPersonDB(dbId, label) {
   const map = {};
   const persons = [];
@@ -200,15 +218,7 @@ async function buildData(targetDb = 'all') {
     return row;
   });
 
-  let titlePropName = null;
-  if (works.length > 0) {
-    for (const [name, prop] of Object.entries(works[0].properties)) {
-      if (prop.type === 'title') {
-        titlePropName = name;
-        break;
-      }
-    }
-  }
+  const titlePropName = works.length > 0 ? findTitleProp(works[0].properties, null) : null;
   if (titlePropName) {
     rows.sort((a, b) => (a[titlePropName] || '').localeCompare(b[titlePropName] || '', 'ja'));
     console.log(`[Notion] 作品を名前順にソート (key: "${titlePropName}")`);
@@ -248,13 +258,7 @@ async function createCreator(name, imageUrl) {
   const dbRes = await notionRequest('GET', `/v1/databases/${config.DB_CREATORS}`);
   if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
 
-  let titlePropName = 'Name';
-  for (const [propName, prop] of Object.entries(dbRes.body.properties)) {
-    if (prop.type === 'title') {
-      titlePropName = propName;
-      break;
-    }
-  }
+  const titlePropName = findTitleProp(dbRes.body.properties);
 
   const searchRes = await notionRequest('POST', `/v1/databases/${config.DB_CREATORS}/query`, {
     filter: { property: titlePropName, title: { equals: name } },
@@ -290,8 +294,7 @@ async function getRoleOptions() {
   const dbRes = await notionRequest('GET', `/v1/databases/${config.DB_CREATORS}`);
   if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
   const props = dbRes.body.properties;
-  const rolePropName = Object.keys(props).find(key => key === 'Role' || key === '役職') || 'Role';
-  const roleProp = props[rolePropName];
+  const roleProp = props[findRoleProp(props)];
   let options = [];
   if (roleProp?.type === 'multi_select') options = roleProp.multi_select.options || [];
   else if (roleProp?.type === 'select') options = roleProp.select.options || [];
@@ -302,8 +305,8 @@ async function updateCreatorMeta(creatorPageId, role, sns) {
   const dbRes = await notionRequest('GET', `/v1/databases/${config.DB_CREATORS}`);
   if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
   const props = dbRes.body.properties;
-  const rolePropName = Object.keys(props).find(key => key === 'Role' || key === '役職') || 'Role';
-  const snsPropName = Object.keys(props).find(key => key.toLowerCase() === 'sns') || 'SNS';
+  const rolePropName = findRoleProp(props);
+  const snsPropName = findSnsProp(props);
   const patchProps = {};
 
   if (role !== undefined) {
@@ -336,13 +339,7 @@ async function renameCreator(creatorPageId, newName) {
   const dbRes = await notionRequest('GET', `/v1/databases/${config.DB_CREATORS}`);
   if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
 
-  let titlePropName = 'Name';
-  for (const [propName, prop] of Object.entries(dbRes.body.properties)) {
-    if (prop.type === 'title') {
-      titlePropName = propName;
-      break;
-    }
-  }
+  const titlePropName = findTitleProp(dbRes.body.properties);
 
   const patchRes = await notionRequest('PATCH', `/v1/pages/${creatorPageId}`, {
     properties: {
