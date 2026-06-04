@@ -1,28 +1,16 @@
-const { readJson, sendJson } = require('../http');
+const { jsonRoute, HttpError } = require('../http');
 const { searchYoutubeVideos } = require('../services/youtube');
 const { translateToJapanese } = require('../services/translate');
 
 async function handleMiscRoutes(req, res) {
-  if (req.method === 'POST' && req.url === '/youtube-video-search') {
-    try {
-      const { titles = [] } = await readJson(req);
-      return sendJson(res, 200, await searchYoutubeVideos(titles));
-    } catch (error) {
-      console.error('[YouTube.js Error]', error.message);
-      return sendJson(res, 500, { error: error.message });
-    }
-  }
+  if (await jsonRoute(req, res, { method: 'POST', path: '/youtube-video-search', label: 'YouTube.js Error' }, async ({ titles = [] }) => {
+    return searchYoutubeVideos(titles);
+  })) return true;
 
-  if (req.method === 'POST' && req.url === '/translate') {
-    try {
-      const { text } = await readJson(req);
-      if (!text) return sendJson(res, 400, { error: 'text required' });
-      return sendJson(res, 200, { translated: await translateToJapanese(text) });
-    } catch (error) {
-      console.error('[DeepL]', error.message);
-      return sendJson(res, 500, { error: error.message });
-    }
-  }
+  if (await jsonRoute(req, res, { method: 'POST', path: '/translate', label: 'DeepL' }, async ({ text }) => {
+    if (!text) throw new HttpError(400, 'text required', { error: 'text required' });
+    return { translated: await translateToJapanese(text) };
+  })) return true;
 
   return false;
 }
