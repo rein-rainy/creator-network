@@ -43,4 +43,28 @@ function proxyImage(imageUrl, res, endpoint = 'unknown') {
   }
 }
 
-module.exports = { proxyImage };
+/**
+ * Match a `GET <prefix><base64-url>` image-proxy route and stream the
+ * decoded upstream image through `proxyImage`. Returns true if matched.
+ */
+function handleImageProxyRoute(req, res, prefix, endpoint) {
+  if (req.method !== 'GET' || !req.url.startsWith(prefix)) return false;
+
+  const encoded = req.url.slice(prefix.length).split('?')[0];
+  if (!encoded) {
+    res.writeHead(400);
+    res.end('imageUrl required');
+    return true;
+  }
+  try {
+    const imageUrl = Buffer.from(encoded, 'base64').toString('utf-8');
+    new URL(imageUrl);
+    proxyImage(imageUrl, res, endpoint);
+  } catch {
+    res.writeHead(400);
+    res.end('invalid imageUrl');
+  }
+  return true;
+}
+
+module.exports = { proxyImage, handleImageProxyRoute };
