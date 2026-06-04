@@ -1,4 +1,10 @@
-const https = require('https');
+const { createCache } = require('../util/cache');
+const { fetchJson } = require('../util/fetchJson');
+const { toRomaji } = require('../util/romaji');
+
+// Searches change rarely and are pure functions of the query, so cache aggressively.
+const suggestCache = createCache({ ttlMs: 30 * 60 * 1000, max: 1000 });
+const apiCache = createCache({ ttlMs: 30 * 60 * 1000, max: 500 });
 
 function imdbSuggestionUrl(query) {
   const encoded = encodeURIComponent(query).replace(/%20/g, '_');
@@ -8,40 +14,16 @@ function imdbSuggestionUrl(query) {
 }
 
 function imdbSuggest(query) {
-  return new Promise((resolve) => {
-    const url = imdbSuggestionUrl(query);
-    https.get(url, { headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0' } }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch { resolve(null); }
-      });
-    }).on('error', () => resolve(null));
-  });
+  return suggestCache.wrap(query, () =>
+    fetchJson(imdbSuggestionUrl(query), { label: `IMDB-suggest "${query}"` })
+      .catch(() => null) // suggestion is best-effort; never fail the whole search
+  );
 }
 
 function imdbApiGet(apiPath) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'api.imdbapi.dev',
-      path: apiPath,
-      method: 'GET',
-      headers: { 'Accept': 'application/json' },
-    };
-    https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => {
-        if (res.statusCode !== 200) {
-          reject(new Error(`imdbapi.dev ${apiPath} -> ${res.statusCode}`));
-          return;
-        }
-        try { resolve(JSON.parse(data)); }
-        catch (error) { reject(error); }
-      });
-    }).on('error', reject).end();
-  });
+  return apiCache.wrap(apiPath, () =>
+    fetchJson(`https://api.imdbapi.dev${apiPath}`, { label: `imdbapi.dev ${apiPath}`, timeoutMs: 10000 })
+  );
 }
 
 function normalizeTitle(raw) {
@@ -110,21 +92,100 @@ function buildQueries(raw) {
   return [...queries].filter(query => query && query.length >= 2 && query.length <= 120);
 }
 
+/** Lowercased word tokens, stripped of punctuation, for similarity comparison. */
+function tokenize(str) {
+  return (str || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+// This app maps songs to music videos, so non-music types (movie, tvSeries,
+// short…) are essentially never the right answer and only cause common-word
+// collisions ("Lemon", "Pretender"). We accept only these music-ish types.
+const MUSIC_TYPES = new Set(['musicVideo', 'tvMusic', 'video']);
+
+function isMusicType(item) {
+  return MUSIC_TYPES.has(item.qid) || item.q === 'music video';
+}
+
+/**
+ * IMDb names music videos as "Artist: Song", so the part after the last colon
+ * is the song. We match against *that* rather than the whole title: an
+ * artist-only query like "yoasobi" would otherwise score 100% against every
+ * one of that artist's videos and pick the wrong (most popular) song.
+ */
+function candidateSongTokens(candidateTitle) {
+  const idx = candidateTitle.lastIndexOf(':');
+  const song = idx >= 0 ? candidateTitle.slice(idx + 1) : candidateTitle;
+  return tokenize(song);
+}
+
+/**
+ * Score a music-video candidate against the full set of query tokens. The key
+ * signal is "song coverage": how much of the candidate's *song* (post-colon)
+ * the queries actually mention. Type and popularity are only tie-breakers.
+ * Returns coverage so the caller can gate on it — a confident NOT FOUND beats
+ * returning the artist's wrong popular video.
+ */
+function scoreCandidate(item, queryTokenSet) {
+  if (!item.id?.startsWith('tt') || !isMusicType(item)) return { score: -1, coverage: 0 };
+  const songTokens = candidateSongTokens(item.l);
+  if (!songTokens.length) return { score: -1, coverage: 0 };
+  const covered = songTokens.filter(token => queryTokenSet.has(token)).length;
+  const coverage = covered / songTokens.length;
+  let score = coverage * 100;
+  if (item.qid === 'musicVideo' || item.q === 'music video') score += 15;
+  // Popularity tiebreaker only (tiny), to order otherwise-equal candidates.
+  if (typeof item.rank === 'number') score += Math.max(0, 5 - item.rank / 4000);
+  return { score, coverage };
+}
+
+/**
+ * Add romaji transliterations of any Japanese-containing queries. IMDb indexes
+ * Japanese titles by their romaji reading (e.g. "夜に駆ける" -> "Yoru ni Kakeru"),
+ * so these often hit when the original-script query cannot. No-op when kuromoji
+ * is unavailable.
+ */
+async function withRomajiQueries(queries) {
+  const out = [...queries];
+  const seen = new Set(queries.map(q => q.toLowerCase()));
+  for (const query of queries) {
+    if (!/[぀-ヿ一-龯]/.test(query)) continue;
+    const romaji = await toRomaji(query);
+    if (romaji && romaji.length >= 2 && !seen.has(romaji.toLowerCase())) {
+      seen.add(romaji.toLowerCase());
+      out.push(romaji);
+    }
+  }
+  return out;
+}
+
 async function searchTitle(title) {
-  const queries = buildQueries(title);
+  const queries = await withRomajiQueries(buildQueries(title));
   console.log(`[IMDB] "${title}" -> queries: ${JSON.stringify(queries)}`);
 
-  for (const query of queries) {
-    const json = await imdbSuggest(query);
-    if (!json?.d) continue;
-    const match = json.d.find(item => item.qid === 'musicVideo')
-      ?? json.d.find(item => item.q === 'music video')
-      ?? json.d.find(item => (item.l || '').toLowerCase().includes(title.toLowerCase().slice(0, 10)));
-    if (match) {
-      return { tt: match.id, title: match.l, year: match.y ?? '', image: match.i?.imageUrl ?? '' };
+  const queryTokens = new Set(queries.flatMap(tokenize));
+  const results = await Promise.all(queries.map(query => imdbSuggest(query)));
+
+  let best = null;
+  for (const json of results) {
+    for (const item of json?.d ?? []) {
+      const { score, coverage } = scoreCandidate(item, queryTokens);
+      if (score > (best?.score ?? -Infinity)) best = { item, score, coverage };
     }
   }
 
+  // Accept only when the queries actually name the candidate's song — a
+  // confident NOT FOUND beats returning the artist's wrong popular video.
+  if (best && best.coverage >= 0.6) {
+    const { item } = best;
+    console.log(`[IMDB] "${title}" -> ${item.id} "${item.l}" (score ${best.score.toFixed(1)}, coverage ${best.coverage.toFixed(2)})`);
+    return { tt: item.id, title: item.l, year: item.y ?? '', image: item.i?.imageUrl ?? '' };
+  }
+
+  console.log(`[IMDB] "${title}" -> notFound (best "${best?.item?.l ?? 'n/a'}" coverage ${best?.coverage?.toFixed(2) ?? 'n/a'})`);
   return { notFound: true };
 }
 
