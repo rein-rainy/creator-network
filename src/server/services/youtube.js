@@ -1,3 +1,5 @@
+const { processInChunks } = require('../util/concurrency');
+
 const youtubeVideoCache = new Map();
 
 async function searchYoutubeVideos(titles = []) {
@@ -56,20 +58,11 @@ async function searchYoutubeVideos(titles = []) {
     }
   }
 
-  const CONCURRENCY = 5;
-  const DELAY_MS = 100;
-  for (let i = 0; i < uncached.length; i += CONCURRENCY) {
-    const chunk = uncached.slice(i, i + CONCURRENCY);
-    const chunkResults = await Promise.all(chunk.map(title => ytJsSearch(title)));
-    chunkResults.forEach((result, index) => {
-      const title = chunk[index];
-      youtubeVideoCache.set(title, result);
-      results[title] = result;
-    });
-    if (i + CONCURRENCY < uncached.length) {
-      await new Promise(resolve => setTimeout(resolve, DELAY_MS));
-    }
-  }
+  await processInChunks(uncached, async (title) => {
+    const result = await ytJsSearch(title);
+    youtubeVideoCache.set(title, result);
+    results[title] = result;
+  }, { concurrency: 5, delayMs: 100 });
 
   const successCount = Object.values(results).filter(Boolean).length;
   console.log(`[YouTube.js] 全体完了: ${Date.now() - startTime}ms (成功=${successCount}/${uniqueTitles.length})`);
