@@ -6,17 +6,13 @@
 require('dotenv').config();
 
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
 const config = require('./server/config');
-const { servePublicFile } = require('./server/static');
+const { servePublicFile, serveIndex } = require('./server/static');
 const { notFound } = require('./server/http');
 const { handleAvatarRoutes } = require('./server/routes/avatars');
 const { handleImdbRoutes } = require('./server/routes/imdb');
 const { handleMiscRoutes } = require('./server/routes/misc');
 const { handleNotionRoutes } = require('./server/routes/notion');
-
-const HTML_FILE = path.join(config.PUBLIC_DIR, 'index.html');
 
 if (!config.NOTION_TOKEN) {
   console.warn('[Warning] 環境変数 NOTION_TOKEN が設定されていません。');
@@ -30,44 +26,6 @@ function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-}
-
-function serveIndex(req, res) {
-  if (!((req.method === 'GET' || req.method === 'HEAD') && (req.url === '/' || req.url === '/index.html'))) {
-    return false;
-  }
-
-  try {
-    if (!fs.existsSync(HTML_FILE)) {
-      res.writeHead(500, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(`
-        <!DOCTYPE html>
-        <html>
-        <head><title>Error</title></head>
-        <body>
-          <h1>Server Error</h1>
-          <p>HTML file not found at: ${HTML_FILE}</p>
-          <p>Please ensure public/index.html exists in the application directory.</p>
-        </body>
-        </html>
-      `);
-      return true;
-    }
-
-    const html = fs.readFileSync(HTML_FILE, 'utf-8');
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    if (req.method === 'HEAD') {
-      res.end();
-      return true;
-    }
-    res.end(html);
-    return true;
-  } catch (error) {
-    console.error('[Static file error]', error.message);
-    res.writeHead(500, { 'Content-Type': 'text/plain; charset=utf-8' });
-    res.end(`Error reading HTML file: ${error.message}`);
-    return true;
-  }
 }
 
 const routeHandlers = [
@@ -87,7 +45,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if ((req.method === 'GET' || req.method === 'HEAD') && servePublicFile(req, res, config.PUBLIC_DIR)) return;
-  if (serveIndex(req, res)) return;
+  if (serveIndex(req, res, config.PUBLIC_DIR)) return;
 
   for (const handler of routeHandlers) {
     if (await handler(req, res)) return;
