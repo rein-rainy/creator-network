@@ -210,7 +210,7 @@ function renderImdbData(panelId, data, workNode = null) {
           style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
                  width:fit-content;max-width:200px;flex-shrink:0;
                  background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
-                 padding:10px 12px;cursor:pointer;text-align:left;transition:all .15s;font-family:var(--sans)"
+                 padding:10px 12px;cursor:pointer;text-align:left;transition:background .15s,color .15s;font-family:var(--sans)"
           onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
           onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
           <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;

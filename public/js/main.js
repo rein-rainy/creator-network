@@ -202,7 +202,7 @@ function updateSearchModeBtn() {
   document.getElementById('smb-icon-filter').style.display = isFilter ? '' : 'none';
   document.getElementById('smb-icon-nav').style.display    = isFilter ? 'none' : '';
   btn.style.background    = isFilter ? 'var(--bg3)' : 'var(--accent)';
-  btn.style.color         = isFilter ? 'var(--text-2)' : 'rgb(28,28,30)';
+  btn.style.color         = isFilter ? 'var(--text-2)' : '#fff';
   btn.title = isFilter ? '検索モード：フィルター（クリックで移動モードへ）' : '検索モード：移動（クリックでフィルターモードへ）';
   document.getElementById('search-box').placeholder = isFilter ? '検索（フィルター）...' : '検索（移動）...';
 }

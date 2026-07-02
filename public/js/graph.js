@@ -44,9 +44,8 @@ function draw(nodes, links, { freeLayout = false } = {}) {
     }
   });
 
-  const dimColor = document.body.dataset.theme === 'light' ? '#f2f2f7' : 'rgb(25,25,25)';
   gDimRect = g.append('rect').attr('x',-99999).attr('y',-99999).attr('width',199999).attr('height',199999)
-    .attr('fill', dimColor).attr('fill-opacity', 0).attr('pointer-events', 'none')
+    .style('fill', 'var(--bg-solid)').attr('fill-opacity', 0).attr('pointer-events', 'none')
     .style('transition', 'fill-opacity .18s');
 
   const gL = g.append('g').attr('class', 'layer-links');

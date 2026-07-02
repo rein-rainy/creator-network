@@ -194,7 +194,7 @@ function showPanel(d) {
       html += `<div style="border-top:1px solid var(--border);padding:10px 14px 14px">`;
       html += `<div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);padding:2px 0 10px;display:flex;justify-content:space-between;align-items:center">
         <span>参加クリエイター</span>
-        <button id="add-creator-btn" style="width:22px;height:22px;border-radius:50%;border:none;background:var(--bg3);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s" title="クリエイターを追加" onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text-2)'">＋</button>
+        <button id="add-creator-btn" style="width:22px;height:22px;border-radius:50%;border:none;background:var(--bg3);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:background .15s,color .15s" title="クリエイターを追加" onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text-2)'">＋</button>
       </div>`;
       if (workPersons.length) {
         html += `<div style="display:flex;gap:8px;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:8px 2px">`;
@@ -216,7 +216,7 @@ function showPanel(d) {
               style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
                      width:fit-content;max-width:200px;flex-shrink:0;
                      background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
-                     padding:10px 12px;cursor:pointer;text-align:left;transition:all .15s"
+                     padding:10px 12px;cursor:pointer;text-align:left;transition:background .15s,color .15s"
               onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
               onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
               <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
