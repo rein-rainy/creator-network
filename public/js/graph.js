@@ -1,6 +1,22 @@
 /* ═══════════════════════════════════════════
    DRAW
 ═══════════════════════════════════════════ */
+
+/* シミュレーションを初期レイアウト完了後の「安定状態」パラメータに戻す。
+   通常 draw() 後の simTimer と、検索終了時（検索ボックスが空）に共通で使う。
+   検索中（freeLayout）は起動時の強い力（charge -2500 / center あり / link 0.5）が
+   残るため、これを呼ばないと解除後もノードが元と違う動きをしてしまう。 */
+function settleSimForces() {
+  if (!sim) return;
+  // 既存ノードの位置固定を解除（新規ノードはここで初めて自由になる）
+  sim.nodes().forEach(n => { n.fx = null; n.fy = null; });
+  sim.force('charge').strength(-400).distanceMax(150);
+  baseLinkStrength = 0.01;
+  sim.force('link').strength(sim.force('link').strength());
+  sim.velocityDecay(0.7);
+  sim.force('center', null);
+}
+
 function draw(nodes, links, { freeLayout = false } = {}) {
   const W = window.innerWidth, H = window.innerHeight - 48;
   d3.select('#canvas').selectAll('*').remove();
@@ -215,13 +231,7 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   if (!freeLayout) {
     simTimer = setTimeout(() => {
       if (sim) {
-        // 既存ノードの位置固定を解除（新規ノードはここで初めて自由になる）
-        sim.nodes().forEach(n => { n.fx = null; n.fy = null; });
-        sim.force('charge').strength(-400).distanceMax(150);
-        baseLinkStrength = 0.01;
-        sim.force('link').strength(sim.force('link').strength());
-        sim.velocityDecay(0.7);
-        sim.force('center', null);
+        settleSimForces();
         sim.alpha(0.05).restart();
       }
     }, isFirstDraw ? 3000 : 800);

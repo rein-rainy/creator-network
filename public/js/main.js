@@ -280,6 +280,7 @@ document.getElementById('search-mode-btn').addEventListener('click', () => {
       }
       const { nodes, links } = filteredData();
       redraw(nodes, links);
+      settleSimForces();  // 検索中に強まった力学パラメータを元の安定状態へ戻す
       navigateToMatches(sq);
     }
   }
@@ -310,6 +311,7 @@ document.getElementById('search-box').addEventListener('input', e => {
     _preSqSnapshot = null;
     const { nodes, links } = filteredData();
     redraw(nodes, links);
+    settleSimForces();  // 検索中に強まった力学パラメータを元の安定状態へ戻す
   } else {
     refresh({ freeLayout: true });
   }
