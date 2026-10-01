@@ -380,10 +380,45 @@ async function fetchFilmography(nameId) {
   };
 }
 
+// IMDb lists a person's credits newest first, so the first page of director
+// credits always contains everything released in the last year.
+const RECENT_DIRECTOR_CREDITS_QUERY = `query RecentDirectorCredits($id: ID!) {
+  name(id: $id) {
+    primaryImage { url }
+    credits(first: 50, filter: { categories: ["director"] }) {
+      edges { node { title {
+        id titleText { text } originalTitleText { text }
+        titleType { id } releaseYear { year }
+        releaseDate { day month year }
+        primaryImage { url }
+      } } }
+    }
+  }
+}`;
+
+async function fetchRecentDirectorCredits(nameId) {
+  const data = await imdbGraphql(RECENT_DIRECTOR_CREDITS_QUERY, { id: nameId });
+  const credits = (data?.name?.credits?.edges ?? []).map(({ node }) => {
+    const title = node.title ?? {};
+    const date = title.releaseDate ?? {};
+    return {
+      tt: title.id,
+      title: title.titleText?.text ?? title.originalTitleText?.text ?? '',
+      type: title.titleType?.id ?? 'unknown',
+      year: date.year ?? title.releaseYear?.year ?? null,
+      month: date.month ?? null,
+      day: date.day ?? null,
+      image: title.primaryImage?.url ?? '',
+    };
+  });
+  return { image: data?.name?.primaryImage?.url ?? '', credits };
+}
+
 module.exports = {
   imdbSuggestionUrl,
   searchTitle,
   fetchCrew,
   searchName,
   fetchFilmography,
+  fetchRecentDirectorCredits,
 };

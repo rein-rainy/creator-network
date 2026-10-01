@@ -1,6 +1,6 @@
 const { jsonRoute } = require('../http');
 const { handleImageProxyRoute } = require('../services/imageProxy');
-const { searchTitle, fetchCrew, searchName, fetchFilmography } = require('../services/imdb');
+const { searchTitle, fetchCrew, searchName, fetchFilmography, fetchRecentDirectorCredits } = require('../services/imdb');
 
 async function handleImdbRoutes(req, res) {
   if (handleImageProxyRoute(req, res, '/imdb-img/', 'imdb-img')) return true;
@@ -23,6 +23,11 @@ async function handleImdbRoutes(req, res) {
   if (await jsonRoute(req, res, { method: 'POST', path: '/imdb-filmography', label: 'IMDB-Filmography Error' }, async ({ nameId }) => {
     if (!nameId) throw new Error('nameId が指定されていません');
     return fetchFilmography(nameId);
+  })) return true;
+
+  if (await jsonRoute(req, res, { method: 'POST', path: '/imdb-recent-credits', label: 'IMDB-Recent Error' }, async ({ nameId }) => {
+    if (!nameId) throw new Error('nameId が指定されていません');
+    return fetchRecentDirectorCredits(nameId);
   })) return true;
 
   return false;

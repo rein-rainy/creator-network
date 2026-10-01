@@ -594,8 +594,8 @@ function normalizeFilmographyCredits(fmgData) {
   return credits.filter(item => item && typeof item === 'object');
 }
 
-async function enrichFmgYoutubeLinks(body) {
-  const rows = [...body.querySelectorAll('.fmg-item[data-yt-query]')];
+async function enrichFmgYoutubeLinks(body, rowSelector = '.fmg-item[data-yt-query]') {
+  const rows = [...body.querySelectorAll(rowSelector)];
 
   const updateRow = (row) => {
     const query = row.dataset.ytQuery;
