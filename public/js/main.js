@@ -44,6 +44,8 @@ function init(rows) {
   fetchArtistAvatars();
   // Director/Creator の Instagram アバターを取得（Notionカバー画像がない場合）
   requestAnimationFrame(() => fetchDirectorIgAvatars());
+  // クリエイター未登録の作品について IMDb の監督候補を調べる（自動登録はしない）
+  scanDirectorSuggestions();
 }
 
 /* ═══════════════════════════════════════════
@@ -342,6 +344,11 @@ document.getElementById('theme-btn').addEventListener('click', () => {
   const dark = document.body.dataset.theme === 'dark';
   document.body.dataset.theme = dark ? 'light' : 'dark';
   document.getElementById('theme-btn').textContent = dark ? '◑' : '◐';
+});
+
+document.addEventListener('click', e => {
+  const panel = document.getElementById('dir-suggest-panel');
+  if (panel.classList.contains('visible') && !panel.contains(e.target)) panel.classList.remove('visible');
 });
 
 document.getElementById('hidden-btn').addEventListener('click', () => {

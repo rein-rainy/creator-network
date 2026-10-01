@@ -902,3 +902,55 @@ g.nd { transition: opacity .18s; }
 }
 .acd-name { font-size: 13px; font-weight: 500; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .acd-role { font-family: var(--mono); font-size: 11px; color: var(--ink-3); flex-shrink: 0; }
+
+/* ── IMDb director suggestions ── */
+#dir-suggest-btn { width: auto; gap: 5px; padding: 0 8px; color: var(--amber); }
+#dir-suggest-btn:hover { color: var(--amber); }
+#dir-suggest-count { font-family: var(--mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+#dir-suggest-panel {
+  position: fixed; top: calc(var(--topbar-h) + 12px); right: 14px; width: 300px; z-index: 200;
+  background: var(--bg-glass); backdrop-filter: saturate(180%) blur(24px); -webkit-backdrop-filter: saturate(180%) blur(24px);
+  box-shadow: var(--shadow-pop); border-radius: var(--r-xl);
+  display: none; max-height: calc(100vh - 90px); overflow-y: auto;
+  animation: slideIn .22s var(--ease);
+}
+#dir-suggest-panel.visible { display: block; }
+.ds-panel-note { padding: 10px 14px; font-size: 11px; line-height: 1.6; color: var(--ink-3); border-bottom: 1px solid var(--hairline); text-wrap: pretty; }
+.ds-item { cursor: pointer; transition: background .15s; }
+.ds-item:hover { background: var(--bg3); }
+.ds-item-sub { font-family: var(--mono); font-size: 10px; color: var(--amber); margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.wcard { position: relative; }
+.wc-suggest {
+  position: absolute; top: 5px; right: 5px;
+  font-size: 9px; font-weight: 600; line-height: 1; padding: 3px 5px; border-radius: 4px;
+  background: var(--amber); color: #1a1205; box-shadow: 0 1px 3px rgba(0,0,0,.3);
+}
+
+.ds-section {
+  margin: 0 14px 12px; padding: 12px; border-radius: var(--r);
+  background: rgba(245,158,11,.08); box-shadow: 0 0 0 1px rgba(245,158,11,.35) inset;
+}
+.ds-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.ds-title { font-family: var(--mono); font-size: 11px; font-weight: 600; letter-spacing: .04em; color: var(--amber); }
+.ds-ignore { background: none; border: none; color: var(--ink-3); font-size: 11px; cursor: pointer; padding: 2px 4px; border-radius: var(--r-sm); font-family: var(--sans); }
+.ds-ignore:hover { color: var(--ink); background: var(--bg3); }
+.ds-note { font-size: 12px; line-height: 1.6; color: var(--ink-2); margin-bottom: 10px; text-wrap: pretty; }
+.ds-note a { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.ds-people { display: flex; flex-direction: column; gap: 6px; }
+.ds-person { display: flex; align-items: center; gap: 10px; background: var(--card-bg); border-radius: var(--r-sm); padding: 8px 10px; }
+.ds-avatar {
+  position: relative; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; flex-shrink: 0;
+  background: var(--node-dir); color: #fff; font-size: 14px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.ds-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ds-name { font-size: 12px; font-weight: 600; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-hint { font-size: 10px; color: var(--ink-3); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-add {
+  flex-shrink: 0; height: 26px; padding: 0 12px; border: none; border-radius: var(--r-sm);
+  background: var(--accent); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer;
+  font-family: var(--sans); transition: opacity .15s, scale .12s var(--ease);
+}
+.ds-add:hover { opacity: .85; }
+.ds-add:active { scale: .96; }

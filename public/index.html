@@ -7,7 +7,7 @@
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<link rel="stylesheet" href="/css/styles.css?v=5">
+<link rel="stylesheet" href="/css/styles.css?v=6">
 </head>
 <body data-theme="dark">
 
@@ -68,6 +68,12 @@
         <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/><line x1="1" y1="1" x2="23" y2="23"/>
       </svg>
     </button>
+    <button class="icon-btn" id="dir-suggest-btn" title="IMDbで監督が見つかった未登録の作品" style="display:none">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="7" width="15" height="13" rx="2"/><polygon points="22 8 17 12 22 16 22 8"/>
+      </svg>
+      <span id="dir-suggest-count"></span>
+    </button>
     <button id="notion-sync-btn" title="Notionから自動取得"><span class="nsb-dot"></span><span>更新</span></button>
   </div>
 </div>
@@ -90,6 +96,14 @@
     <div><button class="hp-btn" id="hp-restore-all">すべて復元</button></div>
   </div>
   <div id="hp-list"></div>
+</div>
+
+<div id="dir-suggest-panel">
+  <div class="hp-header">
+    <div class="hp-title">監督候補 <span id="ds-count"></span></div>
+  </div>
+  <div class="ds-panel-note">クリエイター未登録の作品のうち、IMDbで監督が見つかったもの。クリックして内容を確認してから登録できます。</div>
+  <div id="ds-list"></div>
 </div>
 
 <div id="filter-modal">
@@ -185,12 +199,13 @@
 
 <script src="/js/core.js?v=4"></script>
 <script src="/js/filters.js?v=4"></script>
-<script src="/js/graph.js?v=5"></script>
-<script src="/js/panel.js?v=5"></script>
-<script src="/js/imdb.js?v=5"></script>
+<script src="/js/graph.js?v=6"></script>
+<script src="/js/panel.js?v=6"></script>
+<script src="/js/imdb.js?v=6"></script>
 <script src="/js/tag-filter.js?v=4"></script>
 <script src="/js/avatars.js?v=4"></script>
-<script src="/js/main.js?v=5"></script>
+<script src="/js/director-suggest.js?v=1"></script>
+<script src="/js/main.js?v=6"></script>
 <!-- ── Role Picker Popover ── -->
 <div id="role-picker-popover" class="picker-popover">
   <div class="picker-popover-header">

@@ -349,58 +349,76 @@ function renderImdbData(panelId, data, workNode = null) {
         btn.onmouseover = null;
         btn.onmouseout = null;
 
-        // 2. ローカルグラフに即座に反映
-        if (!workNode._creatorRelIds) workNode._creatorRelIds = [];
-        const creatorNodeId = `d_${personName}`;
-        let targetNode = AN.find(n => n.id === creatorNodeId);
-        if (!targetNode) {
-          targetNode = {
-            id: creatorNodeId, type: 'director', label: personName,
-            role: '', sns: [], avatar: rawImgUrl || '',
-            notionPageId: '', works: [workNode.id],
-          };
-          AN.push(targetNode);
-        } else {
-          if (!targetNode.works.includes(workNode.id)) targetNode.works.push(workNode.id);
-        }
-        if (!AL.find(l => lid(l.source) === creatorNodeId && lid(l.target) === workNode.id)) {
-          AL.push({ source: creatorNodeId, target: workNode.id, ltype: 'dir' });
-        }
-
-        // 3. UIを即座に再描画（位置維持）
-        showPanel(workNode);
-        const { nodes: vNodes, links: vLinks } = filteredData();
-        redraw(vNodes, vLinks);
-        selId = workNode.id;
-        applyHL(selId, 'click');
-
-        // 4. バックグラウンドで Notion に反映（fire-and-forget）
-        fetch('/notion-create-creator', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: personName, imageUrl: rawImgUrl || undefined }),
-        })
-        .then(r => r.json())
-        .then(createData => {
-          if (!createData.success) throw new Error(createData.error || '作成失敗');
-          const creatorPageId = createData.creatorPageId;
-          // notionPageId を後から補完
-          if (targetNode && !targetNode.notionPageId) targetNode.notionPageId = creatorPageId;
-          const normalizedNewId = creatorPageId.replace(/-/g, '');
-          if (!workNode._creatorRelIds.some(id => id.replace(/-/g,'') === normalizedNewId)) {
-            workNode._creatorRelIds.push(creatorPageId);
-          }
-          return fetch('/notion-add-creator', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ workId: workNode.notionPageId, creatorPageId }),
-          });
-        })
-        .then(r => r.json())
-        .catch(err => console.error('[IMDB AddCreator]', err));
+        addImdbPersonToWork(workNode, personName, rawImgUrl);
       });
     });
   }
+}
+
+/** Notion クリエイターDBに同名（表記ゆれ程度）の人物がいれば返す */
+function findExistingCreatorByName(name) {
+  const key = _compact(_normName(name));
+  if (!key) return null;
+  return ALL_CREATORS.find(c => _compact(_normName(c.Name)) === key) || null;
+}
+
+/** IMDb の人物を作品の参加クリエイターに追加する。
+ *  既存クリエイターがいればそれを紐づけ、いなければ Notion に新規作成してから紐づける */
+function addImdbPersonToWork(workNode, personName, rawImgUrl = '') {
+  const existing = findExistingCreatorByName(personName);
+  if (existing) { addCreatorToWork(workNode, existing); return; }
+
+  // 1. ローカルグラフに即座に反映
+  if (!workNode._creatorRelIds) workNode._creatorRelIds = [];
+  const creatorNodeId = `d_${personName}`;
+  let targetNode = AN.find(n => n.id === creatorNodeId);
+  if (!targetNode) {
+    targetNode = {
+      id: creatorNodeId, type: 'director', label: personName,
+      role: '', sns: [], avatar: rawImgUrl || '',
+      notionPageId: '', works: [workNode.id],
+    };
+    AN.push(targetNode);
+  } else {
+    if (!targetNode.works.includes(workNode.id)) targetNode.works.push(workNode.id);
+  }
+  if (!AL.find(l => lid(l.source) === creatorNodeId && lid(l.target) === workNode.id)) {
+    AL.push({ source: creatorNodeId, target: workNode.id, ltype: 'dir' });
+  }
+
+  // 2. UIを即座に再描画（位置維持）
+  showPanel(workNode);
+  const { nodes: vNodes, links: vLinks } = filteredData();
+  redraw(vNodes, vLinks);
+  selId = workNode.id;
+  applyHL(selId, 'click');
+
+  // 3. バックグラウンドで Notion に反映（fire-and-forget）
+  fetch('/notion-create-creator', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: personName, imageUrl: rawImgUrl || undefined }),
+  })
+  .then(r => r.json())
+  .then(createData => {
+    if (!createData.success) throw new Error(createData.error || '作成失敗');
+    const creatorPageId = createData.creatorPageId;
+    // notionPageId を後から補完
+    if (targetNode && !targetNode.notionPageId) targetNode.notionPageId = creatorPageId;
+    // 以降の追加で同じ人物を重複作成しないよう一覧にも反映
+    ALL_CREATORS.push({ Name: personName, Role: '', SNS: '', Avatar: rawImgUrl || '', notionPageId: creatorPageId });
+    const normalizedNewId = creatorPageId.replace(/-/g, '');
+    if (!workNode._creatorRelIds.some(id => id.replace(/-/g,'') === normalizedNewId)) {
+      workNode._creatorRelIds.push(creatorPageId);
+    }
+    return fetch('/notion-add-creator', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workId: workNode.notionPageId, creatorPageId }),
+    });
+  })
+  .then(r => r.json())
+  .catch(err => console.error('[IMDB AddCreator]', err));
 }
 
 async function fetchImdbInfo(panelId, workTitle, workNode = null) {

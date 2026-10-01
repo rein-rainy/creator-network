@@ -254,6 +254,9 @@ function showPanel(d) {
       html += `</div>`;
     }
 
+    // IMDb 監督候補（クリエイター未登録の作品のみ。renderDirSuggestSection で描画）
+    html += `<div id="dir-suggest-slot"></div>`;
+
     // IMDB セクション（パネルオープン時に自動取得）
     _imdbPanelId = `imdb_${Date.now()}`;
     html += `<div id="imdb-section-${esc(_imdbPanelId)}" class="imdb-section">
@@ -382,6 +385,7 @@ function showPanel(d) {
   }
   document.getElementById('pc2').innerHTML = html;
   document.getElementById('info-panel').classList.add('visible');
+  if (d.type === 'work') renderDirSuggestSection(d);
 
   // 出演・制作作品 → 作品パネルへ遷移
   document.getElementById('pc2').querySelectorAll('.pw-item[data-work-id]').forEach(btn => {

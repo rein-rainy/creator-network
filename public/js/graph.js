@@ -355,6 +355,7 @@ function _renderNodeContent(grp, d) {
     bd.append('xhtml:div').attr('class', 'wc-tt').text(d.label);
     const tgs = bd.append('xhtml:div').attr('class', 'wc-tags');
     (d.cats || []).slice(0, 3).forEach(c => tgs.append('xhtml:span').attr('class', 'wc-tag').text(c));
+    if (dirSuggestFor(d)) card.append('xhtml:div').attr('class', 'wc-suggest').attr('title', 'IMDbに監督候補あり').text('監督候補');
   } else {
     const isDir = d.type === 'director';
     const col   = isDir ? 'var(--node-dir)' : 'var(--node-art)';
