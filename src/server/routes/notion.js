@@ -35,6 +35,15 @@ async function handleNotionRoutes(req, res) {
     return notion.uploadCreatorCover(creatorPageId, Buffer.from(match[2], 'base64'), match[1]);
   })) return true;
 
+  if (await jsonRoute(req, res, { method: 'GET', path: '/notion-work-categories', label: 'WorkCategories Error' }, async () => {
+    return notion.getWorkCategoryOptions();
+  })) return true;
+
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-create-work', label: 'Notion Create Work Error' }, async (work) => {
+    if (!work.title) throw new Error('title が必要です');
+    return notion.createWork(work);
+  })) return true;
+
   if (await jsonRoute(req, res, { method: 'GET', path: '/notion-role-options', label: 'RoleOptions Error' }, async () => {
     return notion.getRoleOptions();
   })) return true;

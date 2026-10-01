@@ -328,6 +328,11 @@ body {
   width: min(92vmin, 680px);
   max-height: 88vh;
 }
+/* 最新作品ギャラリーの上に開くとき */
+#info-overlay.above-gallery { z-index: 8050; }
+#info-panel.above-gallery   { z-index: 8060; }
+#filmography-overlay { z-index: 8100; }
+
 #info-panel.mode-modal.visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 
 /* クリエイター/アーティスト：右上小パネル */
@@ -571,7 +576,9 @@ g.nd { transition: opacity .18s; }
   font-family: var(--mono); font-size: 10px; font-weight: 400; padding: 2px 6px;
   border-radius: 4px; background: var(--bg3); color: var(--ink-3);
 }
-.fmg-rating { font-family: var(--mono); font-size: 11px; color: var(--accent2); font-weight: 500; }
+.fmg-rating { font-family: var(--mono); font-size: 11px; color: var(--accent2); font-weight: 500; display: inline-flex; align-items: center; gap: 3px; }
+/* 評価の星（STAR_ICON）。数字と縦中央をそろえ、文字サイズに比例させる */
+.star-icon { width: 1.1em; height: 1.1em; flex-shrink: 0; }
 
 /* 最新作品（ギャラリー） */
 #recent-modal { width: min(94vw, 1080px); height: 88vh; max-height: 88vh; }
@@ -613,6 +620,33 @@ g.nd { transition: opacity .18s; }
 .rw-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .rw-director-name { font-size: 11.5px; font-weight: 500; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-director:hover .rw-director-name { color: var(--ink); }
+.rw-votes { font-family: var(--mono); font-size: 10px; color: var(--ink-3); }
+#rw-loading.rw-loading-more { padding: 8px 20px 28px; font-size: 12px; color: var(--ink-3); }
+#rw-loading.rw-loading-more .fm2-spinner { width: 14px; height: 14px; }
+/* 最新作品 → 未登録作品のパネル */
+.rw-player { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #000; border-bottom: 1px solid var(--border); }
+.rw-player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+.rw-player-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px; color: rgba(255,255,255,.6); font-size: 12px; }
+.rw-panel-meta { padding: 14px 20px 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rw-panel-section { border-top: 1px solid var(--border); padding: 12px 20px 16px; }
+.rw-panel-label {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--text-dim); padding: 2px 0 10px;
+}
+.rw-panel-people { display: flex; flex-wrap: wrap; gap: 8px; }
+.rw-panel-person {
+  display: inline-flex; align-items: center; gap: 10px; max-width: 220px;
+  background: var(--card-bg); border: 1.5px solid var(--card-border); border-radius: var(--r);
+  padding: 8px 12px 8px 8px; cursor: pointer; font-family: var(--sans); color: inherit; text-align: left;
+  transition: background .15s, border-color .15s;
+}
+.rw-panel-person:hover { border-color: var(--accent); background: var(--bg2); }
+.rw-panel-person .rw-avatar { width: 32px; height: 32px; font-size: 13px; }
+.rw-panel-person-name { font-size: 12px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rw-save-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.rw-save-note { font-size: 11px; line-height: 1.5; color: var(--ink-3); min-width: 0; text-wrap: pretty; }
+.rw-save-btn { height: 32px; padding: 0 16px; flex-shrink: 0; }
+.rw-save-btn:disabled { opacity: .5; cursor: default; }
 .rw-registered {
   position: absolute; top: 8px; left: 8px; z-index: 1;
   font-size: 10px; font-weight: 600; line-height: 1; padding: 4px 6px; border-radius: 4px;
@@ -869,7 +903,7 @@ g.nd { transition: opacity .18s; }
   font-family: var(--mono); font-size: 11px; font-weight: 400; padding: 3px 8px;
   background: var(--bg3); border-radius: 4px; color: var(--ink-2); white-space: nowrap;
 }
-.imdb-chip.rating { background: rgba(245,197,24,0.12); color: rgb(180,140,0); font-weight: 500; }
+.imdb-chip.rating { display: inline-flex; align-items: center; gap: 3px; background: rgba(245,197,24,0.12); color: rgb(180,140,0); font-weight: 500; }
 [data-theme="dark"] .imdb-chip.rating { color: rgb(245,197,24); }
 .imdb-chip.runtime { background: var(--bg3); color: var(--ink-2); }
 .imdb-plot {
@@ -927,7 +961,7 @@ g.nd { transition: opacity .18s; }
   display: none; position: fixed;
   background: var(--bg2); box-shadow: var(--shadow-pop); border-radius: var(--r-xl);
   padding: 8px; min-width: 220px; max-height: 380px; overflow-y: auto;
-  z-index: 5000; animation: pop .12s var(--ease);
+  z-index: 8500; animation: pop .12s var(--ease);
 }
 #add-creator-dropdown.open { display: block; }
 #add-creator-dropdown::-webkit-scrollbar { width: 4px; }

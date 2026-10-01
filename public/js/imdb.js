@@ -129,7 +129,7 @@ function renderImdbData(panelId, data, workNode = null) {
   // ── ヘッダー: タイトル・年・評価 ──────────────────────────────────
   if (foundEl) {
     let chips = '';
-    if (data.rating) chips += `<span class="imdb-chip rating">★ ${data.rating}</span>`;
+    if (data.rating) chips += `<span class="imdb-chip rating">${STAR_ICON}${data.rating}</span>`;
     if (data.votes)  chips += `<span class="imdb-chip">${Number(data.votes).toLocaleString('ja-JP')} votes</span>`;
     if (data.year)   chips += `<span class="imdb-chip">${data.year}</span>`;
     foundEl.innerHTML = `
@@ -854,7 +854,7 @@ function renderFmgList(type) {
           ${year ? `<span class="fmg-year">${esc(String(year))}</span>` : ''}
           ${roleHtml}
           ${titleType && titleType !== type ? `<span class="fmg-type">${esc(fmgTypeLabel(titleType))}</span>` : ''}
-          ${rating ? `<span class="fmg-rating">★ ${rating}</span>` : ''}
+          ${rating ? `<span class="fmg-rating">${STAR_ICON}${rating}</span>` : ''}
         </div>
       </div>
     </a>`;

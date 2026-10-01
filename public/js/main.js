@@ -326,8 +326,8 @@ function stopYtIframe() {
 
 function closeInfoPanel() {
   stopYtIframe();
-  document.getElementById('info-panel').classList.remove('visible');
-  document.getElementById('info-overlay').classList.remove('visible');
+  document.getElementById('info-panel').classList.remove('visible', 'above-gallery');
+  document.getElementById('info-overlay').classList.remove('visible', 'above-gallery');
   selId = null; hovId = null; applyHL(null, null);
 }
 
@@ -394,6 +394,7 @@ async function fetchFromNotionAPI() {
     if (data.error) throw new Error(data.error);
     if (!data.results?.length) throw new Error('データが0件です');
     ALL_CREATORS = data.creators || [];
+    ALL_ARTISTS = data.artists || [];
     // creators / artists フィールドがあればメタ情報を先に読み込む
     const allPersons = [...ALL_CREATORS, ...(data.artists ?? [])];
 

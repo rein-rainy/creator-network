@@ -1,26 +1,31 @@
 /* ═══════════════════════════════════════════
    RECENT WORKS (IMDb)
-   登録済みクリエイターが IMDb で「監督」として載っている作品のうち、
-   直近1年に公開されたものをギャラリー表示する。
+   登録済みクリエイターが IMDb で「監督」として載っている MV を
+   公開日の新しい順にギャラリー表示する。
 ═══════════════════════════════════════════ */
 const RECENT_NAMEID_CACHE_KEY  = 'creator_network_imdb_nameid_v1';
-const RECENT_CREDITS_CACHE_KEY = 'creator_network_recent_credits_v2';
+const RECENT_CREDITS_CACHE_KEY = 'creator_network_director_mvs_v2';
 const RECENT_NAMEID_TTL_HIT  = 30 * 24 * 60 * 60 * 1000;
 const RECENT_NAMEID_TTL_MISS =  7 * 24 * 60 * 60 * 1000;
 const RECENT_CREDITS_TTL     = 12 * 60 * 60 * 1000;
 const RECENT_CONCURRENCY = 3;
-const RECENT_DAYS = 365;
-const DAY_MS = 24 * 60 * 60 * 1000;
+const RECENT_FLUSH_SIZE = 10; // この件数たまるごとにギャラリーへ差し込む
+
+// 古いキャッシュ（直近1年版・評価なし版）は使わないので掃除する
+try { ['creator_network_recent_credits_v1', 'creator_network_recent_credits_v2', 'creator_network_director_mvs_v1'].forEach(key => localStorage.removeItem(key)); } catch {}
 
 // クリエイター名 → { at, nameId } | { at, none: true }
 let _recentNameIds = {};
-// nameId → { at, image, credits: [{ tt, title, type, year, month, day, image }] }
+// nameId → { at, image, credits: [{ tt, title, year, month, day }] }
 let _recentCredits = {};
-// tt → { ...credit, directors: [{ name, nameId, nodeId, imdbImage }] }
+// tt → { ...credit, sortKey, registered, directors: [{ name, nameId, nodeId, imdbImage }], card? }
 let _recentWorks = new Map();
+let _recentPending = [];        // まだギャラリーに出していない作品
+let _recentDirty = new Set();   // 表示済みで監督が増えた作品
 let _recentScanGen = 0;
 let _recentScanning = false;
 let _recentScannedNodes = null; // スキャン対象にしたグラフ（AN）— Notion 更新で差し替わったら再スキャン
+let _recentThumbObserver = null;
 
 function _loadRecentCache() {
   try { _recentNameIds = JSON.parse(localStorage.getItem(RECENT_NAMEID_CACHE_KEY) || '{}'); } catch { _recentNameIds = {}; }
@@ -37,25 +42,11 @@ function _recentPost(url, body) {
   }).then(r => r.json()).then(d => { if (d.error) throw new Error(d.error); return d; });
 }
 
-/** 公開日（日付が欠けていれば月初・年初）と、日単位まで分かっているか */
-function _recentDate(credit) {
+/** 並び順のキー（日付が欠けていれば月初・年初扱い）。公開日不明・公開予定は null */
+function _recentSortKey(credit, now = Date.now()) {
   if (!credit.year) return null;
-  return {
-    date: new Date(credit.year, (credit.month || 1) - 1, credit.day || 1),
-    precision: credit.day ? 'day' : credit.month ? 'month' : 'year',
-  };
-}
-
-function _inRecentRange(credit, now = new Date()) {
-  const d = _recentDate(credit);
-  if (!d) return false;
-  // 年しか分からないものは今年の作品だけ含める
-  if (d.precision === 'year') return credit.year === now.getFullYear();
-  if (d.date > now) return false; // 公開予定は除外
-  const from = new Date(now.getTime() - RECENT_DAYS * DAY_MS);
-  // 月までしか分からないものは、その月の末日が範囲内なら含める
-  const end = d.precision === 'month' ? new Date(credit.year, credit.month, 0) : d.date;
-  return end >= from;
+  const time = new Date(credit.year, (credit.month || 1) - 1, credit.day || 1).getTime();
+  return time > now ? null : time;
 }
 
 function _formatRecentDate(credit) {
@@ -70,11 +61,12 @@ function _formatRecentDate(credit) {
 function _recentCompact(str) {
   return (str || '').toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, '');
 }
-function _isRegisteredWork(credit) {
+/** グラフ上の同じ作品（曲名がタイトルに含まれる作品）。なければ null */
+function _findRegisteredWork(credit) {
   const idx = credit.title.lastIndexOf(':');
   const song = _recentCompact(idx >= 0 ? credit.title.slice(idx + 1) : credit.title);
-  if (song.length < 3) return false;
-  return AN.some(n => n.type === 'work' && _recentCompact(n.label).includes(song));
+  if (song.length < 3) return null;
+  return AN.find(n => n.type === 'work' && _recentCompact(n.label).includes(song)) || null;
 }
 
 async function _resolveNameId(node) {
@@ -92,24 +84,26 @@ async function _resolveNameId(node) {
 async function _fetchCredits(nameId, force) {
   const cached = _recentCredits[nameId];
   if (!force && cached && Date.now() - cached.at < RECENT_CREDITS_TTL) return cached;
-  const { image, credits } = await _recentPost('/imdb-recent-credits', { nameId });
-  // 1年より前のものは使わないので保存しない
-  const minYear = new Date().getFullYear() - 1;
-  const kept = credits.filter(c => c.year && c.year >= minYear);
-  _recentCredits[nameId] = { at: Date.now(), image, credits: kept };
+  const { image, credits } = await _recentPost('/imdb-director-mvs', { nameId });
+  _recentCredits[nameId] = { at: Date.now(), image, credits };
   return _recentCredits[nameId];
 }
 
 function _addRecentCredits(node, nameId, { image, credits }) {
+  const now = Date.now();
   credits.forEach(c => {
-    if (!c.tt || !_inRecentRange(c)) return;
+    const sortKey = _recentSortKey(c, now);
+    if (!c.tt || sortKey === null) return;
     let entry = _recentWorks.get(c.tt);
     if (!entry) {
-      entry = { ...c, directors: [], registered: _isRegisteredWork(c) };
+      const workNode = _findRegisteredWork(c);
+      entry = { ...c, sortKey, directors: [], workNode, registered: !!workNode };
       _recentWorks.set(c.tt, entry);
+      _recentPending.push(entry);
     }
     if (!entry.directors.some(d => d.nameId === nameId)) {
       entry.directors.push({ name: node.label, nameId, nodeId: node.id, imdbImage: image || '' });
+      if (entry.card) _recentDirty.add(entry);
     }
   });
 }
@@ -118,18 +112,17 @@ async function scanRecentWorks({ force = false } = {}) {
   const gen = ++_recentScanGen;
   _loadRecentCache();
   _recentWorks = new Map();
+  _recentPending = [];
+  _recentDirty = new Set();
   _recentScanning = true;
   _recentScannedNodes = AN;
+  _resetRecentGallery();
 
   const directors = AN.filter(n => n.type === 'director');
-  let done = 0, notFound = 0, failed = 0, renderedSize = -1;
+  let done = 0, notFound = 0, failed = 0;
   const progress = () => {
-    if (gen !== _recentScanGen) return;
-    _setRecentSub(`監督 ${done}/${directors.length} 人を確認中…`);
-    // 作品が増えたときだけ描き直す（サムネイルのちらつき防止）
-    if (_recentWorks.size === renderedSize) return;
-    renderedSize = _recentWorks.size;
-    renderRecentWorks();
+    _setRecentSub(`${_recentWorks.size} 作品 · 監督 ${done}/${directors.length} 人を確認中…`);
+    if (_recentPending.length >= RECENT_FLUSH_SIZE) _flushRecentWorks();
   };
   progress();
 
@@ -140,12 +133,15 @@ async function scanRecentWorks({ force = false } = {}) {
       if (gen !== _recentScanGen) return;
       try {
         const nameId = await _resolveNameId(node);
-        if (nameId) _addRecentCredits(node, nameId, await _fetchCredits(nameId, force));
+        const credits = nameId ? await _fetchCredits(nameId, force) : null;
+        if (gen !== _recentScanGen) return; // 再スキャンが始まったら古い結果は捨てる
+        if (credits) _addRecentCredits(node, nameId, credits);
         else notFound++;
       } catch (e) {
         failed++;
         console.warn('[RecentWorks]', node.label, e.message); // 失敗はキャッシュせず次回再試行
       }
+      if (gen !== _recentScanGen) return;
       done++;
       _saveRecentCache();
       progress();
@@ -155,11 +151,11 @@ async function scanRecentWorks({ force = false } = {}) {
   if (gen !== _recentScanGen) return;
 
   _recentScanning = false;
+  _flushRecentWorks();
   const notes = [`${_recentWorks.size} 作品`, `監督 ${directors.length} 人`];
   if (notFound) notes.push(`IMDb未発見 ${notFound}`);
   if (failed) notes.push(`取得失敗 ${failed}`);
   _setRecentSub(notes.join(' · '));
-  renderRecentWorks();
 }
 
 /* ── UI ─────────────────────────────────────── */
@@ -176,73 +172,359 @@ function _recentAvatarSrc(d, igCache = loadIgAvatarCache()) {
   return d.imdbImage ? imdbProxyImg(d.imdbImage) : '';
 }
 
-function _recentAvatarHtml(d, igCache) {
-  const initial = esc([...d.name][0] || '?');
-  const src = _recentAvatarSrc(d, igCache);
-  const img = src ? `<img src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">` : '';
-  return `<span class="rw-avatar"><span>${initial}</span>${img}</span>`;
+function _recentDirectorsHtml(entry, igCache) {
+  return entry.directors.map((d, i) => {
+    const initial = esc([...d.name][0] || '?');
+    const src = _recentAvatarSrc(d, igCache);
+    const img = src ? `<img src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">` : '';
+    return `<span class="rw-director" data-idx="${i}" role="button" tabindex="0" title="${esc(d.name)} のフィルモグラフィー">
+      <span class="rw-avatar"><span>${initial}</span>${img}</span><span class="rw-director-name">${esc(d.name)}</span>
+    </span>`;
+  }).join('');
 }
 
-function renderRecentWorks() {
+function _createRecentCard(entry, igCache) {
+  const searchQuery = `${entry.title} Music Video`;
+  const card = document.createElement('a');
+  card.className = 'rw-card';
+  card.href = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
+  card.target = '_blank';
+  card.rel = 'noopener';
+  card.dataset.ytQuery = searchQuery;
+  card.innerHTML = `
+    <div class="rw-thumb-wrap">
+      <div class="fmg-ph"></div>
+      ${entry.registered ? '<span class="rw-registered">登録済み</span>' : ''}
+    </div>
+    <div class="rw-info">
+      <div class="rw-title">${esc(entry.title)}</div>
+      <div class="rw-meta">
+        <span class="fmg-year">${esc(_formatRecentDate(entry))}</span>
+        ${entry.rating ? `<span class="fmg-rating">${STAR_ICON}${entry.rating.toFixed(1)}</span><span class="rw-votes">${entry.votes.toLocaleString()}票</span>` : ''}
+      </div>
+      <div class="rw-directors">${_recentDirectorsHtml(entry, igCache)}</div>
+    </div>`;
+  // カードはページ内のパネルで開く（Cmd/Ctrl クリックなどは YouTube 検索を新しいタブで）
+  card.addEventListener('click', e => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    openRecentWorkPanel(entry);
+  });
+  // 監督は後から増えることがあるので、クリック時に entry から引く
+  card.querySelector('.rw-directors').addEventListener('click', e => {
+    const el = e.target.closest('.rw-director');
+    if (!el) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const d = entry.directors[Number(el.dataset.idx)];
+    openFilmographyModal(d.name, _recentAvatarSrc(d), { nameId: d.nameId });
+  });
+  return card;
+}
+
+/** サムネイルは画面に近づいたカードの分だけ YouTube に問い合わせる */
+function _observeRecentThumb(card) {
+  if (!_recentThumbObserver) {
+    const body = document.getElementById('rw-body');
+    _recentThumbObserver = new IntersectionObserver(entries => {
+      const visible = entries.filter(e => e.isIntersecting).map(e => e.target);
+      if (!visible.length) return;
+      visible.forEach(el => {
+        _recentThumbObserver.unobserve(el);
+        el.dataset.ytPending = '1';
+      });
+      enrichFmgYoutubeLinks(body, '.rw-card[data-yt-pending]');
+      visible.forEach(el => delete el.dataset.ytPending);
+    }, { root: body, rootMargin: '400px 0px' });
+  }
+  _recentThumbObserver.observe(card);
+}
+
+function _resetRecentGallery() {
+  _recentThumbObserver?.disconnect();
+  _recentThumbObserver = null;
   const body = document.getElementById('rw-body');
-  const items = [..._recentWorks.values()].sort((a, b) => _recentDate(b).date - _recentDate(a).date);
-  if (!items.length) {
-    body.innerHTML = _recentScanning
-      ? `<div class="fm2-loading"><div class="fm2-spinner"></div>IMDb を確認中…</div>`
-      : `<div class="fm2-empty">直近1年に公開された作品は見つかりませんでした</div>`;
+  body.scrollTop = 0;
+  body.innerHTML = `<div class="rw-grid"></div>
+    <div class="fm2-loading" id="rw-loading"><div class="fm2-spinner"></div>IMDb を確認中…</div>`;
+}
+
+/** たまった作品を新しい順の位置に差し込む。表示済みのカードは作り直さない（チラつき防止） */
+function _flushRecentWorks() {
+  const grid = document.querySelector('#rw-body .rw-grid');
+  if (!grid) return;
+  const igCache = loadIgAvatarCache();
+
+  _recentDirty.forEach(entry => {
+    entry.card.querySelector('.rw-directors').innerHTML = _recentDirectorsHtml(entry, igCache);
+  });
+  _recentDirty.clear();
+
+  const pending = _recentPending.sort((a, b) => b.sortKey - a.sortKey);
+  _recentPending = [];
+  // 既存カードも新しい順に並んでいるので、マージしながら挿入位置を進める
+  let cursor = grid.firstElementChild;
+  pending.forEach(entry => {
+    while (cursor && _recentWorks.get(cursor.dataset.tt)?.sortKey >= entry.sortKey) {
+      cursor = cursor.nextElementSibling;
+    }
+    entry.card = _createRecentCard(entry, igCache);
+    entry.card.dataset.tt = entry.tt;
+    grid.insertBefore(entry.card, cursor);
+    _observeRecentThumb(entry.card);
+  });
+
+  const loading = document.getElementById('rw-loading');
+  if (!_recentScanning) {
+    loading?.remove();
+    if (!_recentWorks.size) grid.outerHTML = `<div class="fm2-empty">MV が見つかりませんでした</div>`;
+  } else if (loading && _recentWorks.size) {
+    // 作品が出始めたらスピナーは一覧の下に小さく残す
+    loading.classList.add('rw-loading-more');
+  }
+}
+
+/* ── 作品パネル（ギャラリーの上に開く） ───────── */
+const RECENT_TAG_COLORS = {
+  default: 'var(--text-dim)', gray: '#8e8e93', brown: '#a68064', orange: '#ff9f0a', yellow: '#ffd60a',
+  green: '#30d158', blue: 'var(--accent)', purple: '#bf5af2', pink: '#ff375f', red: 'var(--accent-red)',
+};
+const RECENT_DEFAULT_TAGS = ['MV'];
+let _workCategoryOptions = null; // Promise<[{ name, color }]>
+let _recentGraphDirty = false;   // 保存した作品をギャラリーを閉じたときにグラフへ反映する
+
+function _loadWorkCategoryOptions() {
+  if (!_workCategoryOptions) {
+    _workCategoryOptions = fetch('/notion-work-categories').then(r => r.json())
+      .then(d => { if (d.error) throw new Error(d.error); return d.options; })
+      .catch(e => { _workCategoryOptions = null; throw e; });
+  }
+  return _workCategoryOptions;
+}
+
+/** YouTube の動画（サムネイル取得と同じ検索。結果は共有キャッシュに入る） */
+async function _recentYoutube(entry) {
+  const query = `${entry.title} Music Video`;
+  if (!_fmgYoutubeCache.has(query)) {
+    const data = await _recentPost('/youtube-video-search', { titles: [query] });
+    _fmgYoutubeCache.set(query, data.results?.[query] || null);
+  }
+  return _fmgYoutubeCache.get(query);
+}
+
+/** IMDb の「Artist feat. X: Song」から、Notion に登録済みのアーティストを探す */
+function _matchArtists(entry) {
+  const idx = entry.title.lastIndexOf(':');
+  if (idx < 0) return [];
+  const artistPart = entry.title.slice(0, idx);
+  const names = [artistPart, ...artistPart.split(/\s*(?:,|&|×|\bfeat\.?|\bft\.?|\bx\b|\band\b)\s*/i)]
+    .map(_recentCompact).filter(name => name.length >= 2);
+  const found = new Map();
+  ALL_ARTISTS.forEach(artist => {
+    const key = _recentCompact(artist.Name);
+    if (key && artist.notionPageId && names.some(name => key === name || key.startsWith(name))) {
+      found.set(artist.notionPageId, artist);
+    }
+  });
+  return [...found.values()];
+}
+
+function _raiseInfoPanel() {
+  document.getElementById('info-panel').classList.add('above-gallery');
+  document.getElementById('info-overlay').classList.add('above-gallery');
+}
+
+function openRecentWorkPanel(entry) {
+  _raiseInfoPanel();
+  // 登録済みの作品は通常の作品パネルをそのまま開く
+  if (entry.workNode && AN.includes(entry.workNode)) {
+    showPanel(entry.workNode);
     return;
   }
 
-  // 再描画でスクロール位置が飛ばないよう保持する
-  const scrollTop = body.scrollTop;
-  const igCache = loadIgAvatarCache();
-  body.innerHTML = `<div class="rw-grid">${items.map(c => {
-    const searchQuery = `${c.title} ${fmgTypeLabel(c.type)}`;
-    const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
-    const directorsHtml = c.directors.map((d, i) =>
-      `<span class="rw-director" data-idx="${i}" role="button" tabindex="0" title="${esc(d.name)} のフィルモグラフィー">
-        ${_recentAvatarHtml(d, igCache)}<span class="rw-director-name">${esc(d.name)}</span>
-      </span>`).join('');
-    return `<a class="rw-card" href="${esc(youtubeUrl)}" target="_blank" rel="noopener" data-yt-query="${esc(searchQuery)}" data-tt="${esc(c.tt)}">
-      <div class="rw-thumb-wrap">
-        <div class="fmg-ph"></div>
-        ${c.registered ? '<span class="rw-registered">登録済み</span>' : ''}
-      </div>
-      <div class="rw-info">
-        <div class="rw-title">${esc(c.title)}</div>
-        <div class="rw-meta">
-          <span class="fmg-year">${esc(_formatRecentDate(c))}</span>
-          <span class="fmg-type">${esc(fmgTypeLabel(c.type))}</span>
-        </div>
-        <div class="rw-directors">${directorsHtml}</div>
-      </div>
-    </a>`;
-  }).join('')}</div>`;
-  body.scrollTop = scrollTop;
+  document.getElementById('pt').textContent = 'WORK';
+  document.getElementById('pt').style.color = 'var(--accent2)';
+  const pnEl = document.getElementById('pn');
+  pnEl.textContent = entry.title;
+  pnEl.ondblclick = null; pnEl.title = ''; pnEl.style.cursor = '';
+  document.getElementById('ph-avatar').style.display = 'none';
+  ['pc-hide', 'pc-search', 'pc-notion'].forEach(id => { document.getElementById(id).style.display = 'none'; });
 
-  body.querySelectorAll('.rw-card').forEach(card => {
-    const credit = _recentWorks.get(card.dataset.tt);
-    card.querySelectorAll('.rw-director').forEach(el => {
-      el.addEventListener('click', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        const d = credit.directors[Number(el.dataset.idx)];
-        openFilmographyModal(d.name, _recentAvatarSrc(d), { nameId: d.nameId });
-      });
+  const panelId = `imdb_rw_${Date.now()}`;
+  const igCache = loadIgAvatarCache();
+  const people = entry.directors.map((d, i) => {
+    const initial = esc([...d.name][0] || '?');
+    const src = _recentAvatarSrc(d, igCache);
+    const img = src ? `<img src="${esc(src)}" alt="" onerror="this.remove()">` : '';
+    return `<button class="rw-panel-person" data-idx="${i}">
+      <span class="rw-avatar"><span>${initial}</span>${img}</span>
+      <span class="rw-panel-person-name">${esc(d.name)}</span>
+    </button>`;
+  }).join('');
+  const artists = _matchArtists(entry);
+
+  document.getElementById('pc2').innerHTML = `
+    <div class="rw-player" id="rw-player"><div class="rw-player-msg"><div class="fm2-spinner"></div>動画を検索中…</div></div>
+    <div class="rw-panel-meta">
+      <span class="fmg-year">${esc(_formatRecentDate(entry))}</span>
+      ${entry.rating ? `<span class="fmg-rating">${STAR_ICON}${entry.rating.toFixed(1)}</span><span class="rw-votes">${entry.votes.toLocaleString()}票</span>` : ''}
+    </div>
+    <div class="rw-panel-section">
+      <div class="rw-panel-label">参加クリエイター</div>
+      <div class="rw-panel-people">${people}</div>
+    </div>
+    <div class="rw-panel-section" id="rw-save">
+      <div class="rw-panel-label">Notion に保存</div>
+      <div class="role-picker-tags" id="rw-save-tags" style="max-height:none"><span class="role-picker-loading">タグを読み込み中…</span></div>
+      <div class="rw-save-row">
+        <div class="rw-save-note">${artists.length
+          ? `アーティスト: ${esc(artists.map(a => a.Name).join(' / '))}`
+          : 'Notion に一致するアーティストがいないため、アーティストは空で保存されます'}</div>
+        <button class="cmeta-save-btn rw-save-btn" id="rw-save-btn">保存</button>
+      </div>
+    </div>
+    <div id="imdb-section-${esc(panelId)}" class="imdb-section">
+      <div class="imdb-section-title"><span>IMDb 情報</span><span class="imdb-badge">IMDb</span></div>
+      <div id="imdb-found-${esc(panelId)}"></div>
+      <div id="imdb-body-${esc(panelId)}">
+        <div class="imdb-loading"><div class="imdb-loading-dot"></div><div class="imdb-loading-dot"></div><div class="imdb-loading-dot"></div></div>
+      </div>
+    </div>`;
+
+  const panel = document.getElementById('info-panel');
+  panel.classList.add('mode-modal', 'visible');
+  panel.classList.remove('mode-side');
+  panel.scrollTop = 0;
+  document.getElementById('info-overlay').classList.add('visible');
+
+  // 参加クリエイター → 通常のクリエイターパネル
+  document.querySelectorAll('#pc2 .rw-panel-person').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const node = AN.find(n => n.id === entry.directors[Number(btn.dataset.idx)].nodeId);
+      if (node) showPanel(node);
     });
   });
-  enrichFmgYoutubeLinks(body, '.rw-card[data-yt-query]');
+
+  // プレイヤー（ページ内で再生）
+  const playerEl = document.getElementById('rw-player');
+  _recentYoutube(entry).then(yt => {
+    if (!playerEl.isConnected) return;
+    const vid = ytid(yt?.url);
+    playerEl.innerHTML = vid
+      ? `<iframe id="yt-iframe" src="https://www.youtube.com/embed/${esc(vid)}?autoplay=0&modestbranding=1&rel=0&iv_load_policy=3" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`
+      : `<div class="rw-player-msg">YouTube で動画が見つかりませんでした</div>`;
+  }).catch(() => {
+    if (playerEl.isConnected) playerEl.innerHTML = `<div class="rw-player-msg">動画の検索に失敗しました</div>`;
+  });
+
+  // IMDb 情報（tt は分かっているので検索を飛ばす）
+  _imdbTtCache.set(entry.title, entry.tt);
+  fetchImdbInfo(panelId, entry.title, null);
+
+  // タグ選択と保存
+  const selected = new Set(RECENT_DEFAULT_TAGS);
+  const tagsEl = document.getElementById('rw-save-tags');
+  _loadWorkCategoryOptions().then(options => {
+    if (!tagsEl.isConnected) return;
+    tagsEl.innerHTML = '';
+    options.forEach(opt => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'role-tag-btn' + (selected.has(opt.name) ? ' selected' : '');
+      btn.innerHTML = `<span class="role-tag-dot" style="background:${RECENT_TAG_COLORS[opt.color] || RECENT_TAG_COLORS.default}"></span>${esc(opt.name)}`;
+      btn.addEventListener('click', () => {
+        if (selected.has(opt.name)) selected.delete(opt.name); else selected.add(opt.name);
+        btn.classList.toggle('selected', selected.has(opt.name));
+      });
+      tagsEl.appendChild(btn);
+    });
+  }).catch(e => {
+    if (tagsEl.isConnected) tagsEl.innerHTML = `<span class="role-picker-loading">タグを読み込めませんでした: ${esc(e.message)}</span>`;
+  });
+
+  const saveBtn = document.getElementById('rw-save-btn');
+  saveBtn.addEventListener('click', async () => {
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中…';
+    try {
+      await _saveRecentWork(entry, [...selected], artists);
+      showToast('Notion に保存しました');
+      if (document.getElementById('rw-save')?.isConnected) openRecentWorkPanel(entry); // 通常の作品パネルに切り替える
+    } catch (e) {
+      console.error('[RecentWorks Save]', e);
+      showToast(`✗ 保存に失敗しました: ${e.message}`, 'err', 6000);
+      saveBtn.disabled = false;
+      saveBtn.textContent = '保存';
+    }
+  });
+}
+
+/** Notion に作品を作り、グラフのデータにも同じ形で加える */
+async function _saveRecentWork(entry, categories, artists) {
+  const yt = await _recentYoutube(entry).catch(() => null);
+  const vid = ytid(yt?.url);
+  const creatorPageIds = entry.directors
+    .map(d => AN.find(n => n.id === d.nodeId)?.notionPageId).filter(Boolean);
+  const res = await _recentPost('/notion-create-work', {
+    title: yt?.title || entry.title,
+    url: yt?.url || '',
+    coverUrl: vid ? `https://i.ytimg.com/vi/${vid}/hqdefault.jpg` : '',
+    categories,
+    creatorPageIds,
+    artistPageIds: artists.map(a => a.notionPageId),
+  });
+  if (res.alreadyExists) showToast('同じ URL の作品が Notion にあったので、それを使います');
+
+  const wid = `w_${res.workPageId.replace(/-/g, '')}`;
+  let workNode = AN.find(n => n.id === wid);
+  if (!workNode) {
+    const url = yt?.url || '';
+    workNode = {
+      id: wid, type: 'work', label: yt?.title || entry.title, url, th: thumbUrl(url), cats: categories,
+      notionPageId: res.workPageId.replace(/-/g, ''), works: [], _creatorRelIds: creatorPageIds,
+    };
+    AN.push(workNode);
+    entry.directors.forEach(d => {
+      const node = AN.find(n => n.id === d.nodeId);
+      if (!node) return;
+      node.works.push(wid);
+      AL.push({ source: node.id, target: wid, ltype: 'dir' });
+    });
+    artists.forEach(artist => {
+      const aid = `a_${artist.Name}`;
+      let node = AN.find(n => n.id === aid);
+      if (!node) {
+        const meta = getCreatorMeta(artist.Name);
+        node = { id: aid, type: 'artist', label: artist.Name, role: meta.role, sns: meta.sns, avatar: '', works: [] };
+        AN.push(node);
+      }
+      node.works.push(wid);
+      AL.push({ source: aid, target: wid, ltype: 'art' });
+    });
+    _recentGraphDirty = true;
+  }
+
+  entry.workNode = workNode;
+  entry.registered = true;
+  const thumbWrap = entry.card?.querySelector('.rw-thumb-wrap');
+  if (thumbWrap && !thumbWrap.querySelector('.rw-registered')) {
+    thumbWrap.insertAdjacentHTML('beforeend', '<span class="rw-registered">登録済み</span>');
+  }
 }
 
 function openRecentWorks() {
   document.getElementById('recent-overlay').classList.add('visible');
-  // 同じグラフでスキャン中・スキャン済みなら結果をそのまま表示する
-  if (_recentScannedNodes === AN) renderRecentWorks();
-  else scanRecentWorks();
+  // 同じグラフでスキャン中・スキャン済みなら、表示済みのギャラリーをそのまま見せる
+  if (_recentScannedNodes !== AN) scanRecentWorks();
 }
 
 function closeRecentWorks() {
   document.getElementById('recent-overlay').classList.remove('visible');
+  // ギャラリーから保存した作品をグラフに描き足す
+  if (_recentGraphDirty) {
+    _recentGraphDirty = false;
+    refresh();
+  }
 }
 
 document.getElementById('recent-btn').addEventListener('click', openRecentWorks);

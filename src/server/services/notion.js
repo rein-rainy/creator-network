@@ -323,6 +323,59 @@ async function uploadCreatorCover(creatorPageId, buffer, contentType) {
   return { success: true, coverUrl: patchRes.body.cover?.file?.url ?? '' };
 }
 
+/** 作品DBのプロパティ名を型・リレーション先から特定する */
+async function getWorkPropNames() {
+  const dbRes = await notionRequest('GET', `/v1/databases/${config.DB_WORKS}`);
+  if (dbRes.status !== 200) throw new Error(`作品DB取得失敗: ${dbRes.status}`);
+  const props = Object.entries(dbRes.body.properties);
+  const normId = id => (id || '').replace(/-/g, '').toLowerCase();
+  const relationTo = dbId => props.find(([, p]) => p.type === 'relation' && normId(p.relation?.database_id) === normId(dbId))?.[0];
+  return {
+    props: dbRes.body.properties,
+    title: props.find(([, p]) => p.type === 'title')?.[0],
+    url: props.find(([, p]) => p.type === 'url')?.[0],
+    category: props.find(([name, p]) => name === 'Category' && p.type === 'multi_select')?.[0]
+      ?? props.find(([, p]) => p.type === 'multi_select')?.[0],
+    creators: relationTo(config.DB_CREATORS),
+    artists: relationTo(config.DB_ARTISTS),
+  };
+}
+
+async function getWorkCategoryOptions() {
+  const names = await getWorkPropNames();
+  const options = names.category ? names.props[names.category].multi_select.options || [] : [];
+  return { options: options.map(option => ({ name: option.name, color: option.color })) };
+}
+
+/** 作品ページを作成する。同じ URL の作品があれば作らずにそれを返す */
+async function createWork({ title, url, coverUrl, categories = [], creatorPageIds = [], artistPageIds = [] }) {
+  const names = await getWorkPropNames();
+  if (!names.title) throw new Error('作品DBにタイトルプロパティがありません');
+
+  if (url && names.url) {
+    const existing = await notionRequest('POST', `/v1/databases/${config.DB_WORKS}/query`, {
+      filter: { property: names.url, url: { equals: url } },
+      page_size: 1,
+    });
+    if (existing.status === 200 && existing.body.results?.length) {
+      return { success: true, workPageId: existing.body.results[0].id, alreadyExists: true };
+    }
+  }
+
+  const properties = { [names.title]: { title: [{ text: { content: title } }] } };
+  if (url && names.url) properties[names.url] = { url };
+  if (categories.length && names.category) properties[names.category] = { multi_select: categories.map(name => ({ name })) };
+  if (creatorPageIds.length && names.creators) properties[names.creators] = { relation: creatorPageIds.map(id => ({ id })) };
+  if (artistPageIds.length && names.artists) properties[names.artists] = { relation: artistPageIds.map(id => ({ id })) };
+
+  const body = { parent: { database_id: config.DB_WORKS }, properties };
+  if (coverUrl) body.cover = { type: 'external', external: { url: coverUrl } };
+
+  const createRes = await notionRequest('POST', '/v1/pages', body);
+  if (createRes.status !== 200) throw new Error(`作品作成失敗: ${createRes.status} ${JSON.stringify(createRes.body)}`);
+  return { success: true, workPageId: createRes.body.id };
+}
+
 async function getRoleOptions() {
   const dbRes = await notionRequest('GET', `/v1/databases/${config.DB_CREATORS}`);
   if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
@@ -412,6 +465,8 @@ module.exports = {
   createCreator,
   setCreatorCover,
   uploadCreatorCover,
+  getWorkCategoryOptions,
+  createWork,
   getRoleOptions,
   updateCreatorMeta,
   renameCreator,

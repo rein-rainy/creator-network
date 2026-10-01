@@ -15,6 +15,7 @@ const HIDDEN_KEY = 'creator_network_hidden_labels';
 ═══════════════════════════════════════════ */
 let AN = [], AL = [];
 let ALL_CREATORS = [];
+let ALL_ARTISTS = [];
 let aFilters = new Set(), sq = '', depth2 = false;  // aFilters: 空=全表示
 let searchMode = 'filter'; // 'filter' | 'navigate'
 let showDir = true, showArt = true, simTimer = null, baseLinkStrength = 0.5;
@@ -29,6 +30,9 @@ let _preSqSnapshot = null; // 検索開始直前のノード座標スナップ�
 ═══════════════════════════════════════════ */
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const lid = x => (typeof x === 'object' ? x.id : x);
+
+// 評価の星。文字の「★」は等幅フォントだと小さく下寄りになるので SVG で描く
+const STAR_ICON = '<svg class="star-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2.5l2.95 5.98 6.6.96-4.78 4.65 1.13 6.57L12 17.56l-5.9 3.1 1.13-6.57L2.45 9.44l6.6-.96z"/></svg>';
 
 function parseCSVLine(line) {
   const res = []; let cur = '', q = false;

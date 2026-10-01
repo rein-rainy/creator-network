@@ -380,35 +380,35 @@ async function fetchFilmography(nameId) {
   };
 }
 
-// IMDb lists a person's credits newest first, so the first page of director
-// credits always contains everything released in the last year.
-const RECENT_DIRECTOR_CREDITS_QUERY = `query RecentDirectorCredits($id: ID!) {
+// IMDb lists a person's credits newest first. One page of 250 covers even
+// the most prolific MV directors (Dave Meyers has ~220).
+const DIRECTOR_MUSIC_VIDEOS_QUERY = `query DirectorMusicVideos($id: ID!) {
   name(id: $id) {
     primaryImage { url }
-    credits(first: 50, filter: { categories: ["director"] }) {
+    credits(first: 250, filter: { categories: ["director"], titleType: ["musicVideo"] }) {
       edges { node { title {
         id titleText { text } originalTitleText { text }
-        titleType { id } releaseYear { year }
+        releaseYear { year }
         releaseDate { day month year }
-        primaryImage { url }
+        ratingsSummary { aggregateRating voteCount }
       } } }
     }
   }
 }`;
 
-async function fetchRecentDirectorCredits(nameId) {
-  const data = await imdbGraphql(RECENT_DIRECTOR_CREDITS_QUERY, { id: nameId });
+async function fetchDirectorMusicVideos(nameId) {
+  const data = await imdbGraphql(DIRECTOR_MUSIC_VIDEOS_QUERY, { id: nameId });
   const credits = (data?.name?.credits?.edges ?? []).map(({ node }) => {
     const title = node.title ?? {};
     const date = title.releaseDate ?? {};
     return {
       tt: title.id,
       title: title.titleText?.text ?? title.originalTitleText?.text ?? '',
-      type: title.titleType?.id ?? 'unknown',
       year: date.year ?? title.releaseYear?.year ?? null,
       month: date.month ?? null,
       day: date.day ?? null,
-      image: title.primaryImage?.url ?? '',
+      rating: title.ratingsSummary?.aggregateRating ?? null,
+      votes: title.ratingsSummary?.voteCount ?? 0,
     };
   });
   return { image: data?.name?.primaryImage?.url ?? '', credits };
@@ -420,5 +420,5 @@ module.exports = {
   fetchCrew,
   searchName,
   fetchFilmography,
-  fetchRecentDirectorCredits,
+  fetchDirectorMusicVideos,
 };
