@@ -15,9 +15,9 @@ async function handleImdbRoutes(req, res) {
     return fetchCrew(tt);
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/imdb-name-search', label: 'IMDB-Name Error' }, async ({ name }) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/imdb-name-search', label: 'IMDB-Name Error' }, async ({ name, workTitles }) => {
     if (!name) throw new Error('name が指定されていません');
-    return searchName(name);
+    return searchName(name, Array.isArray(workTitles) ? workTitles : []);
   })) return true;
 
   if (await jsonRoute(req, res, { method: 'POST', path: '/imdb-filmography', label: 'IMDB-Filmography Error' }, async ({ nameId }) => {

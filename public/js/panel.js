@@ -144,7 +144,7 @@ function showPanel(d) {
       selId = null;
     };
     searchBtn.onclick = () => {
-      openFilmographyModal(d.label, d.avatar || '');
+      openFilmographyModal(d.label, d.avatar || '', { workTitles: linkedWorkTitles(d.id) });
     };
   }
 

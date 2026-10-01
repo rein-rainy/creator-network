@@ -169,7 +169,7 @@ function renderImdbData(panelId, data, workNode = null) {
   // work-person-btn と同じカードUI（横スクロール）、クリックでフィルモグラフィー表示
   // workNode が渡された場合は＋ボタンを表示して参加クリエイターに追加できる
   // rawImgUrl: IMDb 側の元画像URL（カバー設定用）
-  const imdbPersonCard = (name, role, imgSrc, accentColor, rawImgUrl = '', _workNode = workNode) => {
+  const imdbPersonCard = (name, role, imgSrc, accentColor, rawImgUrl = '', _workNode = workNode, nameId = '') => {
     const initial  = [...name][0] || '?';
     const showRole = role && role.trim() && role.trim().toLowerCase() !== name.trim().toLowerCase();
     const avatarInner = imgSrc
@@ -206,7 +206,7 @@ function renderImdbData(panelId, data, workNode = null) {
       <div class="imdb-person-wrap" style="position:relative;display:inline-flex;flex-shrink:0"
         onmouseenter="const b=this.querySelector('.imdb-add-creator-btn');if(b){b.style.opacity='1';b.style.pointerEvents='auto'}"
         onmouseleave="const b=this.querySelector('.imdb-add-creator-btn');if(b){b.style.opacity='0';b.style.pointerEvents='none'}">
-        <button class="imdb-search-card" data-name="${esc(name)}"
+        <button class="imdb-search-card" data-name="${esc(name)}" data-name-id="${esc(nameId)}"
           style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
                  width:fit-content;max-width:200px;flex-shrink:0;
                  background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
@@ -275,7 +275,7 @@ function renderImdbData(panelId, data, workNode = null) {
         const name   = p.name || '';
         const role   = p.job  ? p.job : categoryLabel(p.category);
         const imgSrc = p.image ? imdbProxyImg(p.image) : '';
-        html += imdbPersonCard(name, role, imgSrc, 'var(--node-dir)', p.image || '', workNode);
+        html += imdbPersonCard(name, role, imgSrc, 'var(--node-dir)', p.image || '', workNode, p.id || '');
       });
     });
     html += `</div>`;
@@ -309,7 +309,7 @@ function renderImdbData(panelId, data, workNode = null) {
       const name   = p.name || '';
       const role   = (p.characters && p.characters.length) ? p.characters[0] : categoryLabel(p.category) || '';
       const imgSrc = p.image ? imdbProxyImg(p.image) : '';
-      html += imdbPersonCard(name, role, imgSrc, 'var(--node-art)', '', null);
+      html += imdbPersonCard(name, role, imgSrc, 'var(--node-art)', '', null, p.id || '');
     });
     html += `</div>`;
     if (cast.length > castLimit) {
@@ -325,7 +325,8 @@ function renderImdbData(panelId, data, workNode = null) {
     btn.addEventListener('click', () => {
       const name = btn.dataset.name;
       const imgSrc = btn.querySelector('img')?.src || '';
-      if (name) openFilmographyModal(name, imgSrc);
+      // クルー由来の IMDb nameId が分かっているので名前検索を経由しない（同名人物の誤一致を防ぐ）
+      if (name) openFilmographyModal(name, imgSrc, { nameId: btn.dataset.nameId || '' });
     });
   });
 
@@ -473,7 +474,7 @@ async function fetchImdbInfo(panelId, workTitle, workNode = null) {
 /* ═══════════════════════════════════════════
    FILMOGRAPHY MODAL
 ═══════════════════════════════════════════ */
-const _fmgNameIdCache = new Map();  // name → nameId
+const _fmgNameIdCache = new Map();  // name|作品タイトル… → nameId
 const _fmgDataCache   = new Map();  // nameId → filmography data
 const _fmgYoutubeCache = new Map(); // title → YouTube video data | null
 
@@ -656,7 +657,22 @@ async function enrichFmgYoutubeLinks(body) {
   }
 }
 
-async function openFilmographyModal(personName, avatarSrc) {
+/** グラフ上でこのノードとリンクしている作品タイトル（IMDb上の本人特定に使う） */
+function linkedWorkTitles(nodeId) {
+  const ids = new Set();
+  AL.forEach(l => {
+    const s = lid(l.source), t = lid(l.target);
+    if (s === nodeId) ids.add(t);
+    else if (t === nodeId) ids.add(s);
+  });
+  return AN.filter(n => ids.has(n.id) && n.type === 'work').map(n => n.label).filter(Boolean);
+}
+
+/**
+ * opts.nameId     — 既知の IMDb nameId（あれば名前検索をスキップ）
+ * opts.workTitles — この人物が関わった作品タイトル（同名人物の判別に使う）
+ */
+async function openFilmographyModal(personName, avatarSrc, opts = {}) {
   _fmgCurrentName = personName;
 
   // モーダルを開く
@@ -685,12 +701,14 @@ async function openFilmographyModal(personName, avatarSrc) {
 
   try {
     // nameId 取得
-    let nameId = _fmgNameIdCache.get(personName);
+    const workTitles = opts.workTitles || [];
+    const cacheKey = `${personName}|${workTitles.join('|')}`;
+    let nameId = opts.nameId || _fmgNameIdCache.get(cacheKey);
     if (!nameId) {
       const r1 = await fetch('/imdb-name-search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: personName }),
+        body: JSON.stringify({ name: personName, workTitles }),
       });
       if (!r1.ok) throw new Error(`nameId取得失敗 (${r1.status})`);
       const d1 = await r1.json();
@@ -700,7 +718,7 @@ async function openFilmographyModal(personName, avatarSrc) {
         return;
       }
       nameId = d1.nameId;
-      _fmgNameIdCache.set(personName, nameId);
+      _fmgNameIdCache.set(cacheKey, nameId);
       // アバター画像を IMDB画像で更新
       if (d1.image) {
         avatarEl.innerHTML = `<img src="/imdb-img/${btoa(d1.image)}" alt="" onerror="this.parentElement.textContent='${esc(initial)}'">`;

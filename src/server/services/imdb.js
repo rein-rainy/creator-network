@@ -246,29 +246,74 @@ async function fetchCrew(tt) {
   };
 
   for (const { node: credit } of title.credits?.edges ?? []) {
+    const id = credit.name?.id ?? '';
     const name = credit.name?.nameText?.text ?? '';
     const image = credit.name?.primaryImage?.url ?? '';
     const cat = credit.category?.id ?? '';
     const job = (credit.jobs ?? []).map(j => j.text).join(', ');
-    if (cat === 'director') result.directors.push({ name, image });
+    if (cat === 'director') result.directors.push({ id, name, image });
     else if (cat === 'actor' || cat === 'actress' || cat === 'self') {
-      result.cast.push({ name, image, characters: (credit.characters ?? []).map(c => c.name), category: cat });
-    } else if (cat === 'writer') result.writers.push({ name, image });
-    else result.crew.push({ name, image, job, category: cat });
+      result.cast.push({ id, name, image, characters: (credit.characters ?? []).map(c => c.name), category: cat });
+    } else if (cat === 'writer') result.writers.push({ id, name, image });
+    else result.crew.push({ id, name, image, job, category: cat });
   }
 
   console.log(`[IMDB-Crew] ${tt} 完了 — 監督${result.directors.length} キャスト${result.cast.length} クルー${result.crew.length}`);
   return result;
 }
 
-async function searchName(name) {
+/** Lowercase, drop punctuation and all whitespace: "Cho Gi-seok" -> "chogiseok". */
+function compactName(str) {
+  return (str || '').toLowerCase().normalize('NFKC').replace(/[^\p{L}\p{N}]/gu, '');
+}
+
+// Resolving tt + crew for each linked work costs two requests; a handful is plenty.
+const MAX_HINT_WORKS = 5;
+
+/**
+ * Find the person among the credits of works they are known to be on. This is
+ * the reliable path: a bare name search can't tell "Samson" the MV director
+ * from "Samson" the actor, but the MV's own credits can.
+ */
+async function findNameInWorks(name, workTitles) {
+  const target = compactName(name);
+  if (!target) return null;
+  for (const workTitle of workTitles.slice(0, MAX_HINT_WORKS)) {
+    try {
+      const hit = await searchTitle(workTitle);
+      if (hit.notFound) continue;
+      const crew = await fetchCrew(hit.tt);
+      const people = [...crew.directors, ...crew.writers, ...crew.crew, ...crew.cast];
+      const person = people.find(p => p.id && compactName(p.name) === target)
+        ?? people.find(p => {
+          const candidate = compactName(p.name);
+          return p.id && candidate.length >= 3 && (candidate.includes(target) || target.includes(candidate));
+        });
+      if (person) {
+        console.log(`[IMDB-Name] "${name}" -> ${person.id} (credits of ${hit.tt})`);
+        return { nameId: person.id, name: person.name, image: person.image };
+      }
+    } catch (error) {
+      console.warn(`[IMDB-Name] "${workTitle}" の照合に失敗: ${error.message}`);
+    }
+  }
+  return null;
+}
+
+async function searchName(name, workTitles = []) {
+  const fromWorks = await findNameInWorks(name, workTitles);
+  if (fromWorks) return fromWorks;
+
   const result = await imdbSuggest(name);
   if (!result?.d) return { notFound: true };
 
+  // Fallback without work context: prefer an exact name match, then directors.
+  const target = compactName(name);
   const nameItems = result.d.filter(item => item.id?.startsWith('nm'));
-  const found = nameItems.find(item => /\bDirector\b/i.test(item.s || ''))
-    ?? nameItems.find(item => item.qid === 'name')
-    ?? nameItems[0];
+  const exact = nameItems.filter(item => compactName(item.l) === target);
+  const pool = exact.length ? exact : nameItems;
+  const found = pool.find(item => /\bDirector\b/i.test(item.s || ''))
+    ?? pool[0];
 
   if (!found) return { notFound: true };
   return { nameId: found.id, name: found.l, image: found.i?.imageUrl ?? '' };
