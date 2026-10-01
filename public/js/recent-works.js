@@ -81,16 +81,25 @@ async function _resolveNameId(node) {
   return d.nameId || null;
 }
 
-async function _fetchCredits(nameId, force) {
+function _isCreditsFresh(nameId) {
   const cached = _recentCredits[nameId];
-  if (!force && cached && Date.now() - cached.at < RECENT_CREDITS_TTL) return cached;
+  return !!cached && Date.now() - cached.at < RECENT_CREDITS_TTL;
+}
+
+/** IMDb から取り直し、前回までの記録に足す（IMDb から消えた作品も記録は残す） */
+async function _fetchCredits(nameId) {
   const { image, credits } = await _recentPost('/imdb-director-mvs', { nameId });
-  _recentCredits[nameId] = { at: Date.now(), image, credits };
+  const prev = _recentCredits[nameId];
+  const merged = new Map((prev?.credits || []).map(c => [c.tt || c.title, c]));
+  credits.forEach(c => merged.set(c.tt || c.title, c));
+  _recentCredits[nameId] = { at: Date.now(), image: image || prev?.image || '', credits: [...merged.values()] };
   return _recentCredits[nameId];
 }
 
+/** 作品をギャラリーの一覧に足す。まだ無かった作品の数を返す */
 function _addRecentCredits(node, nameId, { image, credits }) {
   const now = Date.now();
+  let added = 0;
   credits.forEach(c => {
     const sortKey = _recentSortKey(c, now);
     if (!c.tt || sortKey === null) return;
@@ -100,43 +109,73 @@ function _addRecentCredits(node, nameId, { image, credits }) {
       entry = { ...c, sortKey, directors: [], workNode, registered: !!workNode };
       _recentWorks.set(c.tt, entry);
       _recentPending.push(entry);
+      added++;
     }
     if (!entry.directors.some(d => d.nameId === nameId)) {
       entry.directors.push({ name: node.label, nameId, nodeId: node.id, imdbImage: image || '' });
       if (entry.card) _recentDirty.add(entry);
     }
   });
+  return added;
 }
 
+/**
+ * ギャラリーの読み込み。
+ * 1. 前回までの記録（期限切れも含む）をすぐ並べる
+ * 2. 記録が古い人（12時間以上）だけ IMDb に問い合わせ、新しく見つかった作品だけ差し込む
+ * force（↻）なら全員を問い合わせる。どちらの場合も表示済みのカードは消さない。
+ */
 async function scanRecentWorks({ force = false } = {}) {
   const gen = ++_recentScanGen;
   _loadRecentCache();
-  _recentWorks = new Map();
-  _recentPending = [];
-  _recentDirty = new Set();
-  _recentScanning = true;
-  _recentScannedNodes = AN;
-  _resetRecentGallery();
-
   const directors = AN.filter(n => n.type === 'director');
-  let done = 0, notFound = 0, failed = 0;
+
+  // グラフ（Notion のデータ）が変わったときだけ一覧を作り直す
+  if (_recentScannedNodes !== AN) {
+    _recentScannedNodes = AN;
+    _recentWorks = new Map();
+    _recentPending = [];
+    _recentDirty = new Set();
+    _resetRecentGallery();
+    directors.forEach(node => {
+      const nameId = _recentNameIds[node.label]?.nameId;
+      if (nameId && _recentCredits[nameId]) _addRecentCredits(node, nameId, _recentCredits[nameId]);
+    });
+  }
+
+  // 前回「見つかりませんでした」になっていたら一覧の枠から作り直す
+  if (!document.querySelector('#rw-body .rw-grid')) _resetRecentGallery();
+
+  const queue = directors.filter(node => {
+    const cached = _recentNameIds[node.label];
+    if (!cached) return true;
+    if (cached.none) return Date.now() - cached.at >= RECENT_NAMEID_TTL_MISS;
+    return force || !_isCreditsFresh(cached.nameId) || Date.now() - cached.at >= RECENT_NAMEID_TTL_HIT;
+  });
+  const total = queue.length;
+  let done = 0, added = 0, failed = 0;
+
+  _recentScanning = total > 0;
+  if (_recentScanning && !document.getElementById('rw-loading')) {
+    document.getElementById('rw-body').insertAdjacentHTML('beforeend',
+      `<div class="fm2-loading rw-loading-more" id="rw-loading"><div class="spinner"></div>IMDb を確認中…</div>`);
+  }
   const progress = () => {
-    _setRecentSub(`${_recentWorks.size} 作品 · 監督 ${done}/${directors.length} 人を確認中…`);
+    _setRecentSub(`${_recentWorks.size} 作品 · 新着を確認中 ${done}/${total} 人`);
     if (_recentPending.length >= RECENT_FLUSH_SIZE) _flushRecentWorks();
   };
-  progress();
+  _flushRecentWorks();
+  if (_recentScanning) progress();
 
-  const queue = [...directors];
   const worker = async () => {
     while (queue.length) {
       const node = queue.shift();
       if (gen !== _recentScanGen) return;
       try {
         const nameId = await _resolveNameId(node);
-        const credits = nameId ? await _fetchCredits(nameId, force) : null;
+        const credits = nameId ? await _fetchCredits(nameId) : null;
         if (gen !== _recentScanGen) return; // 再スキャンが始まったら古い結果は捨てる
-        if (credits) _addRecentCredits(node, nameId, credits);
-        else notFound++;
+        if (credits) added += _addRecentCredits(node, nameId, credits);
       } catch (e) {
         failed++;
         console.warn('[RecentWorks]', node.label, e.message); // 失敗はキャッシュせず次回再試行
@@ -153,7 +192,7 @@ async function scanRecentWorks({ force = false } = {}) {
   _recentScanning = false;
   _flushRecentWorks();
   const notes = [`${_recentWorks.size} 作品`, `監督 ${directors.length} 人`];
-  if (notFound) notes.push(`IMDb未発見 ${notFound}`);
+  if (total) notes.push(added ? `新着 ${added} 件` : '新着なし');
   if (failed) notes.push(`取得失敗 ${failed}`);
   _setRecentSub(notes.join(' · '));
 }
@@ -579,8 +618,8 @@ async function _saveRecentWork(entry, categories, creators, artists) {
 
 function openRecentWorks() {
   document.getElementById('recent-overlay').classList.add('visible');
-  // 同じグラフでスキャン中・スキャン済みなら、表示済みのギャラリーをそのまま見せる
-  if (_recentScannedNodes !== AN) scanRecentWorks();
+  // 開くたびに確認する。記録が新しければ問い合わせずにそのまま見せる
+  if (!_recentScanning) scanRecentWorks();
 }
 
 function closeRecentWorks() {
