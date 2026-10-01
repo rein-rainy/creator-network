@@ -19,8 +19,7 @@ function renderTagDropdown() {
   if (aFilters.size > 0) {
     const clear = document.createElement('div');
     clear.className = 'tfd-item';
-    clear.style.cssText = 'color:var(--accent);font-weight:600';
-    clear.textContent = '✕  絞り込みをクリア';
+    clear.innerHTML = `${icon('x', 14)}<span>絞り込みをクリア</span>`;
     clear.addEventListener('click', e => {
       e.stopPropagation();
       aFilters.clear();
@@ -37,7 +36,7 @@ function renderTagDropdown() {
   sorted.forEach(cat => {
     const item = document.createElement('div');
     item.className = 'tfd-item' + (aFilters.has(cat) ? ' checked' : '');
-    item.innerHTML = `<div class="tfd-check"></div><span>${esc(cat)}</span>`;
+    item.innerHTML = `<div class="tfd-check"></div>${tagHtml(cat)}`;
     item.addEventListener('click', e => {
       e.stopPropagation();
       if (aFilters.has(cat)) aFilters.delete(cat); else aFilters.add(cat);

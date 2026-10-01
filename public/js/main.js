@@ -83,7 +83,7 @@ function updateHiddenUI() {
     row.innerHTML = `
       <span class="hp-item-type">${typeLabel}</span>
       <span class="hp-item-label" title="${esc(node.label)}">${esc(node.label)}</span>
-      <button class="hp-restore" data-id="${esc(id)}" title="復元">↩</button>`;
+      <button class="icon-btn-xs hp-restore" data-id="${esc(id)}" title="復元">${icon('undo-2', 14)}</button>`;
     row.querySelector('.hp-restore').addEventListener('click', () => {
       hiddenIds.delete(id); updateHiddenUI(); refresh();
       if (hiddenIds.size === 0) document.getElementById('hidden-panel').classList.remove('visible');
@@ -203,9 +203,8 @@ function updateSearchModeBtn() {
   const btn = document.getElementById('search-mode-btn');
   document.getElementById('smb-icon-filter').style.display = isFilter ? '' : 'none';
   document.getElementById('smb-icon-nav').style.display    = isFilter ? 'none' : '';
-  btn.style.background    = isFilter ? 'var(--bg3)' : 'var(--accent)';
-  btn.style.color         = isFilter ? 'var(--text-2)' : '#fff';
-  btn.title = isFilter ? '検索モード：フィルター（クリックで移動モードへ）' : '検索モード：移動（クリックでフィルターモードへ）';
+  btn.classList.toggle('active', !isFilter);
+  btn.title = isFilter ? '検索モード: フィルター' : '検索モード: 移動';
   document.getElementById('search-box').placeholder = isFilter ? '検索（フィルター）...' : '検索（移動）...';
 }
 
@@ -395,6 +394,7 @@ async function fetchFromNotionAPI() {
     if (!data.results?.length) throw new Error('データが0件です');
     ALL_CREATORS = data.creators || [];
     ALL_ARTISTS = data.artists || [];
+    if (data.tagColors) TAG_COLORS = data.tagColors;
     // creators / artists フィールドがあればメタ情報を先に読み込む
     const allPersons = [...ALL_CREATORS, ...(data.artists ?? [])];
 

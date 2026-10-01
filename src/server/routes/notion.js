@@ -10,8 +10,8 @@ async function handleNotionRoutes(req, res) {
         code: 'NOTION_TOKEN_MISSING',
       });
     }
-    const { rows, creators, artists, count } = await notion.buildData(database);
-    return { results: rows, creators, artists, count };
+    const { rows, creators, artists, count, tagColors } = await notion.buildData(database);
+    return { results: rows, creators, artists, count, tagColors };
   })) return true;
 
   if (await jsonRoute(req, res, { method: 'POST', path: '/notion-add-creator', label: 'Notion Add Error' }, async ({ workId, creatorPageId }) => {
@@ -22,6 +22,11 @@ async function handleNotionRoutes(req, res) {
   if (await jsonRoute(req, res, { method: 'POST', path: '/notion-create-creator', label: 'Notion Create Creator Error' }, async ({ name, imageUrl }) => {
     if (!name) throw new Error('name が必要です');
     return notion.createCreator(name, imageUrl);
+  })) return true;
+
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-create-artist', label: 'Notion Create Artist Error' }, async ({ name }) => {
+    if (!name) throw new Error('name が必要です');
+    return notion.createArtist(name);
   })) return true;
 
   if (await jsonRoute(req, res, { method: 'POST', path: '/notion-set-creator-cover', label: 'Notion Cover Error' }, async ({ creatorPageId, imageUrl }) => {

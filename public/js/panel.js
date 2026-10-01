@@ -5,7 +5,6 @@ function showPanel(d) {
   const col = d.type === 'director' ? 'var(--node-dir)' : d.type === 'artist' ? 'var(--node-art)' : 'var(--accent2)';
   const lbl = d.type === 'director' ? 'CREATOR' : d.type === 'artist' ? 'ARTIST' : 'WORK';
   document.getElementById('pt').textContent = lbl;
-  document.getElementById('pt').style.color = col;
 
   const pnEl = document.getElementById('pn');
   pnEl.textContent = d.label;
@@ -20,13 +19,7 @@ function showPanel(d) {
       const oldName = d.label;
       const input = document.createElement('input');
       input.value = oldName;
-      input.style.cssText = [
-        'font:inherit', 'font-size:inherit', 'font-weight:inherit',
-        'color:var(--text)', 'background:var(--bg3)',
-        'border:1.5px solid var(--accent)', 'border-radius:6px',
-        'padding:2px 6px', 'outline:none',
-        'width:100%', 'box-sizing:border-box',
-      ].join(';');
+      input.className = 'ph-name-input';
       pnEl.textContent = '';
       pnEl.appendChild(input);
       input.focus();
@@ -96,8 +89,7 @@ function showPanel(d) {
     if (d.avatar) {
       const img = document.createElement('img');
       img.src = d.avatar; img.alt = '';
-      img.style.cssText = 'width:100%;height:100%;object-fit:cover';
-      img.onerror = () => { phAvatar.innerHTML = initial; };
+      img.onerror = () => { phAvatar.textContent = initial; };
       phAvatar.appendChild(img);
     } else {
       phAvatar.textContent = initial;
@@ -152,15 +144,13 @@ function showPanel(d) {
   if (d.type === 'work') {
     const vid = ytid(d.url);
     if (vid) {
-      html += `<div style="position:relative;width:100%;padding-top:56.25%;border-bottom:1px solid var(--border);background:#000">`;
-      html += `<iframe id="yt-iframe" src="https://www.youtube.com/embed/${esc(vid)}?autoplay=0&modestbranding=1&rel=0&iv_load_policy=3" style="position:absolute;inset:0;width:100%;height:100%;border:none" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
-      html += `</div>`;
+      html += `<div class="player"><iframe id="yt-iframe" src="https://www.youtube.com/embed/${esc(vid)}?autoplay=0&modestbranding=1&rel=0&iv_load_policy=3" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>`;
     } else if (d.th) {
-      html += `<img style="width:100%;height:130px;object-fit:cover;border-bottom:1px solid var(--border);display:block" src="${esc(d.th)}" onerror="this.style.display='none'">`;
+      html += `<img class="player-thumb" src="${esc(d.th)}" alt="" onerror="this.remove()">`;
     }
-    html += `<div style="padding:14px 20px 10px">`;
-    html += (d.cats || []).map(c => `<span class="wc-tag" style="margin-right:5px;margin-bottom:5px;display:inline-block;font-size:12px;padding:4px 10px">${esc(c)}</span>`).join('');
-    html += `</div>`;
+    if ((d.cats || []).length) {
+      html += `<div class="panel-meta">${d.cats.map(c => tagHtml(c)).join('')}</div>`;
+    }
 
     // --- 参加クリエイター（director）横スクロールカード ---
     const workPersons = [];
@@ -191,65 +181,30 @@ function showPanel(d) {
       return a.person.label.localeCompare(b.person.label, 'ja');
     });
     if (workPersons.length || true) {
-      html += `<div style="border-top:1px solid var(--border);padding:10px 14px 14px">`;
-      html += `<div style="font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--text-dim);padding:2px 0 10px;display:flex;justify-content:space-between;align-items:center">
-        <span>参加クリエイター</span>
-        <button id="add-creator-btn" style="width:22px;height:22px;border-radius:50%;border:none;background:var(--bg3);color:var(--text-2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:background .15s,color .15s" title="クリエイターを追加" onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text-2)'">＋</button>
-      </div>`;
+      html += `<div class="panel-section">
+        <div class="section-label">
+          <span>参加クリエイター</span>
+          <button class="icon-btn-xs" id="add-creator-btn" title="クリエイターを追加">${icon('plus', 14)}</button>
+        </div>`;
       if (workPersons.length) {
-        html += `<div style="display:flex;gap:8px;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:8px 2px">`;
+        html += `<div class="person-list">`;
         workPersons.forEach(({ person }) => {
-          const roleText  = person.role || 'Creator';
-          const initial   = [...person.label][0] || '?';
-          const avatarUrl = person.avatar || '';
-          const avatarInner = avatarUrl
-            ? `<img src="${esc(avatarUrl)}" alt=""
-                 style="width:100%;height:100%;object-fit:cover"
-                 onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-               ><span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`
-            : `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`;
-          html += `<div class="work-person-wrap" data-person-id="${esc(person.id)}" data-notion-page-id="${esc(person.notionPageId || '')}"
-              style="position:relative;display:inline-flex;flex-shrink:0"
-              onmouseenter="this.querySelector('.remove-creator-btn').style.opacity='1';this.querySelector('.remove-creator-btn').style.pointerEvents='auto'"
-              onmouseleave="this.querySelector('.remove-creator-btn').style.opacity='0';this.querySelector('.remove-creator-btn').style.pointerEvents='none'">
-            <button class="work-person-btn" data-person-id="${esc(person.id)}"
-              style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
-                     width:fit-content;max-width:200px;flex-shrink:0;
-                     background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
-                     padding:10px 12px;cursor:pointer;text-align:left;transition:background .15s,color .15s"
-              onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
-              onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
-              <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
-                          background:var(--node-dir);overflow:hidden;
-                          display:flex;align-items:center;justify-content:center">
-                ${avatarInner}
-              </div>
-              <div style="min-width:0;overflow:hidden">
-                <div style="font-size:11px;font-weight:700;color:var(--text);
-                            overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-                            line-height:1.4;margin-bottom:2px">${esc(person.label)}</div>
-                <div style="font-size:10px;font-weight:500;color:var(--text-2);
-                            overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-                            line-height:1.3">${esc(roleText)}</div>
-              </div>
+          const initial = esc([...person.label][0] || '?');
+          const img = person.avatar ? `<img src="${esc(person.avatar)}" alt="" onerror="this.remove()">` : '';
+          html += `<div class="person-card-wrap work-person-wrap" data-person-id="${esc(person.id)}" data-notion-page-id="${esc(person.notionPageId || '')}">
+            <button class="person-card work-person-btn" data-person-id="${esc(person.id)}">
+              <span class="avatar avatar-md">${initial}${img}</span>
+              <span class="person-card-text">
+                <span class="person-card-name">${esc(person.label)}</span>
+                <span class="person-card-role">${esc(person.role || 'Creator')}</span>
+              </span>
             </button>
-            <button class="remove-creator-btn" data-person-id="${esc(person.id)}" data-person-name="${esc(person.label)}" title="${esc(person.label)}を削除"
-              onmouseover="this.style.background='var(--accent-red)';this.style.color='#fff'"
-              onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text-2)'"
-              style="position:absolute;top:-7px;right:-7px;width:18px;height:18px;
-                     border-radius:50%;border:1.5px solid var(--bg2);background:var(--bg3);color:var(--text-2);
-                     cursor:pointer;display:flex;align-items:center;justify-content:center;
-                     box-shadow:0 1px 4px rgba(0,0,0,.4);transition:background .15s,opacity .15s;z-index:10;
-                     padding:0;opacity:0;pointer-events:none">
-              <svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                <line x1="1.5" y1="1.5" x2="8.5" y2="8.5"/><line x1="8.5" y1="1.5" x2="1.5" y2="8.5"/>
-              </svg>
-            </button>
+            <button class="card-corner-btn danger remove-creator-btn" data-person-id="${esc(person.id)}" data-person-name="${esc(person.label)}" title="${esc(person.label)}を削除">${icon('x', 10)}</button>
           </div>`;
         });
         html += `</div>`;
       } else {
-        html += `<div style="font-size:12px;color:var(--text-dim);padding:4px 0 8px">紐づいているクリエイターはいません</div>`;
+        html += `<div class="empty-note">なし</div>`;
       }
       html += `</div>`;
     }
@@ -259,20 +214,7 @@ function showPanel(d) {
 
     // IMDB セクション（パネルオープン時に自動取得）
     _imdbPanelId = `imdb_${Date.now()}`;
-    html += `<div id="imdb-section-${esc(_imdbPanelId)}" class="imdb-section">
-      <div class="imdb-section-title">
-        <span>IMDb 情報</span>
-        <span class="imdb-badge">IMDb</span>
-      </div>
-      <div id="imdb-found-${esc(_imdbPanelId)}"></div>
-      <div id="imdb-body-${esc(_imdbPanelId)}">
-        <div class="imdb-loading">
-          <div class="imdb-loading-dot"></div>
-          <div class="imdb-loading-dot"></div>
-          <div class="imdb-loading-dot"></div>
-        </div>
-      </div>
-    </div>`;
+    html += imdbSectionHtml(_imdbPanelId);
   } else {
     const works = (d.works || []).map(wid => AN.find(n => n.id === wid)).filter(Boolean);
     const sl = d.type === 'director' ? `制作作品 (${works.length})` : `出演作品 (${works.length})`;
@@ -285,17 +227,14 @@ function showPanel(d) {
     const roleChipsHtml = (() => {
       if (!d.role || !d.role.trim()) return `<span class="cmeta-empty" id="${esc(metaId)}_role_chip">未設定</span>`;
       const roleArr = d.role.split(',').map(r => r.trim()).filter(Boolean);
-      const chips = roleArr.map(r => `<span class="cmeta-role-chip">${esc(r)}</span>`).join('');
-      return `<span id="${esc(metaId)}_role_chip" style="display:flex;flex-wrap:wrap;gap:4px">${chips}</span>`;
+      const chips = roleArr.map(r => tagHtml(r, 'roles')).join('');
+      return `<span class="cmeta-chips" id="${esc(metaId)}_role_chip">${chips}</span>`;
     })();
     html += `<div class="cmeta-row" id="${esc(metaId)}_role_view">
       <span class="cmeta-label">役職</span>
       ${roleChipsHtml}
-      <button class="cmeta-edit-btn" id="${esc(metaId)}_role_editbtn" title="役職を編集">
-        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-        </svg>
+      <button class="icon-btn-xs cmeta-edit-btn" id="${esc(metaId)}_role_editbtn" title="役職を編集">
+        ${icon('pencil', 14)}
       </button>
     </div>`;
 
@@ -303,7 +242,7 @@ function showPanel(d) {
     html += `<div id="${esc(metaId)}_sns_view">
       <div class="cmeta-row">
         <span class="cmeta-label">SNS</span>
-        <div style="display:flex;flex-wrap:wrap;gap:5px;flex:1;min-width:0" id="${esc(metaId)}_sns_chips">`;
+        <div class="cmeta-chips" id="${esc(metaId)}_sns_chips">`;
     if (d.sns && d.sns.length > 0) {
       d.sns.forEach(s => {
         html += `<a href="${esc(s.url)}" target="_blank" rel="noopener noreferrer" class="cmeta-sns-chip">${esc(s.label)}</a>`;
@@ -312,11 +251,8 @@ function showPanel(d) {
       html += `<span class="cmeta-empty">未設定</span>`;
     }
     html += `</div>
-        <button class="cmeta-edit-btn" id="${esc(metaId)}_sns_editbtn" title="SNSを編集">
-          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-          </svg>
+        <button class="icon-btn-xs cmeta-edit-btn" id="${esc(metaId)}_sns_editbtn" title="SNSを編集">
+          ${icon('pencil', 14)}
         </button>
       </div>
     </div>`;
@@ -344,43 +280,36 @@ function showPanel(d) {
     if (top3.length > 0) {
       const panelId = `cwlist_${Date.now()}`;
       html += `<div class="ps-title">${esc(counterLabel)}</div>`;
-      html += `<div style="padding:16px 20px 12px;display:flex;flex-direction:column;gap:14px">`;
+      html += `<div class="cw-list">`;
       allCoworkers.forEach((p, i) => {
-        const rank = i + 1;
         const barPct = Math.round((p.count / allCoworkers[0].count) * 100);
-        const isHidden = i >= 3;
         html += `
-          <div class="cw-row" data-panel="${panelId}" style="display:${isHidden ? 'none' : 'flex'};align-items:center;gap:12px;padding:2px 0">
-            <div style="width:28px;height:28px;border-radius:50%;border:1.5px solid var(--border-hi);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-              <span style="font-size:12px;font-weight:700;color:var(--text-2);line-height:1;position:relative;top:-0.5px">${rank}</span>
-            </div>
-            <div style="flex:1;min-width:0">
-              <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
-                <span class="cw-name" style="font-size:15px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.label)}</span>
-                <span class="cw-count" style="font-size:13px;font-weight:600;color:var(--accent);flex-shrink:0;margin-left:8px">${p.count}回</span>
+          <div class="cw-row" data-panel="${panelId}"${i >= 3 ? ' hidden' : ''}>
+            <span class="cw-rank">${i + 1}</span>
+            <div class="cw-body">
+              <div class="cw-head">
+                <span class="cw-name">${esc(p.label)}</span>
+                <span class="cw-count">${p.count}回</span>
               </div>
-              <div style="height:3px;background:var(--bg3);border-radius:2px;overflow:hidden">
-                <div style="height:100%;width:${barPct}%;background:var(--accent);border-radius:2px"></div>
-              </div>
+              <div class="cw-bar"><div class="cw-bar-fill" style="width:${barPct}%"></div></div>
             </div>
           </div>`;
       });
       if (allCoworkers.length > 3) {
-        html += `<button onclick="
-          const rows = document.querySelectorAll('.cw-row[data-panel=\\'${panelId}\\']');
-          rows.forEach(r => r.style.display='flex');
-          this.style.display='none';
-        " style="margin-top:2px;background:transparent;border:none;color:var(--text-2);font-size:14px;font-weight:500;padding:0px 0;cursor:pointer;text-align:center;width:100%;font-family:var(--sans);transition:color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text-2)'">もっと見る (${allCoworkers.length - 3}件)</button>`;
+        html += `<button class="btn btn-ghost btn-block" onclick="
+          document.querySelectorAll('.cw-row[data-panel=\\'${panelId}\\']').forEach(r => { r.hidden = false; });
+          this.remove();
+        ">もっと見る (${allCoworkers.length - 3}件)</button>`;
       }
       html += `</div>`;
     }
     // --- Works list ---
     html += `<div class="ps-title">${esc(sl)}</div>`;
     works.forEach(w => {
-      html += `<button class="pw-item" data-work-id="${esc(w.id)}" style="width:100%;text-align:left;background:none;border:none;cursor:pointer;font-family:var(--sans)">`;
-      if (w.th) html += `<img class="pw-thumb" src="${esc(w.th)}" onerror="this.style.display='none'">`;
-      html += `<div class="pw-ph" style="${w.th ? 'display:none' : ''}">🎬</div>`;
-      html += `<div><div class="pw-title">${esc(w.label)}</div><div class="pw-cat">${(w.cats||[]).join(', ')}</div></div></button>`;
+      html += `<button class="pw-item" data-work-id="${esc(w.id)}">`;
+      const thumb = w.th ? `<img class="pw-thumb" src="${esc(w.th)}" alt="" onerror="this.remove()">` : '';
+      html += `<div class="pw-ph">${icon('film', 16)}${thumb}</div>`;
+      html += `<div class="pw-text"><div class="pw-title">${esc(w.label)}</div><div class="pw-cat">${esc((w.cats||[]).join(', '))}</div></div></button>`;
     });
   }
   document.getElementById('pc2').innerHTML = html;
@@ -466,10 +395,7 @@ function showPanel(d) {
       e.stopPropagation();
       
       // 毎回最新のデータベースを読み込む
-      const originalText = addBtn.textContent;
-      addBtn.textContent = '...';
-      addBtn.style.pointerEvents = 'none';
-      addBtn.style.opacity = '0.6';
+      addBtn.disabled = true;
       
       try {
         const r = await fetch('/notion-data', {
@@ -493,9 +419,7 @@ function showPanel(d) {
         console.error('[AddCreator Re-fetch Error]', err);
         showToast('データの再取得に失敗しました', 'err');
       } finally {
-        addBtn.textContent = originalText;
-        addBtn.style.pointerEvents = 'auto';
-        addBtn.style.opacity = '1';
+        addBtn.disabled = false;
       }
       
       showAddCreatorDropdown(addBtn, d);
@@ -513,13 +437,6 @@ function showPanel(d) {
 
     // ── 役職 編集（multi_select ピッカー）──
     const roleEditBtn  = document.getElementById(`${metaId}_role_editbtn`);
-
-    // Notionのロール色 → CSS変数マッピング
-    const NOTION_COLOR = {
-      default: 'var(--text-dim)', gray: '#8e8e93', brown: '#a68064',
-      orange: '#ff9f0a', yellow: '#ffd60a', green: '#30d158',
-      blue: 'var(--accent)', purple: '#bf5af2', pink: '#ff375f', red: 'var(--accent-red)',
-    };
 
     let _roleOptions = null;  // キャッシュ
     let _selectedRoles = new Set();
@@ -549,21 +466,10 @@ function showPanel(d) {
         return;
       }
       options.forEach(opt => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'role-tag-btn' + (_selectedRoles.has(opt.name) ? ' selected' : '');
-        const color = NOTION_COLOR[opt.color] || NOTION_COLOR.default;
-        btn.innerHTML = `<span class="role-tag-dot" style="background:${color}"></span>${esc(opt.name)}`;
-        btn.addEventListener('click', () => {
-          if (_selectedRoles.has(opt.name)) {
-            _selectedRoles.delete(opt.name);
-            btn.classList.remove('selected');
-          } else {
-            _selectedRoles.add(opt.name);
-            btn.classList.add('selected');
-          }
-        });
-        rolePopTags.appendChild(btn);
+        rolePopTags.appendChild(tagOptionButton(opt, 'roles', _selectedRoles.has(opt.name), name => {
+          if (_selectedRoles.has(name)) _selectedRoles.delete(name); else _selectedRoles.add(name);
+          return _selectedRoles.has(name);
+        }));
       });
     }
 
@@ -614,7 +520,7 @@ function showPanel(d) {
               const roleArr = newRole.split(',').map(r => r.trim()).filter(Boolean);
               chip.className = '';
               chip.style.cssText = 'display:flex;flex-wrap:wrap;gap:4px';
-              chip.innerHTML = roleArr.map(r => `<span class="cmeta-role-chip">${esc(r)}</span>`).join('');
+              chip.innerHTML = roleArr.map(r => tagHtml(r, 'roles')).join('');
             } else {
               chip.className = 'cmeta-empty';
               chip.style.cssText = '';
@@ -672,7 +578,7 @@ function showPanel(d) {
       const s = editingSns[0] || { url: '', label: 'Web', icon: '🔗' };
       const item = document.createElement('div');
       item.className = 'cmeta-sns-item';
-      item.innerHTML = `<input class="cmeta-input" value="${esc(s.url)}" placeholder="https://..." style="flex:1;padding:6px 10px">`;
+      item.innerHTML = `<input class="cmeta-input" value="${esc(s.url)}" placeholder="https://...">`;
       item.querySelector('input').addEventListener('input', e => {
         const val = e.target.value.trim();
         editingSns[0] = snsFromUrl(val) || { url: val, label: 'Web', icon: '🔗' };
@@ -681,8 +587,8 @@ function showPanel(d) {
       snsPopList.appendChild(item);
       const saveRow = document.createElement('div');
       saveRow.style.cssText = 'padding-top:8px';
-      saveRow.innerHTML = `<button class="cmeta-save-btn" style="flex:1;height:28px;font-size:12px;width:100%">保存</button>`;
-      saveRow.querySelector('.cmeta-save-btn').addEventListener('click', saveCb);
+      saveRow.innerHTML = `<button class="btn btn-primary btn-block">保存</button>`;
+      saveRow.querySelector('button').addEventListener('click', saveCb);
       snsPopList.appendChild(saveRow);
     }
 
@@ -746,62 +652,88 @@ function showPanel(d) {
    ADD CREATOR LOGIC
 ═══════════════════════════════════════════ */
 function showAddCreatorDropdown(anchor, workNode) {
+  const currentRelIds = new Set(workNode._creatorRelIds || []);
+  showPersonPicker(anchor, {
+    people: ALL_CREATORS.filter(c => !currentRelIds.has(c.notionPageId)),
+    onPick: c => addCreatorToWork(workNode, c),
+  });
+}
+
+/** 人物を選ぶドロップダウン。onCreate を渡すと、入力した名前で新規作成する行を一番下に出す */
+function showPersonPicker(anchor, { people, onPick, onCreate, avatarClass = '' }) {
+  showPicker(anchor, {
+    items: () => people,
+    label: p => p.Name,
+    itemHtml: p => `
+      <span class="avatar avatar-xs${avatarClass}">${esc([...p.Name][0] || '?')}${p.Avatar ? `<img src="${esc(p.Avatar)}" alt="" onerror="this.remove()">` : ''}</span>
+      <div class="acd-name">${esc(p.Name)}</div>
+      <div class="acd-role">${esc(p.Role || '')}</div>`,
+    onPick, onCreate,
+    placeholder: onCreate ? '検索 / 新しい名前' : '検索...',
+  });
+}
+
+/**
+ * 検索つきの選択ドロップダウン（クリエイター・アーティスト・カテゴリ共通）。
+ * items() は開くたび・選ぶたびに呼ぶ（選んだものを候補から外せる）。keepOpen なら選んでも閉じない。
+ */
+function showPicker(anchor, { items, label, itemHtml, onPick, onCreate, keepOpen = false, placeholder = '検索...' }) {
   const dropdown = document.getElementById('add-creator-dropdown');
   const search = dropdown.querySelector('.acd-search');
   const list = dropdown.querySelector('.acd-list');
 
-  // 位置調整
   const rect = anchor.getBoundingClientRect();
-  dropdown.style.top = (rect.bottom + 8) + 'px';
-  dropdown.style.left = (Math.max(10, rect.right - 220)) + 'px';
+  dropdown.style.top = (rect.bottom + 6) + 'px';
+  dropdown.style.left = Math.max(10, Math.min(rect.left, window.innerWidth - 240)) + 'px';
 
-  const currentRelIds = new Set(workNode._creatorRelIds || []);
+  const closeDropdown = () => {
+    dropdown.classList.remove('open');
+    window.removeEventListener('mousedown', closeOnOutside);
+  };
+  const closeOnOutside = e => {
+    if (!dropdown.contains(e.target) && !anchor.contains(e.target)) closeDropdown();
+  };
 
-  const render = (q = '') => {
+  const render = () => {
+    const query = search.value.trim();
+    const all = items();
+    const filtered = all.filter(it => label(it).toLowerCase().includes(query.toLowerCase())).slice(0, 50);
     list.innerHTML = '';
-    const filtered = ALL_CREATORS.filter(c => 
-      c.Name.toLowerCase().includes(q.toLowerCase()) && !currentRelIds.has(c.notionPageId)
-    ).slice(0, 50);
-
-    if (filtered.length === 0) {
-      list.innerHTML = `<div style="padding:10px;font-size:12px;color:var(--text-dim);text-align:center">見つかりませんでした</div>`;
-      return;
-    }
-
-    filtered.forEach(c => {
+    filtered.forEach(it => {
       const item = document.createElement('div');
       item.className = 'acd-item';
-      const initial = [...c.Name][0] || '?';
-      item.innerHTML = `
-        <div class="acd-avatar" style="background:${c.Avatar ? 'none' : 'var(--node-dir)'}">
-          ${c.Avatar ? `<img src="${esc(c.Avatar)}" style="width:100%;height:100%;object-fit:cover">` : `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff">${esc(initial)}</span>`}
-        </div>
-        <div class="acd-name">${esc(c.Name)}</div>
-        <div class="acd-role">${esc(c.Role)}</div>
-      `;
-      item.onclick = async () => {
-        dropdown.classList.remove('open');
-        await addCreatorToWork(workNode, c);
+      item.innerHTML = itemHtml(it);
+      item.onclick = () => {
+        onPick(it);
+        if (keepOpen) { search.value = ''; render(); search.focus(); } else closeDropdown();
       };
       list.appendChild(item);
     });
+
+    const exact = all.some(it => label(it).toLowerCase() === query.toLowerCase());
+    if (onCreate && query && !exact) {
+      const item = document.createElement('div');
+      item.className = 'acd-item acd-create';
+      item.innerHTML = `${icon('plus', 14)}<div class="acd-name">「${esc(query)}」を作成</div>`;
+      item.onclick = () => { closeDropdown(); onCreate(query); };
+      list.appendChild(item);
+    } else if (!filtered.length) {
+      list.innerHTML = `<div class="empty-note acd-empty">見つかりませんでした</div>`;
+    }
   };
 
   search.value = '';
-  search.oninput = (e) => render(e.target.value);
+  search.placeholder = placeholder;
+  search.oninput = render;
+  search.onkeydown = e => {
+    if (e.key === 'Enter') list.querySelector('.acd-item')?.click();
+    if (e.key === 'Escape') closeDropdown();
+  };
   render();
 
   dropdown.classList.add('open');
   search.focus();
-
-  // 外側クリックで閉じる
-  const close = (e) => {
-    if (!dropdown.contains(e.target) && e.target !== anchor) {
-      dropdown.classList.remove('open');
-      window.removeEventListener('mousedown', close);
-    }
-  };
-  window.addEventListener('mousedown', close);
+  window.addEventListener('mousedown', closeOnOutside);
 }
 
 function addCreatorToWork(workNode, creator) {

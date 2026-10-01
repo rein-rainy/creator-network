@@ -108,11 +108,11 @@ function refreshDirSuggestUI() {
     const row = document.createElement('div');
     row.className = 'hp-item ds-item';
     row.innerHTML = `
-      <div style="flex:1;min-width:0">
+      <div class="ds-item-text">
         <div class="hp-item-label">${esc(work.label)}</div>
         <div class="ds-item-sub">${esc(s.directors.map(d => d.name).join(' / '))}</div>
       </div>
-      <button class="hp-restore ds-dismiss" title="この候補を無視">✕</button>`;
+      <button class="icon-btn-xs ds-dismiss" title="この候補を無視">${icon('x', 14)}</button>`;
     row.addEventListener('click', () => {
       document.getElementById('dir-suggest-panel').classList.remove('visible');
       selId = work.id;
@@ -143,24 +143,24 @@ function renderDirSuggestSection(work) {
   if (!s) { slot.innerHTML = ''; return; }
 
   const imdbLabel = `${s.title}${s.year ? ` (${s.year})` : ''}`;
-  let html = `<div class="ds-section">
-    <div class="ds-head">
-      <span class="ds-title">IMDb 監督候補</span>
-      <button class="ds-ignore" id="ds-ignore">この候補を無視</button>
+  let html = `<div class="panel-section ds-section">
+    <div class="section-label">
+      <span>IMDb 監督候補</span>
+      <button class="btn btn-ghost" id="ds-ignore">無視</button>
     </div>
-    <div class="ds-note">IMDbの「<a href="https://www.imdb.com/title/${esc(s.tt)}/" target="_blank" rel="noopener noreferrer">${esc(imdbLabel)}</a>」に監督の記載があります。同じ作品か確認してから登録してください。</div>
+    <div class="ds-note"><a class="text-link" href="https://www.imdb.com/title/${esc(s.tt)}/" target="_blank" rel="noopener noreferrer">${esc(imdbLabel)}</a></div>
     <div class="ds-people">`;
   s.directors.forEach((p, i) => {
     const existing = findExistingCreatorByName(p.name);
     const initial = [...p.name][0] || '?';
     const img = p.image ? `<img src="${esc(imdbProxyImg(p.image))}" alt="" onerror="this.remove()">` : '';
     html += `<div class="ds-person">
-      <div class="ds-avatar"><span>${esc(initial)}</span>${img}</div>
-      <div style="flex:1;min-width:0">
-        <div class="ds-name">${esc(p.name)}</div>
-        <div class="ds-hint">${existing ? `既存のクリエイター「${esc(existing.Name)}」に紐づけ` : 'Notionに新規作成して紐づけ'}</div>
+      <span class="avatar">${esc(initial)}${img}</span>
+      <div class="person-card-text">
+        <div class="person-card-name">${esc(p.name)}</div>
+        <div class="person-card-role">${existing ? `既存: ${esc(existing.Name)}` : '新規'}</div>
       </div>
-      <button class="ds-add" data-idx="${i}">登録</button>
+      <button class="btn btn-primary ds-add" data-idx="${i}">登録</button>
     </div>`;
   });
   html += `</div></div>`;

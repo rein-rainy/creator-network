@@ -230,7 +230,7 @@ async function buildData(targetDb = 'all') {
   }
 
   console.log(`[Notion] 完了 — 作品 ${rows.length} 件 / Creator ${creators.length} 件 / Artist ${artists.length} 件`);
-  return { rows, creators, artists, count: rows.length };
+  return { rows, creators, artists, count: rows.length, tagColors: await getTagColors() };
 }
 
 async function addCreatorToWork(workId, creatorPageId) {
@@ -258,24 +258,24 @@ async function addCreatorToWork(workId, creatorPageId) {
   return { success: true };
 }
 
-async function createCreator(name, imageUrl) {
-  console.log(`[Notion] クリエイター新規作成: name="${name}"`);
-  const dbRes = await notionRequest('GET', `/v1/databases/${config.DB_CREATORS}`);
+/** 人物 DB（クリエイター / アーティスト）にページを作る。同名がいればそれを返す */
+async function createPerson(dbId, name, imageUrl) {
+  const dbRes = await notionRequest('GET', `/v1/databases/${dbId}`);
   if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
 
   const titlePropName = findTitleProp(dbRes.body.properties);
 
-  const searchRes = await notionRequest('POST', `/v1/databases/${config.DB_CREATORS}/query`, {
+  const searchRes = await notionRequest('POST', `/v1/databases/${dbId}/query`, {
     filter: { property: titlePropName, title: { equals: name } },
     page_size: 1,
   });
   if (searchRes.status === 200 && searchRes.body.results?.length > 0) {
     const existing = searchRes.body.results[0];
-    return { success: true, creatorPageId: existing.id, alreadyExists: true };
+    return { success: true, pageId: existing.id, alreadyExists: true };
   }
 
   const createBody = {
-    parent: { database_id: config.DB_CREATORS },
+    parent: { database_id: dbId },
     properties: {
       [titlePropName]: { title: [{ text: { content: name } }] },
     },
@@ -284,7 +284,19 @@ async function createCreator(name, imageUrl) {
 
   const createRes = await notionRequest('POST', '/v1/pages', createBody);
   if (createRes.status !== 200) throw new Error(`作成失敗: ${createRes.status} ${JSON.stringify(createRes.body)}`);
-  return { success: true, creatorPageId: createRes.body.id };
+  return { success: true, pageId: createRes.body.id };
+}
+
+async function createCreator(name, imageUrl) {
+  console.log(`[Notion] クリエイター新規作成: name="${name}"`);
+  const { pageId, ...rest } = await createPerson(config.DB_CREATORS, name, imageUrl);
+  return { ...rest, creatorPageId: pageId };
+}
+
+async function createArtist(name) {
+  console.log(`[Notion] アーティスト新規作成: name="${name}"`);
+  const { pageId, ...rest } = await createPerson(config.DB_ARTISTS, name);
+  return { ...rest, artistPageId: pageId };
 }
 
 async function setCreatorCover(creatorPageId, imageUrl) {
@@ -345,6 +357,16 @@ async function getWorkCategoryOptions() {
   const names = await getWorkPropNames();
   const options = names.category ? names.props[names.category].multi_select.options || [] : [];
   return { options: options.map(option => ({ name: option.name, color: option.color })) };
+}
+
+/** タグ名 → Notion の色名（作品カテゴリと役職）。画面のタグを Notion と同じ色で塗るのに使う */
+async function getTagColors() {
+  const [categories, roles] = await Promise.all([
+    getWorkCategoryOptions().catch(() => ({ options: [] })),
+    getRoleOptions().catch(() => ({ options: [] })),
+  ]);
+  const toMap = ({ options }) => Object.fromEntries(options.map(o => [o.name, o.color]));
+  return { categories: toMap(categories), roles: toMap(roles) };
 }
 
 /** 作品ページを作成する。同じ URL の作品があれば作らずにそれを返す */
@@ -463,6 +485,7 @@ module.exports = {
   buildData,
   addCreatorToWork,
   createCreator,
+  createArtist,
   setCreatorCover,
   uploadCreatorCover,
   getWorkCategoryOptions,

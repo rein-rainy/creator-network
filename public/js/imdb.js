@@ -116,13 +116,22 @@ function personImgHtml(imgUrl, phIcon, imgClass, phClass) {
   return `<div class="${esc(phClass)}">${phIcon}</div>`;
 }
 
+/** 作品パネルの「IMDb 情報」セクションの枠（中身は renderImdbData が埋める） */
+function imdbSectionHtml(panelId) {
+  return `<div id="imdb-section-${esc(panelId)}" class="panel-section imdb-section">
+    <div class="section-label"><span>IMDb 情報</span></div>
+    <div id="imdb-found-${esc(panelId)}"></div>
+    <div id="imdb-body-${esc(panelId)}"><div class="loading-row"><div class="spinner"></div>読み込み中…</div></div>
+  </div>`;
+}
+
 function renderImdbData(panelId, data, workNode = null) {
   const body    = document.getElementById(`imdb-body-${panelId}`);
   const foundEl = document.getElementById(`imdb-found-${panelId}`);
   if (!body) return;
 
   if (data.notFound) {
-    body.innerHTML = `<div class="imdb-not-found">IMDbに情報が見つかりませんでした</div>`;
+    body.innerHTML = `<div class="empty-note">IMDbに情報が見つかりませんでした</div>`;
     return;
   }
 
@@ -130,12 +139,11 @@ function renderImdbData(panelId, data, workNode = null) {
   if (foundEl) {
     let chips = '';
     if (data.rating) chips += `<span class="imdb-chip rating">${STAR_ICON}${data.rating}</span>`;
-    if (data.votes)  chips += `<span class="imdb-chip">${Number(data.votes).toLocaleString('ja-JP')} votes</span>`;
+    if (data.votes)  chips += `<span class="imdb-chip">${Number(data.votes).toLocaleString('ja-JP')}票</span>`;
     if (data.year)   chips += `<span class="imdb-chip">${data.year}</span>`;
     foundEl.innerHTML = `
-      <div style="padding:4px 0 10px;display:flex;flex-wrap:wrap;align-items:center;gap:6px">
-        <span class="imdb-badge">IMDb</span>
-        <span style="font-size:13px;font-weight:600;color:var(--text)">${esc(data.title || '')}</span>
+      <div class="imdb-found">
+        <span class="imdb-found-title">${esc(data.title || '')}</span>
         ${chips}
       </div>`;
   }
@@ -157,7 +165,7 @@ function renderImdbData(panelId, data, workNode = null) {
 
   // ── 基本情報: ジャンル・上映時間・あらすじ ───────────────────────────
   const infoChips = [];
-  if (data.runtime) infoChips.push(`<span class="imdb-chip runtime">${data.runtime}分</span>`);
+  if (data.runtime) infoChips.push(`<span class="imdb-chip">${data.runtime}分</span>`);
   (data.genres || []).forEach(g => infoChips.push(`<span class="imdb-chip">${esc(g)}</span>`));
   if (infoChips.length || data.plot) {
     html += `<div class="imdb-meta-row">`;
@@ -169,14 +177,11 @@ function renderImdbData(panelId, data, workNode = null) {
   // work-person-btn と同じカードUI（横スクロール）、クリックでフィルモグラフィー表示
   // workNode が渡された場合は＋ボタンを表示して参加クリエイターに追加できる
   // rawImgUrl: IMDb 側の元画像URL（カバー設定用）
-  const imdbPersonCard = (name, role, imgSrc, accentColor, rawImgUrl = '', _workNode = workNode, nameId = '') => {
-    const initial  = [...name][0] || '?';
+  const imdbPersonCard = (name, role, imgSrc, kind, rawImgUrl = '', _workNode = workNode, nameId = '') => {
+    const avatarClass = kind === 'art' ? ' art' : '';
+    const initial  = esc([...name][0] || '?');
     const showRole = role && role.trim() && role.trim().toLowerCase() !== name.trim().toLowerCase();
-    const avatarInner = imgSrc
-      ? `<img src="${esc(imgSrc)}" alt="" style="width:100%;height:100%;object-fit:cover"
-           onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-         <span style="display:none;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`
-      : `<span style="display:flex;width:100%;height:100%;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff">${esc(initial)}</span>`;
+    const img = imgSrc ? `<img src="${esc(imgSrc)}" alt="" onerror="this.remove()">` : '';
 
     // 完全一致 OR 名前類似度が閾値以上のノードとリンクされていれば追加済みとみなす
     const alreadyAdded = _workNode
@@ -184,48 +189,20 @@ function renderImdbData(panelId, data, workNode = null) {
       : false;
 
     const plusBtn = _workNode ? `
-      <button class="imdb-add-creator-btn"
+      <button class="card-corner-btn imdb-add-creator-btn${alreadyAdded ? ' is-added' : ''}"
         data-name="${esc(name)}" data-raw-img="${esc(rawImgUrl)}"
-        title="${esc(name)}を参加クリエイターに追加"
-        ${alreadyAdded ? '' : `onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text-2)'"`}
-        style="position:absolute;top:-7px;right:-7px;width:18px;height:18px;
-               border-radius:50%;border:1.5px solid var(--bg2);
-               background:${alreadyAdded ? 'var(--bg3)' : 'var(--bg3)'};
-               color:${alreadyAdded ? 'var(--accent)' : 'var(--text-2)'};
-               cursor:${alreadyAdded ? 'default' : 'pointer'};
-               display:flex;align-items:center;justify-content:center;
-               box-shadow:0 1px 4px rgba(0,0,0,.4);transition:background .15s,opacity .15s;z-index:10;
-               padding:0;opacity:0;pointer-events:none">
-        ${alreadyAdded
-          ? `<svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5,5 4,7.5 8.5,2"/></svg>`
-          : `<svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="5" y1="1.5" x2="5" y2="8.5"/><line x1="1.5" y1="5" x2="8.5" y2="5"/></svg>`
-        }
+        title="${esc(name)}${alreadyAdded ? 'は参加クリエイターに追加済み' : 'を参加クリエイターに追加'}">
+        ${icon(alreadyAdded ? 'check' : 'plus', 10)}
       </button>` : '';
 
     return `
-      <div class="imdb-person-wrap" style="position:relative;display:inline-flex;flex-shrink:0"
-        onmouseenter="const b=this.querySelector('.imdb-add-creator-btn');if(b){b.style.opacity='1';b.style.pointerEvents='auto'}"
-        onmouseleave="const b=this.querySelector('.imdb-add-creator-btn');if(b){b.style.opacity='0';b.style.pointerEvents='none'}">
-        <button class="imdb-search-card" data-name="${esc(name)}" data-name-id="${esc(nameId)}"
-          style="display:inline-flex;flex-direction:row;align-items:center;gap:10px;
-                 width:fit-content;max-width:200px;flex-shrink:0;
-                 background:var(--card-bg);border:1.5px solid var(--card-border);border-radius:var(--r);
-                 padding:10px 12px;cursor:pointer;text-align:left;transition:background .15s,color .15s;font-family:var(--sans)"
-          onmouseover="this.style.borderColor='var(--accent)';this.style.background='var(--bg2)'"
-          onmouseout="this.style.borderColor='var(--card-border)';this.style.background='var(--card-bg)'">
-          <div style="width:36px;height:36px;border-radius:50%;flex-shrink:0;
-                      background:${accentColor};overflow:hidden;
-                      display:flex;align-items:center;justify-content:center">
-            ${avatarInner}
-          </div>
-          <div style="min-width:0;overflow:hidden">
-            <div style="font-size:11px;font-weight:700;color:var(--text);
-                        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-                        line-height:1.4;margin-bottom:2px">${esc(name)}</div>
-            ${showRole ? `<div style="font-size:10px;font-weight:500;color:var(--text-2);
-                        overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-                        line-height:1.3">${esc(role)}</div>` : ''}
-          </div>
+      <div class="person-card-wrap imdb-person-wrap">
+        <button class="person-card imdb-search-card" data-name="${esc(name)}" data-name-id="${esc(nameId)}">
+          <span class="avatar avatar-md${avatarClass}">${initial}${img}</span>
+          <span class="person-card-text">
+            <span class="person-card-name">${esc(name)}</span>
+            ${showRole ? `<span class="person-card-role">${esc(role)}</span>` : ''}
+          </span>
         </button>
         ${plusBtn}
       </div>`;
@@ -269,13 +246,13 @@ function renderImdbData(panelId, data, workNode = null) {
     });
 
     html += `<div class="imdb-sub-title">クリエイター (${allCrew.length}人)</div>`;
-    html += `<div style="display:flex;gap:8px;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:8px 2px">`;
+    html += `<div class="person-list">`;
     roleGroups.forEach((persons, cat) => {
       persons.forEach(p => {
         const name   = p.name || '';
         const role   = p.job  ? p.job : categoryLabel(p.category);
         const imgSrc = p.image ? imdbProxyImg(p.image) : '';
-        html += imdbPersonCard(name, role, imgSrc, 'var(--node-dir)', p.image || '', workNode, p.id || '');
+        html += imdbPersonCard(name, role, imgSrc, 'dir', p.image || '', workNode, p.id || '');
       });
     });
     html += `</div>`;
@@ -304,20 +281,20 @@ function renderImdbData(panelId, data, workNode = null) {
       return (a.name || '').localeCompare(b.name || '', 'ja');
     });
     html += `<div class="imdb-sub-title">出演 (${cast.length}人)</div>`;
-    html += `<div style="display:flex;gap:8px;overflow-x:auto;overflow-y:visible;-webkit-overflow-scrolling:touch;scrollbar-width:none;padding:8px 2px">`;
+    html += `<div class="person-list">`;
     sortedCast.slice(0, castLimit).forEach(p => {
       const name   = p.name || '';
       const role   = (p.characters && p.characters.length) ? p.characters[0] : categoryLabel(p.category) || '';
       const imgSrc = p.image ? imdbProxyImg(p.image) : '';
-      html += imdbPersonCard(name, role, imgSrc, 'var(--node-art)', '', null, p.id || '');
+      html += imdbPersonCard(name, role, imgSrc, 'art', '', null, p.id || '');
     });
     html += `</div>`;
     if (cast.length > castLimit) {
-      html += `<div style="font-size:11px;color:var(--text-dim);padding-bottom:4px">他 ${cast.length - castLimit} 人</div>`;
+      html += `<div class="empty-note">他 ${cast.length - castLimit} 人</div>`;
     }
   }
 
-  if (!html) html = `<div class="imdb-not-found">データなし</div>`;
+  if (!html) html = `<div class="empty-note">データなし</div>`;
   body.innerHTML = html;
 
   // カードクリック → フィルモグラフィー表示（IMDb nameId を検索）
@@ -333,21 +310,15 @@ function renderImdbData(panelId, data, workNode = null) {
   // ＋ボタン → 参加クリエイターに追加（Notionクリエイター新規作成＋リレーション＋カバー画像）
   if (workNode) {
     body.querySelectorAll('.imdb-add-creator-btn').forEach(btn => {
-      if (btn.textContent.trim() === '✓') return; // 追加済みはスキップ
+      if (btn.classList.contains('is-added')) return;
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const personName = btn.dataset.name;
         const rawImgUrl  = btn.dataset.rawImg || '';
 
         // 1. ボタンを即座に ✓ に変える
-        btn.innerHTML = `<svg width="8" height="8" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1.5,5 4,7.5 8.5,2"/></svg>`;
-        btn.style.background = 'var(--bg3)';
-        btn.style.color = 'var(--accent)';
-        btn.style.opacity = '1';
-        btn.style.cursor = 'default';
-        btn.style.pointerEvents = 'none';
-        btn.onmouseover = null;
-        btn.onmouseout = null;
+        btn.innerHTML = icon('check', 10);
+        btn.classList.add('is-added');
 
         addImdbPersonToWork(workNode, personName, rawImgUrl);
       });
@@ -482,9 +453,7 @@ async function fetchImdbInfo(panelId, workTitle, workNode = null) {
   } catch (e) {
     console.error('[IMDB]', e);
     if (body) {
-      body.innerHTML = `<div class="imdb-error">
-        <span style="font-weight:600">取得エラー:</span> ${esc(e.message)}
-      </div>`;
+      body.innerHTML = `<div class="error-box">取得エラー: ${esc(e.message)}</div>`;
     }
   }
 }
@@ -700,12 +669,8 @@ async function openFilmographyModal(personName, avatarSrc, opts = {}) {
   // ヘッダー設定
   const initial = [...personName][0] || '?';
   const avatarEl = document.getElementById('fm2-avatar');
-  avatarEl.style.background = 'var(--node-dir)';
-  if (avatarSrc && !avatarSrc.endsWith('/imdb-img/')) {
-    avatarEl.innerHTML = `<img src="${esc(avatarSrc)}" alt="" onerror="this.parentElement.innerHTML='${esc(initial)}'">`;
-  } else {
-    avatarEl.textContent = initial;
-  }
+  const hasAvatar = avatarSrc && !avatarSrc.endsWith('/imdb-img/');
+  avatarEl.innerHTML = esc(initial) + (hasAvatar ? `<img src="${esc(avatarSrc)}" alt="" onerror="this.remove()">` : '');
   document.getElementById('fm2-name').textContent = personName;
   document.getElementById('fm2-sub').textContent = 'IMDb フィルモグラフィーを読み込み中…';
   document.getElementById('fm2-google').onclick = () => {
@@ -714,7 +679,7 @@ async function openFilmographyModal(personName, avatarSrc, opts = {}) {
   document.getElementById('fm2-tabs').innerHTML = '';
   document.getElementById('fm2-body').innerHTML = `
     <div class="fm2-loading">
-      <div class="fm2-spinner"></div>フィルモグラフィー取得中…
+      <div class="spinner"></div>フィルモグラフィー取得中…
     </div>`;
 
   try {
@@ -732,14 +697,14 @@ async function openFilmographyModal(personName, avatarSrc, opts = {}) {
       const d1 = await r1.json();
       if (d1.notFound || !d1.nameId) {
         document.getElementById('fm2-sub').textContent = 'IMDbに情報が見つかりませんでした';
-        document.getElementById('fm2-body').innerHTML = `<div class="fm2-empty">IMDbにこの人物の情報が見つかりませんでした。<br><br><a href="https://www.imdb.com/find?q=${encodeURIComponent(personName)}" target="_blank" style="color:var(--accent)">IMDbで手動検索する →</a></div>`;
+        document.getElementById('fm2-body').innerHTML = `<div class="fm2-empty">IMDbに見つかりませんでした<br><br><a class="text-link" href="https://www.imdb.com/find?q=${encodeURIComponent(personName)}" target="_blank" rel="noopener noreferrer">IMDbで手動検索する →</a></div>`;
         return;
       }
       nameId = d1.nameId;
       _fmgNameIdCache.set(cacheKey, nameId);
       // アバター画像を IMDB画像で更新
       if (d1.image) {
-        avatarEl.innerHTML = `<img src="/imdb-img/${btoa(d1.image)}" alt="" onerror="this.parentElement.textContent='${esc(initial)}'">`;
+        avatarEl.innerHTML = `${esc(initial)}<img src="/imdb-img/${btoa(d1.image)}" alt="" onerror="this.remove()">`;
       }
     }
 
@@ -784,7 +749,7 @@ async function openFilmographyModal(personName, avatarSrc, opts = {}) {
 
     if (!availableTypes.length) {
       document.getElementById('fm2-sub').textContent = '合計 0 件';
-      document.getElementById('fm2-body').innerHTML = `<div class="fm2-empty">フィルモグラフィー情報が見つかりませんでした。</div>`;
+      document.getElementById('fm2-body').innerHTML = `<div class="fm2-empty">作品が見つかりませんでした</div>`;
       return;
     }
 
@@ -816,9 +781,8 @@ async function openFilmographyModal(personName, avatarSrc, opts = {}) {
     document.getElementById('fm2-sub').textContent = 'エラーが発生しました';
     document.getElementById('fm2-body').innerHTML = `
       <div class="fm2-error">取得エラー: ${esc(e.message)}</div>
-      <div style="padding:12px 20px">
-        <a href="https://www.imdb.com/find?q=${encodeURIComponent(personName)}" target="_blank"
-           style="color:var(--accent);font-size:13px">IMDbで手動検索する →</a>
+      <div class="fm2-fallback">
+        <a class="text-link" href="https://www.imdb.com/find?q=${encodeURIComponent(personName)}" target="_blank" rel="noopener noreferrer">IMDbで手動検索する →</a>
       </div>`;
   }
 }
