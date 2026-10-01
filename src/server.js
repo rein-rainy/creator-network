@@ -10,6 +10,7 @@ const config = require('./server/config');
 const { servePublicFile, serveIndex } = require('./server/static');
 const { notFound } = require('./server/http');
 const { handleAvatarRoutes } = require('./server/routes/avatars');
+const { handleImdbRoutes } = require('./server/routes/imdb');
 const { handleMiscRoutes } = require('./server/routes/misc');
 const { handleNotionRoutes } = require('./server/routes/notion');
 
@@ -29,6 +30,7 @@ function setCorsHeaders(res) {
 
 const routeHandlers = [
   handleAvatarRoutes,
+  handleImdbRoutes,
   handleMiscRoutes,
   handleNotionRoutes,
 ];

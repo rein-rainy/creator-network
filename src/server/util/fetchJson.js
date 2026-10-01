@@ -1,7 +1,8 @@
 const https = require('https');
 
 /**
- * GET a URL and parse the body as JSON, with a per-attempt timeout and
+ * Request a URL (GET by default, or POST when `body` is given) and parse the
+ * response as JSON, with a per-attempt timeout and
  * automatic retries (with exponential backoff) on network errors and 5xx.
  *
  * Resolves to the parsed JSON, or `null` if `nullOn404` is set and the
@@ -9,14 +10,21 @@ const https = require('https');
  */
 function fetchJson(url, {
   headers = {},
+  body,
   timeoutMs = 8000,
   retries = 1,
   backoffMs = 400,
   label = 'fetchJson',
 } = {}) {
   const attempt = (remaining) => new Promise((resolve, reject) => {
-    const req = https.get(url, {
-      headers: { 'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0', ...headers },
+    const payload = body === undefined ? null : (typeof body === 'string' ? body : JSON.stringify(body));
+    const req = https.request(url, {
+      method: payload === null ? 'GET' : 'POST',
+      headers: {
+        'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0',
+        ...(payload === null ? {} : { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }),
+        ...headers,
+      },
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
@@ -36,6 +44,7 @@ function fetchJson(url, {
     });
     req.setTimeout(timeoutMs, () => req.destroy(new Error(`${label} timed out after ${timeoutMs}ms`)));
     req.on('error', reject);
+    req.end(payload ?? undefined);
   });
 
   const run = async (remaining) => {

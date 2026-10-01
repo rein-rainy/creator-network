@@ -81,6 +81,8 @@ function showPanel(d) {
     pnEl.style.cursor = '';
   }
 
+  // IMDB panel ID（work用、関数スコープで管理）
+  let _imdbPanelId = null;
 
   // ph アバター更新
   const phAvatar = document.getElementById('ph-avatar');
@@ -117,9 +119,11 @@ function showPanel(d) {
   }
 
   const hideBtn = document.getElementById('pc-hide');
+  const searchBtn = document.getElementById('pc-search');
   const notionBtn = document.getElementById('pc-notion');
   if (d.type === 'work') {
     hideBtn.style.display = 'none';
+    searchBtn.style.display = 'none';
     if (d.notionPageId) {
       notionBtn.style.display = 'flex';
       notionBtn.onclick = () => {
@@ -131,12 +135,16 @@ function showPanel(d) {
   } else {
     notionBtn.style.display = 'none';
     hideBtn.style.display = 'flex';
+    searchBtn.style.display = 'flex';
     hideBtn.onclick = () => {
       stopYtIframe();
       hiddenIds.add(d.id); updateHiddenUI(); refresh();
       panel.classList.remove('visible');
       overlay.classList.remove('visible');
       selId = null;
+    };
+    searchBtn.onclick = () => {
+      openFilmographyModal(d.label, d.avatar || '');
     };
   }
 
@@ -246,6 +254,22 @@ function showPanel(d) {
       html += `</div>`;
     }
 
+    // IMDB セクション（パネルオープン時に自動取得）
+    _imdbPanelId = `imdb_${Date.now()}`;
+    html += `<div id="imdb-section-${esc(_imdbPanelId)}" class="imdb-section">
+      <div class="imdb-section-title">
+        <span>IMDb 情報</span>
+        <span class="imdb-badge">IMDb</span>
+      </div>
+      <div id="imdb-found-${esc(_imdbPanelId)}"></div>
+      <div id="imdb-body-${esc(_imdbPanelId)}">
+        <div class="imdb-loading">
+          <div class="imdb-loading-dot"></div>
+          <div class="imdb-loading-dot"></div>
+          <div class="imdb-loading-dot"></div>
+        </div>
+      </div>
+    </div>`;
   } else {
     const works = (d.works || []).map(wid => AN.find(n => n.id === wid)).filter(Boolean);
     const sl = d.type === 'director' ? `制作作品 (${works.length})` : `出演作品 (${works.length})`;
@@ -472,6 +496,11 @@ function showPanel(d) {
       
       showAddCreatorDropdown(addBtn, d);
     };
+  }
+
+  // work パネルを開いた瞬間にIMDB情報を自動取得
+  if (d.type === 'work' && _imdbPanelId) {
+    fetchImdbInfo(_imdbPanelId, d.label, d);
   }
 
   // ─── クリエイター/アーティストパネル: 役職・SNS 編集 ───────────────────────
