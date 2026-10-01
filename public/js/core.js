@@ -82,14 +82,15 @@ function loadCreatorMeta(rows) {
     const role          = (row['Role']          || '').trim();
     const snsRaw        = (row['SNS']            || '').trim();
     const avatar        = (row['Avatar']         || '').trim();
+    const avatarType    = row['AvatarType'] || '';
     const notionPageId  = (row['notionPageId']   || '').trim();
     const sns = snsRaw ? [snsFromUrl(snsRaw)].filter(Boolean) : [];
-    creatorMetaMap.set(name, { role, sns, avatar, notionPageId });
+    creatorMetaMap.set(name, { role, sns, avatar, avatarType, notionPageId });
   });
 }
 
 function getCreatorMeta(name) {
-  return creatorMetaMap.get(name) || { role: '', sns: [], avatar: '', notionPageId: '' };
+  return creatorMetaMap.get(name) || { role: '', sns: [], avatar: '', avatarType: '', notionPageId: '' };
 }
 
 /* ═══════════════════════════════════════════
@@ -123,7 +124,7 @@ function buildGraph(rows) {
     xnames(row['Director / Creator'] || '').forEach(d => {
       const did = `d_${d}`;
       const meta = getCreatorMeta(d);
-      ensure(did, 'director', d, { role: meta.role, sns: meta.sns, avatar: meta.avatar, notionPageId: meta.notionPageId || '' });
+      ensure(did, 'director', d, { role: meta.role, sns: meta.sns, avatar: meta.avatar, avatarType: meta.avatarType, notionPageId: meta.notionPageId || '' });
       nm.get(did).works.push(wid);
       links.push({ source: did, target: wid, ltype: 'dir' });
     });

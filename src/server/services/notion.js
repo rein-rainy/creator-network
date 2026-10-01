@@ -84,7 +84,12 @@ async function fetchPersonDB(dbId, label) {
       if (snsProp?.type === 'url') sns = snsProp.url ?? '';
       else if (snsProp?.type === 'rich_text') sns = snsProp.rich_text.map(t => t.plain_text).join('');
 
-      persons.push({ Name: name, Role: role, SNS: sns, Avatar: '', notionPageId: page.id });
+      // ページのカバー画像をアイコンとして使う（Notion にアップロードした画像の URL は1時間で失効するため毎回取り直す）
+      // AvatarType: 'file' = このアプリが Notion にアップロードした画像 / 'external' = 外部 URL（IMDb など）
+      const avatar = page.cover?.external?.url ?? page.cover?.file?.url ?? '';
+      const avatarType = avatar ? page.cover.type : '';
+
+      persons.push({ Name: name, Role: role, SNS: sns, Avatar: avatar, AvatarType: avatarType, notionPageId: page.id });
     }
 
     hasMore = response.body.has_more;
@@ -290,6 +295,34 @@ async function setCreatorCover(creatorPageId, imageUrl) {
   return { success: true };
 }
 
+const IMAGE_EXTENSIONS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' };
+
+/** 画像データを Notion にアップロードしてクリエイターページのカバーに設定する */
+async function uploadCreatorCover(creatorPageId, buffer, contentType) {
+  const ext = IMAGE_EXTENSIONS[contentType];
+  if (!ext) throw new Error(`未対応の画像形式: ${contentType}`);
+  const filename = `avatar.${ext}`;
+
+  const createRes = await notionRequest('POST', '/v1/file_uploads', { filename, content_type: contentType });
+  if (createRes.status !== 200) throw new Error(`アップロード作成失敗: ${createRes.status} ${JSON.stringify(createRes.body)}`);
+  const uploadId = createRes.body.id;
+
+  const form = new FormData();
+  form.append('file', new Blob([buffer], { type: contentType }), filename);
+  const sendRes = await fetch(`https://api.notion.com/v1/file_uploads/${uploadId}/send`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${config.NOTION_TOKEN}`, 'Notion-Version': '2022-06-28' },
+    body: form,
+  });
+  if (!sendRes.ok) throw new Error(`アップロード送信失敗: ${sendRes.status} ${await sendRes.text()}`);
+
+  const patchRes = await notionRequest('PATCH', `/v1/pages/${creatorPageId}`, {
+    cover: { type: 'file_upload', file_upload: { id: uploadId } },
+  });
+  if (patchRes.status !== 200) throw new Error(`カバー画像設定失敗: ${patchRes.status} ${JSON.stringify(patchRes.body)}`);
+  return { success: true, coverUrl: patchRes.body.cover?.file?.url ?? '' };
+}
+
 async function getRoleOptions() {
   const dbRes = await notionRequest('GET', `/v1/databases/${config.DB_CREATORS}`);
   if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
@@ -378,6 +411,7 @@ module.exports = {
   addCreatorToWork,
   createCreator,
   setCreatorCover,
+  uploadCreatorCover,
   getRoleOptions,
   updateCreatorMeta,
   renameCreator,

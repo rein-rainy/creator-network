@@ -222,6 +222,7 @@ function setupAvatarObserver() {
     }
   }
 
+  // 外部 URL のカバーがある人はそれで表示し、Instagram API は呼ばない
   const uncached = targets.filter(n => !n.avatar);
   if (!uncached.length) { console.log('[Avatar] 全キャッシュヒット'); return; }
 
@@ -313,11 +314,50 @@ async function _fetchOneIgAvatar(node) {
     saveIgAvatarCache(cache);
     console.log(`[IG Avatar] ${node.label}: 完了 (${data.username})`);
     applyAvatarToDOM(node);
+    queueAvatarToNotion(node, avatarData);
   } catch (e) {
     console.warn(`[IG Avatar] ${node.label}: 取得失敗 — ${e.message}`);
   } finally {
     _igFetching.delete(node.id);
   }
+}
+
+// ── Notion への保存 ─────────────────────────────────────────────────────────
+// 取得したアイコンはクリエイターページのカバー画像として Notion に保存する。
+// 次回以降は Notion から読み込まれるので、ブラウザやポートが変わっても
+// Instagram API（RapidAPI）を呼び直さずに済む。
+const _notionAvatarQueue = [];
+let _notionAvatarUploading = false;
+
+function queueAvatarToNotion(node, dataUrl) {
+  if (!node.notionPageId || !dataUrl?.startsWith('data:')) return;
+  if (_notionAvatarQueue.some(item => item.node.id === node.id)) return;
+  _notionAvatarQueue.push({ node, dataUrl });
+  _processNotionAvatarQueue();
+}
+
+// Notion API のレート制限（平均 3 req/秒）に配慮して1件ずつ送る
+async function _processNotionAvatarQueue() {
+  if (_notionAvatarUploading) return;
+  _notionAvatarUploading = true;
+  while (_notionAvatarQueue.length) {
+    const { node, dataUrl } = _notionAvatarQueue.shift();
+    try {
+      const res = await fetch('/notion-upload-creator-cover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ creatorPageId: node.notionPageId, dataUrl }),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      node.avatarType = 'file';
+      console.log(`[Notion Avatar] ${node.label}: カバー画像に保存`);
+    } catch (e) {
+      console.warn(`[Notion Avatar] ${node.label}: 保存失敗 — ${e.message}`);
+    }
+    await new Promise(resolve => setTimeout(resolve, 400));
+  }
+  _notionAvatarUploading = false;
 }
 
 // draw() 後に呼ぶエントリポイント
@@ -328,8 +368,9 @@ function fetchDirectorIgAvatars() {
 function _setupIgObserver() {
   const cache = loadIgAvatarCache();
 
-  // Instagram URL を持つ director ノードが対象
-  const targets = AN.filter(n => n.type === 'director' && extractInstagramUrl(n.sns));
+  // Instagram URL を持ち、Notion にアイコンをまだアップロードしていない director ノードが対象
+  // （IMDb などの外部 URL のカバーより Instagram アイコンを優先する）
+  const targets = AN.filter(n => n.type === 'director' && extractInstagramUrl(n.sns) && n.avatarType !== 'file');
   if (!targets.length) { console.log('[IG Avatar] 取得対象なし'); return; }
   console.log(`[IG Avatar] ${targets.length}件を確認`);
 
@@ -342,6 +383,7 @@ function _setupIgObserver() {
         node.avatar = cache[key];
         console.log(`[IG Avatar] ${node.label}: キャッシュヒット（スキップ）`);
         applyAvatarToDOM(node);
+        queueAvatarToNotion(node, cache[key]); // ブラウザにだけあるアイコンを Notion へ移す
       } else {
         // 旧形式（URL）は削除して再取得
         console.log(`[IG Avatar] ${node.label}: 旧URLキャッシュを破棄して再取得`);
@@ -351,6 +393,7 @@ function _setupIgObserver() {
   }
   saveIgAvatarCache(cache); // 旧形式を削除した場合に備えて保存
 
+  // 外部 URL のカバーがある人はそれで表示し、Instagram API は呼ばない
   const uncached = targets.filter(n => !n.avatar);
   if (!uncached.length) { console.log('[IG Avatar] 全キャッシュヒット'); return; }
   console.log(`[IG Avatar] 未キャッシュ ${uncached.length}件を一括取得`);

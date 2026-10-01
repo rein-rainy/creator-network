@@ -29,6 +29,12 @@ async function handleNotionRoutes(req, res) {
     return notion.setCreatorCover(creatorPageId, imageUrl);
   })) return true;
 
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-upload-creator-cover', label: 'Notion Upload Cover Error' }, async ({ creatorPageId, dataUrl }) => {
+    const match = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(dataUrl || '');
+    if (!creatorPageId || !match) throw new Error('creatorPageId と画像の data URL が必要です');
+    return notion.uploadCreatorCover(creatorPageId, Buffer.from(match[2], 'base64'), match[1]);
+  })) return true;
+
   if (await jsonRoute(req, res, { method: 'GET', path: '/notion-role-options', label: 'RoleOptions Error' }, async () => {
     return notion.getRoleOptions();
   })) return true;
