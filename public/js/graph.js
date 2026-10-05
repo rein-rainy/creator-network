@@ -148,7 +148,10 @@ function draw(nodes, links, { freeLayout = false } = {}) {
         .strength(() => baseLinkStrength))
       .force('charge',  d3.forceManyBody().strength(-2500))
       // 既存ノードが固定されている差分配置では、中心へ寄せる力は新規ノードだけを動かしてしまうので掛けない
-      .force('center',  freeLayout || !hasPlaced ? d3.forceCenter(W/2, H/2) : null)
+      // 検索中は、いちばん大きい塊が画面の中心に来るようにする。全ノードの平均で合わせると、
+      // 遠くへ散った小さな塊に引っ張られて、肝心の大きな塊が画面の外にずれてしまう。
+      .force('center',  freeLayout ? _forceCenterLargest(nodes, links, W/2, H/2)
+                       : !hasPlaced ? d3.forceCenter(W/2, H/2) : null)
       .force('collide', d3.forceCollide(d => d.type === 'work' ? Math.sqrt((CW/2)**2 + (CH/2)**2) + 18 : Math.sqrt((PNW/2)**2 + (PNH/2)**2) + 12))
       .alphaDecay(.015)
       .stop()
@@ -226,6 +229,41 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   const arts = nodes.filter(n => n.type === 'artist').length;
   const wks  = nodes.filter(n => n.type === 'work').length;
   document.getElementById('stats').innerHTML = `${dirs} creators<br>${arts} artists<br>${wks} works`;
+}
+
+/* ─── _forceCenterLargest: いちばん大きい塊の中心が (x, y) に来るよう、全ノードを平行移動する力 ───
+   d3.forceCenter と同じく毎 tick 全体をずらすだけなので、ノード同士の位置関係は変えない。
+   中心は平均位置ではなく上下左右の端の中点にする（平均だとノードの偏りで塊の端が画面からはみ出す）。 */
+function _forceCenterLargest(nodes, links, x, y) {
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const adj = new Map(nodes.map(n => [n, []]));
+  links.forEach(l => {
+    const s = byId.get(lid(l.source)), t = byId.get(lid(l.target));
+    if (s && t) { adj.get(s).push(t); adj.get(t).push(s); }
+  });
+  let largest = [];
+  const seen = new Set();
+  for (const n of nodes) {
+    if (seen.has(n)) continue;
+    const group = [n]; seen.add(n);
+    for (let i = 0; i < group.length; i++) {
+      for (const m of adj.get(group[i])) if (!seen.has(m)) { seen.add(m); group.push(m); }
+    }
+    if (group.length > largest.length) largest = group;
+  }
+  let all = [];
+  const force = () => {
+    if (!largest.length) return;
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const n of largest) {
+      if (n.x < x0) x0 = n.x; if (n.x > x1) x1 = n.x;
+      if (n.y < y0) y0 = n.y; if (n.y > y1) y1 = n.y;
+    }
+    const sx = (x0 + x1) / 2 - x, sy = (y0 + y1) / 2 - y;
+    for (const n of all) { n.x -= sx; n.y -= sy; }
+  };
+  force.initialize = ns => { all = ns; };
+  return force;
 }
 
 /* ─── _renderPositions: ノード・リンクの座標を DOM に反映 ─────────────────── */

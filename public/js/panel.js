@@ -217,7 +217,7 @@ function showPanel(d) {
     html += imdbSectionHtml(_imdbPanelId);
   } else {
     const works = (d.works || []).map(wid => AN.find(n => n.id === wid)).filter(Boolean);
-    const sl = d.type === 'director' ? `制作作品 (${works.length})` : `出演作品 (${works.length})`;
+    const sl = d.type === 'director' ? `制作作品 (${works.length})` : `作品 (${works.length})`;
 
     // --- 役職 / SNS リンク（常に表示、編集ボタン付き）---
     const metaId = `cmeta_${d.id.replace(/[^a-z0-9]/gi,'_')}`;
@@ -316,7 +316,7 @@ function showPanel(d) {
   document.getElementById('info-panel').classList.add('visible');
   if (d.type === 'work') renderDirSuggestSection(d);
 
-  // 出演・制作作品 → 作品パネルへ遷移
+  // 制作作品・アーティストの作品 → 作品パネルへ遷移
   document.getElementById('pc2').querySelectorAll('.pw-item[data-work-id]').forEach(btn => {
     btn.addEventListener('click', () => {
       const work = AN.find(n => n.id === btn.dataset.workId);

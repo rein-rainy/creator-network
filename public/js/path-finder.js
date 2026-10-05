@@ -182,8 +182,7 @@ function _pathPersonCard(n) {
 }
 
 function _pathEdge(ltype) {
-  const label = ltype === 'dir' ? '制作' : '出演';
-  return `<div class="pf-edge ${ltype}"><span class="pf-edge-label">${label}</span><span class="pf-edge-line"></span></div>`;
+  return `<div class="pf-edge ${ltype}"><span class="pf-edge-line"></span></div>`;
 }
 
 function renderPathResult() {
