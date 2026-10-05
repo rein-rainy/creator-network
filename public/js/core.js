@@ -170,6 +170,8 @@ function getCreatorMeta(name) {
 ═══════════════════════════════════════════ */
 function buildGraph(rows) {
   const nm = new Map(), links = [];
+  // アーティストのアイコンは Artist DB のページのカバー画像（同名のクリエイターと混ざらないよう Artist DB から直接引く）
+  const artistRows = new Map(ALL_ARTISTS.map(r => [(r.Name || '').trim(), r]));
 
   function ensure(id, type, label, extra = {}) {
     if (!nm.has(id)) {
@@ -208,7 +210,13 @@ function buildGraph(rows) {
       // ytWorkUrl: アーティストの参加作品のうち YouTube 動画 URL を持つ最初の1本を保存
       // （既に確定済みなら上書きしない）
       const artYtUrl = existingNode?.ytWorkUrl || (ytid(url) ? url : '');
-      ensure(aid, 'artist', a, { role: meta.role, sns: meta.sns, avatar: existingNode?.avatar || '', ytWorkUrl: artYtUrl });
+      const artistRow = artistRows.get(a);
+      // artistPageId: Artist DB のページ ID。notionPageId にするとクリエイター向けの編集（名前・役割・SNS）の対象になってしまうので別名にする
+      ensure(aid, 'artist', a, {
+        role: meta.role, sns: meta.sns, ytWorkUrl: artYtUrl,
+        avatar: existingNode?.avatar || artistRow?.Avatar || '', avatarType: artistRow?.AvatarType || '',
+        artistPageId: artistRow?.notionPageId || '',
+      });
       nm.get(aid).works.push(wid);
       links.push({ source: aid, target: wid, ltype: 'art' });
     });

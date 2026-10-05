@@ -536,10 +536,12 @@ function _refreshNotionAvatars(data) {
   ALL_CREATORS = data.creators || [];
   ALL_ARTISTS = data.artists || [];
   loadCreatorMeta([...ALL_CREATORS, ...ALL_ARTISTS]);
+  const artistAvatar = new Map(ALL_ARTISTS.map(r => [(r.Name || '').trim(), r.Avatar]));
   AN.forEach(n => {
-    // Notion にアップロードした画像（avatarType: file）だけが期限付き。Instagram から取った画像などは触らない
-    if (n.type !== 'director' || n.avatarType !== 'file') return;
-    const avatar = getCreatorMeta(n.label).avatar;
+    // Notion にアップロードした画像（avatarType: file）だけが期限付き。外部 URL のカバーなどは触らない
+    if (n.avatarType !== 'file') return;
+    const avatar = n.type === 'director' ? getCreatorMeta(n.label).avatar
+                 : n.type === 'artist'   ? artistAvatar.get(n.label) : null;
     if (!avatar || avatar === n.avatar) return;
     n.avatar = avatar;
     // 失効した URL で読み込みに失敗し、イニシャル表示に替わっていることもあるので画像ごと入れ直す

@@ -31,16 +31,16 @@ async function fetchIgProfilePic(username) {
     return null;
   }
 
+  // RapidAPI「Instagram best experience」（GET /profile?username=）。
+  // 以前使っていた Instagram120 は RapidAPI から取り下げられた（404 "API doesn't exists"）。
+  const IG_API_HOST = 'instagram-best-experience.p.rapidapi.com';
   return new Promise((resolve) => {
-    const postData = JSON.stringify({ username });
     const options = {
-      hostname: 'instagram120.p.rapidapi.com',
-      path: '/api/instagram/profile',
-      method: 'POST',
+      hostname: IG_API_HOST,
+      path: `/profile?username=${encodeURIComponent(username)}`,
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(postData),
-        'x-rapidapi-host': 'instagram120.p.rapidapi.com',
+        'x-rapidapi-host': IG_API_HOST,
         'x-rapidapi-key': config.RAPIDAPI_KEY,
       },
     };
@@ -52,18 +52,20 @@ async function fetchIgProfilePic(username) {
       igRes.on('end', () => {
         try {
           if (igRes.statusCode !== 200) {
+            // API の取り下げ・購読切れ・無料枠の使い切りなどに気づけるよう、理由を残す
+            console.warn(`[IG] "${username}": HTTP ${igRes.statusCode} ${data.slice(0, 200)}`);
             igAvatarCache.set(username, { profilePicUrl: null, status: igRes.statusCode, expireAt: Date.now() + IG_CACHE_TTL_MS });
             return resolve(null);
           }
 
-          const json = JSON.parse(data);
-          const user = json?.result;
-          if (!user) {
+          const user = JSON.parse(data);
+          const profilePicUrl = user?.hd_profile_pic_url_info?.url || user?.profile_pic_url || null;
+          if (!profilePicUrl) {
+            console.warn(`[IG] "${username}": プロフィール画像が見つからない ${data.slice(0, 200)}`);
             igAvatarCache.set(username, { profilePicUrl: null, status: 404, expireAt: Date.now() + IG_CACHE_TTL_MS });
             return resolve(null);
           }
 
-          const profilePicUrl = user.profile_pic_url_hd || user.profile_pic_url || null;
           igAvatarCache.set(username, { profilePicUrl, expireAt: Date.now() + IG_CACHE_TTL_MS });
           resolve(profilePicUrl);
         } catch (error) {
@@ -76,7 +78,6 @@ async function fetchIgProfilePic(username) {
       console.warn(`[IG] "${username}": リクエストエラー: ${error.message}`);
       resolve(null);
     });
-    req.write(postData);
     req.end();
   });
 }

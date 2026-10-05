@@ -135,6 +135,7 @@ async function _processAvatarQueue() {
       node.avatar = cache[node.label];
       console.log(`[Avatar] ${node.label}: キャッシュヒット`);
       applyAvatarToDOM(node);
+      queueArtistCoverToNotion(node, cache[node.label]);
     } else {
       toFetch.push(node);
       _avatarFetching.add(node.id);
@@ -185,6 +186,7 @@ async function _processAvatarQueue() {
     cache[node.label] = proxyUrl;
     console.log(`[Avatar] ${node.label}: 完了`);
     applyAvatarToDOM(node);
+    queueArtistCoverToNotion(node, proxyUrl);
   }
   saveAvatarCache(cache);
 
@@ -206,7 +208,12 @@ function setupAvatarObserver() {
 
   const cache = loadAvatarCache();
 
-  // artist ノードのカード要素を全取得して監視開始
+  // ブラウザにだけある取得結果（Notion にカバーがないアーティスト）を Notion へ移す
+  for (const node of AN) {
+    if (node.type === 'artist' && !node.avatarType && cache[node.label]) queueArtistCoverToNotion(node, cache[node.label]);
+  }
+
+  // artist ノードのカード要素を全取得して監視開始（Notion にカバーがある人は対象外）
   const targets = AN.filter(n => n.type === 'artist' && !n.avatar);
   if (!targets.length) { console.log('[Avatar] 取得対象なし'); return; }
   console.log(`[Avatar] ${targets.length}件を監視開始`);
@@ -323,16 +330,29 @@ async function _fetchOneIgAvatar(node) {
 }
 
 // ── Notion への保存 ─────────────────────────────────────────────────────────
-// 取得したアイコンはクリエイターページのカバー画像として Notion に保存する。
+// 取得したアイコンはクリエイター・アーティストのページのカバー画像として Notion に保存する。
 // 次回以降は Notion から読み込まれるので、ブラウザやポートが変わっても
-// Instagram API（RapidAPI）を呼び直さずに済む。
+// RapidAPI（Instagram / Spotify）を呼び直さずに済み、間違った画像は Notion でカバーを差し替えれば直せる。
+// - クリエイター（Instagram）: 画像の URL が数日で失効するため、画像そのものをアップロードする
+// - アーティスト（Spotify）: 画像の URL（i.scdn.co）は変わらないので、外部 URL としてカバーに設定する
 const _notionAvatarQueue = [];
 let _notionAvatarUploading = false;
 
 function queueAvatarToNotion(node, dataUrl) {
   if (!node.notionPageId || !dataUrl?.startsWith('data:')) return;
   if (_notionAvatarQueue.some(item => item.node.id === node.id)) return;
-  _notionAvatarQueue.push({ node, dataUrl });
+  _notionAvatarQueue.push({ node, pageId: node.notionPageId, dataUrl });
+  _processNotionAvatarQueue();
+}
+
+// avatar はブラウザのキャッシュと同じ `/avatar-img/<base64(画像URL)>` 形式。Notion には元の画像 URL を保存する
+function queueArtistCoverToNotion(node, avatar) {
+  if (node.type !== 'artist' || !node.artistPageId || node.avatarType) return;
+  let imageUrl = avatar;
+  try { if (avatar?.startsWith('/avatar-img/')) imageUrl = atob(avatar.slice('/avatar-img/'.length)); } catch { return; }
+  if (!/^https?:\/\//.test(imageUrl || '')) return;
+  if (_notionAvatarQueue.some(item => item.node.id === node.id)) return;
+  _notionAvatarQueue.push({ node, pageId: node.artistPageId, imageUrl });
   _processNotionAvatarQueue();
 }
 
@@ -341,16 +361,17 @@ async function _processNotionAvatarQueue() {
   if (_notionAvatarUploading) return;
   _notionAvatarUploading = true;
   while (_notionAvatarQueue.length) {
-    const { node, dataUrl } = _notionAvatarQueue.shift();
+    const { node, pageId, dataUrl, imageUrl } = _notionAvatarQueue.shift();
     try {
-      const res = await fetch('/notion-upload-creator-cover', {
+      // 外部 URL の設定は（名前に反して）ページを問わず使える
+      const res = await fetch(dataUrl ? '/notion-upload-creator-cover' : '/notion-set-creator-cover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creatorPageId: node.notionPageId, dataUrl }),
+        body: JSON.stringify(dataUrl ? { creatorPageId: pageId, dataUrl } : { creatorPageId: pageId, imageUrl }),
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      node.avatarType = 'file';
+      node.avatarType = dataUrl ? 'file' : 'external';
       console.log(`[Notion Avatar] ${node.label}: カバー画像に保存`);
     } catch (e) {
       console.warn(`[Notion Avatar] ${node.label}: 保存失敗 — ${e.message}`);

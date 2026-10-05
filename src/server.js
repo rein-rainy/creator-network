@@ -87,7 +87,7 @@ server.listen(config.PORT, () => {
   console.log('    NOTION_TOKEN — Notion 統合トークン（必須）');
   console.log('    DEEPL_API_KEY — DeepL APIキー（オプション）');
   console.log('    YOUTUBE_API_KEY — YouTube APIキー（オプション）');
-  console.log('    RAPIDAPI_KEY — RapidAPI キー（instagram120.p.rapidapi.com / spotify23.p.rapidapi.com）');
+  console.log('    RAPIDAPI_KEY — RapidAPI キー（instagram-best-experience.p.rapidapi.com / spotify23.p.rapidapi.com）');
   console.log('');
   console.log(config.NOTION_TOKEN
     ? '  NOTION_TOKEN が設定されています'
