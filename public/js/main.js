@@ -430,5 +430,8 @@ async function fetchFromNotionAPI() {
 }
 
 document.getElementById('notion-sync-btn').addEventListener('click', fetchFromNotionAPI);
+document.getElementById('relayout-btn').addEventListener('click', () => {
+  if (AN.length && confirm('すべてのノードを一から配置し直します。よろしいですか？')) relayoutAll();
+});
 updateSearchModeBtn();
 window.addEventListener('load', fetchFromNotionAPI);

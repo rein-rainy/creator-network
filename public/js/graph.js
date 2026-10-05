@@ -130,17 +130,12 @@ function draw(nodes, links, { freeLayout = false } = {}) {
 
   _fitNodeCards(_nSel);
 
-  let hasPlaced = nodes.some(n => n.x != null);
-  // 配置済みのノード同士に新しいつながりができた（既存の監督を別の映像に追加した、など）ときは、
-  // そのままだと長い線で変な角度に繋がるので、一から配置し直してそのつながりへ表示を移す。
-  const newLinks = !freeLayout && hasPlaced ? _newLinksBetweenPlaced(links) : [];
-  if (newLinks.length) {
-    nodes.forEach(n => { delete n.x; delete n.y; n.vx = 0; n.vy = 0; n.fx = null; n.fy = null; });
-    hasPlaced = false;
-  }
+  const hasPlaced = nodes.some(n => n.x != null);
+  // 配置済みのノード同士に新しいつながりができていれば、片方を引き寄せる対象にする
+  const pulled = !freeLayout && hasPlaced ? _pullForNewLinks(links) : new Set();
   // 配置済みのノードがあれば、位置のないもの（新しく増えたもの）だけを差分で配置する。
   // freeLayout（検索時など）は固定せず、シミュに自由に動かせる。
-  const hasNew = !freeLayout && hasPlaced && _prepareNewNodes(nodes, links);
+  const hasNew = !freeLayout && hasPlaced && _prepareNewNodes(nodes, links, pulled);
 
   // freeLayout（検索時）は前回の緩和後パラメータが残っているため初期値に戻す。
   // 通常の draw（初回・更新どちらも）も同様にリセットして、更新時に広がらないようにする。
@@ -222,7 +217,6 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   }
   _renderPositions();
   if (!freeLayout) saveLayout();
-  if (newLinks.length) _focusLink(newLinks[0]);
 
   if (selId)      applyHL(selId, 'click');
   else if (hovId) applyHL(hovId, 'hover');
@@ -244,14 +238,16 @@ function _renderPositions() {
    新しく増えたノード（x/y が未定義）だけを、既存の配置を崩さずに置く。
    draw()（最新作品の追加・Notion からの更新など）と redraw()（映像への監督追加など）の両方で使う。
    1) _prepareNewNodes: 既存ノードを fx/fy で固定し、新規ノードをつながっているノードの近くに仮置きする。
+      _pullForNewLinks で引き寄せたノードも固定せず、新規ノードと一緒に動かす。
       シミュに渡す前に呼ぶ（渡すと位置のないノードは原点付近に置かれ、長い線で繋がってしまう）。
    2) _relaxNewNodes: シミュに渡した後で呼ぶ。新規ノードだけを近くの力で落ち着かせてから、
       全ノードを解放して弱い力でなじませる。新規ノードの周りだけが押し広げられ、
       落ち着いている場所はほぼ動かない。これがないと追加のたびに重なりが溜まっていく。
 ─────────────────────────────────────────────────────────────────────────────── */
-function _prepareNewNodes(nodes, links) {
-  if (!nodes.some(n => n.x == null)) return false;
-  nodes.forEach(n => { if (n.x != null) { n.fx = n.x; n.fy = n.y; } });
+function _prepareNewNodes(nodes, links, pulled = new Set()) {
+  if (!pulled.size && !nodes.some(n => n.x == null)) return false;
+  // pulled（新しいつながりで引き寄せたノード）は新規ノードと一緒に動かす
+  nodes.forEach(n => { if (n.x != null && !pulled.has(n)) { n.fx = n.x; n.fy = n.y; } });
   _placeNewNodes(nodes, links);
   return true;
 }
@@ -365,17 +361,71 @@ function _newLinksBetweenPlaced(links) {
   });
 }
 
-/* 配置し直した後、新しくできたつながりが画面の中央に来るよう表示を移す */
-function _focusLink(l) {
+/* 配置済みのノード同士に新しいつながりができた（既存の監督を別の映像に追加した、など）とき、
+   そのままだと長い線で変な角度に繋がるので、片側を相手の近くへ引き寄せる。動かしたノードの集合を返す。
+   - つながったことで別々の塊が一つになる場合：小さいほうの塊を形を保ったまま平行移動し、
+     相手の外側（相手のつながり先と反対側）に付ける。監督だけ動かすと元の作品との線が長くなるため、塊ごと動かす。
+   - すでに同じ塊の中にある場合（K-POP の作品を海外の監督が手がけた、など）：動かさない。
+     中間に置き直すと、作品が何もない場所に浮いて長い線が2本になるため、
+     元の塊のそばに残して、離れた界隈をつなぐ長い線1本にしておく。
+   動かしたノードは差分配置で周りとなじませる。 */
+function _pullForNewLinks(links) {
+  const pulled = new Set();
+  const fresh = _newLinksBetweenPlaced(links);
+  if (!fresh.length) return pulled;
   const byId = new Map(AN.map(n => [n.id, n]));
-  const s = typeof l.source === 'object' ? l.source : byId.get(l.source);
-  const t = typeof l.target === 'object' ? l.target : byId.get(l.target);
-  if (!s || !t) return;
-  const W = window.innerWidth, H = window.innerHeight - 48;
-  const svg = d3.select('#canvas');
-  const k = Math.max(d3.zoomTransform(svg.node()).k, 0.8);
-  svg.call(_zoomBehavior.transform,
-    d3.zoomIdentity.translate(W/2 - k*(s.x + t.x)/2, H/2 - k*(s.y + t.y)/2).scale(k));
+  const node = x => typeof x === 'object' ? x : byId.get(x);
+  const freshSet = new Set(fresh);
+  // 新しいつながりを除いた隣接関係（塊の判定用）
+  const adj = new Map();
+  const add = (m, a, b) => { if (!m.has(a)) m.set(a, []); m.get(a).push(b); };
+  links.forEach(l => {
+    const s = node(l.source), t = node(l.target);
+    if (!s || !t) return;
+    if (!freshSet.has(l)) { add(adj, s, t); add(adj, t, s); }
+  });
+  const component = start => {
+    const seen = new Set([start]), q = [start];
+    while (q.length) for (const m of adj.get(q.pop()) || []) if (!seen.has(m)) { seen.add(m); q.push(m); }
+    return seen;
+  };
+
+  fresh.forEach(l => {
+    const s = node(l.source), t = node(l.target);
+    if (s.x == null || t.x == null) return;
+    const cs = component(s);
+    if (!cs.has(t)) {
+      const ct = component(t);
+      const [mover, other, comp] = cs.size <= ct.size ? [s, t, cs] : [t, s, ct];
+      // 相手のつながり先の重心と反対側へ、リンクの長さぶん離して付ける
+      const nb = (adj.get(other) || []).filter(m => m.x != null);
+      let ux = 0, uy = 0;
+      if (nb.length) {
+        ux = other.x - nb.reduce((a, m) => a + m.x, 0) / nb.length;
+        uy = other.y - nb.reduce((a, m) => a + m.y, 0) / nb.length;
+      }
+      const len = Math.hypot(ux, uy);
+      if (len < 1) { const a = Math.random() * 2 * Math.PI; ux = Math.cos(a); uy = Math.sin(a); }
+      else { ux /= len; uy /= len; }
+      const dx = other.x + ux * 290 - mover.x, dy = other.y + uy * 290 - mover.y;
+      comp.forEach(n => {
+        if (n.x == null) return;
+        n.x += dx; n.y += dy; n.vx = 0; n.vy = 0; n.fx = null; n.fy = null;
+        pulled.add(n);
+      });
+    }
+  });
+  return pulled;
+}
+
+/* ─── relayoutAll: 「配置をやり直す」ボタン。保存した配置を捨てて一から配置し直す ─── */
+function relayoutAll() {
+  AN.forEach(n => { delete n.x; delete n.y; n.vx = 0; n.vy = 0; n.fx = null; n.fy = null; });
+  try { localStorage.removeItem(LAYOUT_KEY); } catch (e) { /* ignore */ }
+  // 一から配置すると画面中央を基準に並ぶので、表示位置も初期状態に戻す
+  d3.select('#canvas').call(_zoomBehavior.transform, d3.zoomIdentity);
+  const { nodes, links } = filteredData();
+  draw(nodes, links);
 }
 
 /* ─── redraw: 位置を維持したまま SVG と シミュのデータだけ更新 ───────────────
@@ -385,8 +435,6 @@ function _focusLink(l) {
 ─────────────────────────────────────────────────────────────────────────────── */
 function redraw(nodes, links) {
   if (!sim) { draw(nodes, links); return; }
-  // 配置済みのノード同士に新しいつながりができたら、一から配置し直す（draw 側で判定する）
-  if (_newLinksBetweenPlaced(links).length) { draw(nodes, links); return; }
 
   const svg = d3.select('#canvas');
   const g   = svg.select('g');
@@ -448,8 +496,8 @@ function redraw(nodes, links) {
     );
   _fitNodeCards(_nSel);
 
-  // 新しく加わったノード（監督の追加など）は差分配置する
-  const hasNew = _prepareNewNodes(nodes, links);
+  // 新しく加わったノード（監督の追加など）と、新しいつながりで引き寄せるノードは差分配置する
+  const hasNew = _prepareNewNodes(nodes, links, _pullForNewLinks(links));
 
   // シミュのデータを差し替え（新規ノードがなければ alpha は触らない → 動かない）
   sim.stop();
