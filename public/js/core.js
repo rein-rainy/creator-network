@@ -9,6 +9,7 @@ const DR = 30, AR = 22;
 const PNW = 200, PNH = 68; // director card width/height
 const ANW = 200, ANH = 56; // artist card width/height
 const HIDDEN_KEY = 'creator_network_hidden_labels';
+const LAYOUT_KEY = 'creator_network_layout';
 
 /* ═══════════════════════════════════════════
    STATE

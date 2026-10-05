@@ -28,15 +28,16 @@ function init(rows) {
   const data = buildGraph(rows);
   AN = data.nodes; AL = data.links;
 
-  // 更新時も初回と同じ初期配置から始めるため、座標・速度をリセット
+  // 前回保存した配置から始める（保存がないノードだけ新しく配置される）
   AN.forEach(n => { delete n.x; delete n.y; n.vx = 0; n.vy = 0; });
+  loadSavedLayout();
 
   // キャッシュから ytId が既知のアーティストを事前解決
   // （ytId は前回の fetch 後に node に保存されていないため、
   //   キャッシュのキーを全走査してアーティスト名で照合することはせず、
   //   fetchArtistAvatars() 内で ytId 取得後にキャッシュ保存する設計のまま進む）
 
-  hideGraphOverlay(2000);
+  hideGraphOverlay(0);
   loadHiddenState();
   makeFilter();
   refresh();

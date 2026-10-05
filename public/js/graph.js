@@ -130,28 +130,21 @@ function draw(nodes, links, { freeLayout = false } = {}) {
 
   _fitNodeCards(_nSel);
 
-  // 既存ノードは現在位置を fx/fy で固定してからシミュに渡す。
-  // これにより charge/center/link の力が一斉にかかっても既存ノードは動かない。
-  // 新規ノード（x/y が未定義）のみ自然に配置される。
-  // 安定化フェーズへの切り替え時に fx/fy を解除する。
-  // ただし freeLayout=true（検索時など）は固定しない——シミュに自由に動かせる。
-  const isFirstDraw = !sim;
-  if (!freeLayout) {
-    nodes.forEach(n => {
-      if (n.x != null) { n.fx = n.x; n.fy = n.y; }
-    });
+  let hasPlaced = nodes.some(n => n.x != null);
+  // 配置済みのノード同士に新しいつながりができた（既存の監督を別の映像に追加した、など）ときは、
+  // そのままだと長い線で変な角度に繋がるので、一から配置し直してそのつながりへ表示を移す。
+  const newLinks = !freeLayout && hasPlaced ? _newLinksBetweenPlaced(links) : [];
+  if (newLinks.length) {
+    nodes.forEach(n => { delete n.x; delete n.y; n.vx = 0; n.vy = 0; n.fx = null; n.fy = null; });
+    hasPlaced = false;
   }
+  // 配置済みのノードがあれば、位置のないもの（新しく増えたもの）だけを差分で配置する。
+  // freeLayout（検索時など）は固定せず、シミュに自由に動かせる。
+  const hasNew = !freeLayout && hasPlaced && _prepareNewNodes(nodes, links);
 
   // freeLayout（検索時）は前回の緩和後パラメータが残っているため初期値に戻す。
   // 通常の draw（初回・更新どちらも）も同様にリセットして、更新時に広がらないようにする。
   baseLinkStrength = 0.5;
-
-  // 安定化フェーズへ切り替える tick 数（60fps 換算で初回 約3秒 / 更新時 約0.8秒）。
-  // setTimeout だと別タブ表示中（rAF 停止でシミュが止まる）にも時間だけ進み、
-  // 広がる前に力が弱まって固まってしまうため、実際に進んだ tick 数で判定する。
-  // freeLayout は固定なしで自走させるので切り替えない。
-  let settleAtTick = freeLayout ? 0 : (isFirstDraw ? 180 : 48);
-  let tickCount = 0;
 
   if (sim) sim.stop();
   sim = d3.forceSimulation(nodes)
@@ -159,9 +152,11 @@ function draw(nodes, links, { freeLayout = false } = {}) {
         .distance(l => l.ltype === 'dir' ? 280 : 300)
         .strength(() => baseLinkStrength))
       .force('charge',  d3.forceManyBody().strength(-2500))
-      .force('center',  d3.forceCenter(W/2, H/2))
+      // 既存ノードが固定されている差分配置では、中心へ寄せる力は新規ノードだけを動かしてしまうので掛けない
+      .force('center',  freeLayout || !hasPlaced ? d3.forceCenter(W/2, H/2) : null)
       .force('collide', d3.forceCollide(d => d.type === 'work' ? Math.sqrt((CW/2)**2 + (CH/2)**2) + 18 : Math.sqrt((PNW/2)**2 + (PNH/2)**2) + 12))
       .alphaDecay(.015)
+      .stop()
       .on('tick', () => {
         if (draggedNode) {
           // ── ソフトヒモ拘束 ────────────────────────────────────────────────
@@ -204,17 +199,30 @@ function draw(nodes, links, { freeLayout = false } = {}) {
             }
           });
         }
+        _renderPositions();
+      })
+      // ドラッグ後に動きが収まったら配置を保存する（検索中の一時的な配置は保存しない）
+      .on('end', () => { if (!freeLayout) saveLayout(); });
 
-        if (_lpSel) _lpSel.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
-                          .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
-        if (_nSel)  _nSel.attr('transform', d => `translate(${d.x},${d.y})`);
-
-        if (settleAtTick && ++tickCount >= settleAtTick) {
-          settleAtTick = 0;
-          settleSimForces();
-          sim.alpha(0.05).restart();
-        }
-      });
+  // 配置はアニメーションさせず、描画なしで一気に計算してから一度だけ描く（1 tick ≒ 2ms / 600ノード）。
+  if (freeLayout) {
+    // 検索中：固定なしで強い力のまま止まるまで回す
+    _runToRest();
+  } else if (!hasPlaced) {
+    // 一から配置：強い力で広げてから、弱い力で全体をなじませる
+    sim.tick(180);
+    settleSimForces();
+    sim.alpha(0.05);
+    _runToRest();
+  } else if (hasNew) {
+    _relaxNewNodes();
+  } else {
+    // 全ノードが保存済みの位置にある（再読み込み・非表示の切り替えなど）：計算しない
+    settleSimForces();
+  }
+  _renderPositions();
+  if (!freeLayout) saveLayout();
+  if (newLinks.length) _focusLink(newLinks[0]);
 
   if (selId)      applyHL(selId, 'click');
   else if (hovId) applyHL(hovId, 'hover');
@@ -225,6 +233,151 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   document.getElementById('stats').innerHTML = `${dirs} creators<br>${arts} artists<br>${wks} works`;
 }
 
+/* ─── _renderPositions: ノード・リンクの座標を DOM に反映 ─────────────────── */
+function _renderPositions() {
+  if (_lpSel) _lpSel.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+                    .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+  if (_nSel)  _nSel.attr('transform', d => `translate(${d.x},${d.y})`);
+}
+
+/* ─── 差分配置 ───────────────────────────────────────────────────────────────
+   新しく増えたノード（x/y が未定義）だけを、既存の配置を崩さずに置く。
+   draw()（最新作品の追加・Notion からの更新など）と redraw()（映像への監督追加など）の両方で使う。
+   1) _prepareNewNodes: 既存ノードを fx/fy で固定し、新規ノードをつながっているノードの近くに仮置きする。
+      シミュに渡す前に呼ぶ（渡すと位置のないノードは原点付近に置かれ、長い線で繋がってしまう）。
+   2) _relaxNewNodes: シミュに渡した後で呼ぶ。新規ノードだけを近くの力で落ち着かせてから、
+      全ノードを解放して弱い力でなじませる。新規ノードの周りだけが押し広げられ、
+      落ち着いている場所はほぼ動かない。これがないと追加のたびに重なりが溜まっていく。
+─────────────────────────────────────────────────────────────────────────────── */
+function _prepareNewNodes(nodes, links) {
+  if (!nodes.some(n => n.x == null)) return false;
+  nodes.forEach(n => { if (n.x != null) { n.fx = n.x; n.fy = n.y; } });
+  _placeNewNodes(nodes, links);
+  return true;
+}
+
+function _relaxNewNodes() {
+  // 遠くまで届く強い反発（-2500）だと、新規ノードが群れの外へ押し出されてしまうので近くの力だけにする
+  baseLinkStrength = 0.5;
+  sim.force('link').strength(sim.force('link').strength());
+  sim.force('charge').strength(-400).distanceMax(150);
+  sim.force('center', null);
+  sim.velocityDecay(0.4);
+  sim.alpha(1).tick(120);
+  settleSimForces();
+  sim.alpha(0.05);
+  _runToRest();
+}
+
+const _runToRest = () => sim.tick(Math.ceil(Math.log(sim.alphaMin() / sim.alpha()) / Math.log(1 - sim.alphaDecay())));
+
+/* ─── _placeNewNodes: 位置のないノードを、つながっている配置済みノードの近くに置く ───
+   新規ノード同士がつながっている場合（新しい作品と新しいクリエイターなど）は、
+   先に置けたほうを基準に順に置いていく。どこにもつながらないものは全体の中心に置く。
+─────────────────────────────────────────────────────────────────────────────── */
+function _placeNewNodes(nodes, links) {
+  const byId = new Map(nodes.map(n => [n.id, n]));
+  const nbrs = new Map(nodes.map(n => [n.id, []]));
+  links.forEach(l => {
+    const s = byId.get(lid(l.source)), t = byId.get(lid(l.target));
+    if (s && t) { nbrs.get(s.id).push(t); nbrs.get(t.id).push(s); }
+  });
+  const jitter = () => (Math.random() - 0.5) * 300;
+  let pending = nodes.filter(n => n.x == null);
+  while (pending.length) {
+    const rest = [];
+    pending.forEach(n => {
+      const placed = nbrs.get(n.id).filter(m => m.x != null);
+      if (!placed.length) { rest.push(n); return; }
+      n.x = placed.reduce((a, m) => a + m.x, 0) / placed.length + jitter();
+      n.y = placed.reduce((a, m) => a + m.y, 0) / placed.length + jitter();
+      n.vx = 0; n.vy = 0;
+    });
+    if (rest.length === pending.length) break;
+    pending = rest;
+  }
+  if (!pending.length) return;
+  const placed = nodes.filter(n => n.x != null);
+  const cx = placed.reduce((a, m) => a + m.x, 0) / placed.length;
+  const cy = placed.reduce((a, m) => a + m.y, 0) / placed.length;
+  pending.forEach(n => { n.x = cx + jitter(); n.y = cy + jitter(); n.vx = 0; n.vy = 0; });
+}
+
+/* ─── 配置の保存・復元 ──────────────────────────────────────────────────────
+   再読み込みのたびに一から配置し直さないよう、ノードの座標を localStorage に保存する。
+   作品の id（w0, w1…）は Notion の並び順で振られ、作品が増えるとずれるため、
+   作品は Notion のページ ID（なければタイトル）をキーにする。人物は名前入りの id のまま。
+─────────────────────────────────────────────────────────────────────────────── */
+const _layoutKey = n => n.type === 'work' ? `w:${n.notionPageId || n.label}` : n.id;
+
+// リンクを、保存用のキー（両端の _layoutKey）にする。source/target は id でもノードでもよい
+function _linkKey(l, byId) {
+  const s = typeof l.source === 'object' ? l.source : byId.get(l.source);
+  const t = typeof l.target === 'object' ? l.target : byId.get(l.target);
+  return s && t ? `${_layoutKey(s)}|${_layoutKey(t)}` : null;
+}
+
+function _readLayout() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}');
+    return { pos: saved.pos || {}, links: saved.links ? new Set(saved.links) : null };
+  } catch (e) { return { pos: {}, links: null }; }
+}
+
+function loadSavedLayout() {
+  const { pos } = _readLayout();
+  AN.forEach(n => {
+    const p = pos[_layoutKey(n)];
+    if (p) { n.x = p[0]; n.y = p[1]; }
+  });
+}
+
+function saveLayout() {
+  if (_preSqSnapshot) return; // 検索中の一時的な配置は保存しない
+  try {
+    const { pos: saved } = _readLayout();
+    const pos = {};
+    // 非表示などで今回描いていないノードは前回の位置を引き継ぐ。もう存在しないノードは捨てる
+    AN.forEach(n => {
+      const k = _layoutKey(n);
+      if (n.x != null) pos[k] = [Math.round(n.x), Math.round(n.y)];
+      else if (saved[k]) pos[k] = saved[k];
+    });
+    // つながりも保存し、次に配置済みのノード同士に新しいつながりができたかを判定する
+    const byId = new Map(AN.map(n => [n.id, n]));
+    const links = AL.map(l => _linkKey(l, byId)).filter(Boolean);
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ pos, links }));
+  } catch (e) { /* 保存できなくても表示には影響しない */ }
+}
+
+/* 保存時にはなかったつながりのうち、両端とも配置済みのものを返す。
+   片方が新しいノードなら差分配置で近くに置かれるので含めない。
+   保存につながりがない（この仕組みより前の保存）ときは判定できないので空を返す。 */
+function _newLinksBetweenPlaced(links) {
+  if (_preSqSnapshot) return [];
+  const { links: saved } = _readLayout();
+  if (!saved) return [];
+  const byId = new Map(AN.map(n => [n.id, n]));
+  return links.filter(l => {
+    const s = typeof l.source === 'object' ? l.source : byId.get(l.source);
+    const t = typeof l.target === 'object' ? l.target : byId.get(l.target);
+    return s && t && s.x != null && t.x != null && !saved.has(_linkKey(l, byId));
+  });
+}
+
+/* 配置し直した後、新しくできたつながりが画面の中央に来るよう表示を移す */
+function _focusLink(l) {
+  const byId = new Map(AN.map(n => [n.id, n]));
+  const s = typeof l.source === 'object' ? l.source : byId.get(l.source);
+  const t = typeof l.target === 'object' ? l.target : byId.get(l.target);
+  if (!s || !t) return;
+  const W = window.innerWidth, H = window.innerHeight - 48;
+  const svg = d3.select('#canvas');
+  const k = Math.max(d3.zoomTransform(svg.node()).k, 0.8);
+  svg.call(_zoomBehavior.transform,
+    d3.zoomIdentity.translate(W/2 - k*(s.x + t.x)/2, H/2 - k*(s.y + t.y)/2).scale(k));
+}
+
 /* ─── redraw: 位置を維持したまま SVG と シミュのデータだけ更新 ───────────────
    フィルター・非表示・ノード追加/削除・検索など、
    配置を変えたくないすべての再描画はこちらを呼ぶ。
@@ -232,6 +385,8 @@ function draw(nodes, links, { freeLayout = false } = {}) {
 ─────────────────────────────────────────────────────────────────────────────── */
 function redraw(nodes, links) {
   if (!sim) { draw(nodes, links); return; }
+  // 配置済みのノード同士に新しいつながりができたら、一から配置し直す（draw 側で判定する）
+  if (_newLinksBetweenPlaced(links).length) { draw(nodes, links); return; }
 
   const svg = d3.select('#canvas');
   const g   = svg.select('g');
@@ -293,7 +448,10 @@ function redraw(nodes, links) {
     );
   _fitNodeCards(_nSel);
 
-  // シミュのデータを差し替え（alpha は触らない → 動かない）
+  // 新しく加わったノード（監督の追加など）は差分配置する
+  const hasNew = _prepareNewNodes(nodes, links);
+
+  // シミュのデータを差し替え（新規ノードがなければ alpha は触らない → 動かない）
   sim.stop();
   sim.nodes(nodes);
   sim.force('link').links(links);
@@ -301,6 +459,8 @@ function redraw(nodes, links) {
   if (sim.force('link').initialize) {
     sim.force('link').initialize(nodes, () => Math.random());
   }
+  if (hasNew) _relaxNewNodes();
+  saveLayout(); // つながりが減った場合も記録しておく（同じつながりを付け直したときに判定できるように）
   // 解決後の座標で DOM を再反映
   _nSel.attr('transform', d => `translate(${d.x ?? 0},${d.y ?? 0})`);
   _lpSel.attr('x1', d => (typeof d.source === 'object' ? d.source.x : 0))
