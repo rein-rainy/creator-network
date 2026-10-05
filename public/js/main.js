@@ -25,8 +25,11 @@ function hideGraphOverlay(delayMs = 2000) {
 }
 
 function init(rows) {
+  // 作り直す前の画像を引き継ぐ（アーティストの画像などは描画後に取得するため、引き継がないと一瞬消える）
+  const prevAvatar = new Map(AN.filter(n => n.avatar).map(n => [n.id, n.avatar]));
   const data = buildGraph(rows);
   AN = data.nodes; AL = data.links;
+  AN.forEach(n => { if (!n.avatar && prevAvatar.has(n.id)) n.avatar = prevAvatar.get(n.id); });
 
   // 前回保存した配置から始める（保存がないノードだけ新しく配置される）
   AN.forEach(n => { delete n.x; delete n.y; n.vx = 0; n.vy = 0; });
@@ -395,43 +398,178 @@ function showToast(msg, type = 'ok', duration = 3200) {
   el._t = setTimeout(() => { el.style.display = 'none'; el.className = ''; }, duration);
 }
 
-async function fetchFromNotionAPI() {
-  showGraphOverlay();
-  const btn = document.getElementById('notion-sync-btn');
-  const label = btn.querySelector('span:last-child');
-  btn.classList.add('loading'); label.textContent = '取得中…';
+/* ── Notion との同期 ──
+   開き直したときは前回取得したデータですぐに描き、裏で Notion から取得し直して変わった分だけ反映する。
+   開いている間も定期的に変更を確認し、Notion で作品などが追加・編集されたら同じように反映する。
+   配置は保存してあるので、作り直しても既存ノードの位置はそのままで、増えたノードだけが差分配置される。 */
+const NOTION_CACHE_KEY = 'creator_network_notion_data';
+const NOTION_POLL_MS = 30 * 1000;            // 変更確認の間隔（Notion への問い合わせは1回につき3件）
+const NOTION_FULL_SYNC_MS = 10 * 60 * 1000;  // 変更確認では拾えない削除などのため、この間隔で丸ごと取り直す
+let _pendingNotionData = null;  // 操作中のため反映を待っている取得結果 { data, graphSize }
+let _notionSignature = null;    // 最後に取得したときの変更確認の目印
+let _notionSyncing = false;
+let _refreshRequested = false;  // 裏での取得中に更新ボタンが押された
+let _lastFullSync = 0;
+let _appliedDataSig = null;     // 今の画面を作ったデータ（比較用。反映を見送った取得結果と区別するため保存データとは別に持つ）
+
+// 画面上の編集（作品や監督の追加・削除）を検知するための目印
+const _graphSize = () => `${AN.length}:${AL.length}`;
+
+function applyNotionData(data, { relayout = false } = {}) {
+  ALL_CREATORS = data.creators || [];
+  ALL_ARTISTS = data.artists || [];
+  if (data.tagColors) TAG_COLORS = data.tagColors;
+  // creators / artists フィールドがあればメタ情報を先に読み込む
+  const allPersons = [...ALL_CREATORS, ...ALL_ARTISTS];
+  if (allPersons.length) loadCreatorMeta(allPersons);
+  if (relayout) resetLayout();
+  else if (AN.length) saveLayout(); // 作り直す直前の配置（ドラッグ直後など）を確実に引き継ぐ
+  init(data.results);
+  _appliedDataSig = _notionDataSig(JSON.stringify(data));
+}
+
+// Notion のファイル画像は取得のたびに署名の違う URL になるため、比較では署名部分を無視する
+const _notionDataSig = json => json.replace(/(https:\/\/prod-files-secure\.s3[^"?]*)\?[^"]*/g, '$1');
+
+// 検索・ドラッグ・パネルやモーダルの表示中に作り直すと、表示が飛んだり入力中の内容が消えたりするので待つ
+function _isUserBusy() {
+  if (sq || draggedNode) return true;
+  if (['info-panel', 'filter-modal', 'hidden-panel', 'recent-overlay', 'path-overlay', 'dir-suggest-panel']
+      .some(id => document.getElementById(id)?.classList.contains('visible'))) return true;
+  if (document.querySelector('#tag-filter-dropdown.open, #ctx-menu[style*="block"]')) return true;
+  return false;
+}
+
+function _applyWhenIdle(data, graphSize) {
+  const first = !_pendingNotionData;
+  _pendingNotionData = { data, graphSize };
+  if (!first) return;
+  const tryApply = () => {
+    if (!_pendingNotionData) return;
+    // 取得を始めてから画面上で作品や監督を追加・削除した場合、取得結果のほうが古い可能性があるので反映しない
+    // （Notion への書き込みが済めば次の変更確認で取り直される）
+    if (_pendingNotionData.graphSize !== _graphSize()) { _pendingNotionData = null; return; }
+    if (_isUserBusy()) { setTimeout(tryApply, 1500); return; }
+    const { data: d } = _pendingNotionData; _pendingNotionData = null;
+    applyNotionData(d);
+  };
+  tryApply();
+}
+
+/* background: 裏での取得（開き直したとき・変更確認）。変わった分だけ、操作の邪魔にならないときに反映する
+   relayout:   更新ボタン。最新を取得してから、全体を一から配置し直す */
+async function fetchFromNotionAPI({ background = false, relayout = false } = {}) {
+  if (_notionSyncing) {
+    // 裏での取得が終わってから改めて取得する（その取得結果は古いかもしれないので使わない）
+    if (relayout) { _refreshRequested = true; _setSyncBtnLoading(true); }
+    return;
+  }
+  _notionSyncing = true;
+  if (!background) showGraphOverlay();
+  if (relayout) _setSyncBtnLoading(true);
+  const graphSize = _graphSize();
   try {
     const r = await fetch('/notion-data', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}), signal: AbortSignal.timeout(60000),
     });
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const data = await r.json();
+    const { signature, ...data } = await r.json();
     if (data.error) throw new Error(data.error);
     if (!data.results?.length) throw new Error('データが0件です');
-    ALL_CREATORS = data.creators || [];
-    ALL_ARTISTS = data.artists || [];
-    if (data.tagColors) TAG_COLORS = data.tagColors;
-    // creators / artists フィールドがあればメタ情報を先に読み込む
-    const allPersons = [...ALL_CREATORS, ...(data.artists ?? [])];
+    _notionSignature = signature;
+    _lastFullSync = Date.now();
 
-    if (allPersons.length) loadCreatorMeta(allPersons);
-    init(data.results);
+    const json = JSON.stringify(data);
+    try { localStorage.setItem(NOTION_CACHE_KEY, json); } catch {}
     localStorage.setItem('notion_last_sync', new Date().toLocaleString('ja-JP'));
+
+    if (!background) applyNotionData(data, { relayout });
+    // 裏での取得：内容が同じなら作り直さない。ただし画像の URL は失効するので新しいものに差し替える
+    else if (_notionDataSig(json) === _appliedDataSig) _refreshNotionAvatars(data);
+    else _applyWhenIdle(data, graphSize);
   } catch (e) {
     console.error('[Notion]', e);
-    const msg = (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'))
-      ? 'CORSエラー: server.js をご利用ください' : `✗ ${e.message}`;
-    showToast(msg, 'err', 6000);
-    hideGraphOverlay(0);
+    // 裏での取得の失敗は次の確認で取り直すので、知らせるのは画面にまだ何もないときだけ
+    if (!background) {
+      const msg = (e.message.includes('Failed to fetch') || e.message.includes('NetworkError'))
+        ? 'CORSエラー: server.js をご利用ください' : `✗ ${e.message}`;
+      showToast(msg, 'err', 6000);
+      hideGraphOverlay(0);
+    }
   } finally {
-    btn.classList.remove('loading'); label.textContent = '更新';
+    _notionSyncing = false;
+    if (_refreshRequested) { _refreshRequested = false; fetchFromNotionAPI({ relayout: true }); }
+    else if (relayout) _setSyncBtnLoading(false);
   }
 }
 
-document.getElementById('notion-sync-btn').addEventListener('click', fetchFromNotionAPI);
-document.getElementById('relayout-btn').addEventListener('click', () => {
-  if (AN.length && confirm('すべてのノードを一から配置し直します。よろしいですか？')) relayoutAll();
-});
+function _setSyncBtnLoading(on) {
+  const btn = document.getElementById('notion-sync-btn');
+  btn.classList.toggle('loading', on);
+  btn.querySelector('span:last-child').textContent = on ? '取得中…' : '更新';
+}
+
+// 変更確認：Notion で最後に編集されたページが前回の取得時から変わっていれば取り直す
+async function checkNotionChanges() {
+  if (document.hidden || _notionSyncing) return;
+  // まだ一度も描けていない（最初の取得に失敗した）ときは取得からやり直す
+  if (!AN.length) { fetchFromNotionAPI(); return; }
+  if (Date.now() - _lastFullSync >= NOTION_FULL_SYNC_MS) { fetchFromNotionAPI({ background: true }); return; }
+  try {
+    const r = await fetch('/notion-changes', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: '{}', signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const { signature } = await r.json();
+    if (signature && signature !== _notionSignature) fetchFromNotionAPI({ background: true });
+  } catch (e) {
+    console.warn('[Notion] 変更確認に失敗', e.message);
+  }
+}
+setInterval(checkNotionChanges, NOTION_POLL_MS);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkNotionChanges(); });
+
+// 内容が変わっていないときに、期限付きの画像 URL だけを新しいものに差し替える
+function _refreshNotionAvatars(data) {
+  ALL_CREATORS = data.creators || [];
+  ALL_ARTISTS = data.artists || [];
+  loadCreatorMeta([...ALL_CREATORS, ...ALL_ARTISTS]);
+  AN.forEach(n => {
+    // Notion にアップロードした画像（avatarType: file）だけが期限付き。Instagram から取った画像などは触らない
+    if (n.type !== 'director' || n.avatarType !== 'file') return;
+    const avatar = getCreatorMeta(n.label).avatar;
+    if (!avatar || avatar === n.avatar) return;
+    n.avatar = avatar;
+    // 失効した URL で読み込みに失敗し、イニシャル表示に替わっていることもあるので画像ごと入れ直す
+    const avatarDiv = document.querySelector(`.pnode-card[data-id="${CSS.escape(n.id)}"] .pnode-avatar`);
+    if (!avatarDiv) return;
+    const initial = [...n.label][0] || '?';
+    const img = document.createElement('img');
+    img.src = avatar; img.alt = '';
+    img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+    img.onerror = () => { avatarDiv.innerHTML = `<span class="pnode-initial">${esc(initial)}</span>`; };
+    avatarDiv.replaceChildren(img);
+  });
+}
+
+// 開き直したとき：前回のデータがあればすぐに描き、裏で取得し直す。なければ今まで通り取得してから描く
+function loadInitialData() {
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(NOTION_CACHE_KEY) || 'null'); } catch {}
+  if (!cached?.results?.length) { fetchFromNotionAPI(); return; }
+  try {
+    applyNotionData(cached);
+  } catch (e) {
+    console.error('[Notion cache]', e);
+    fetchFromNotionAPI();
+    return;
+  }
+  fetchFromNotionAPI({ background: true });
+}
+
+// 更新ボタン：Notion から最新を取得し、全体を一から配置し直す
+document.getElementById('notion-sync-btn').addEventListener('click', () => fetchFromNotionAPI({ relayout: true }));
 updateSearchModeBtn();
-window.addEventListener('load', fetchFromNotionAPI);
+window.addEventListener('load', loadInitialData);

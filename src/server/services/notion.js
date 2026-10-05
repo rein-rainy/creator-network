@@ -17,6 +17,7 @@ function notionRequest(method, apiPath, body) {
     };
     const req = https.request(options, (res) => {
       let data = '';
+      res.setEncoding('utf8'); // 日本語が切れ目をまたいでも文字化けしないように
       res.on('data', c => data += c);
       res.on('end', () => {
         try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
@@ -231,6 +232,23 @@ async function buildData(targetDb = 'all') {
 
   console.log(`[Notion] 完了 — 作品 ${rows.length} 件 / Creator ${creators.length} 件 / Artist ${artists.length} 件`);
   return { rows, creators, artists, count: rows.length, tagColors: await getTagColors() };
+}
+
+/* 変更確認用の目印。3つの DB それぞれで最後に編集されたページの id と編集時刻をつなげたもの。
+   作品の追加・編集があればこれが変わるので、ブラウザは変わったときだけ buildData を取り直す。
+   ※ Notion の last_edited_time は分単位で、削除（アーカイブ）されたページは検索に出てこない。
+     同じページを同じ分のうちに続けて編集した場合や削除は、ブラウザ側の定期的な取り直しで拾う。 */
+async function getChangeSignature() {
+  const parts = await Promise.all([config.DB_WORKS, config.DB_CREATORS, config.DB_ARTISTS].map(async dbId => {
+    const response = await notionRequest('POST', `/v1/databases/${dbId}/query`, {
+      page_size: 1,
+      sorts: [{ timestamp: 'last_edited_time', direction: 'descending' }],
+    });
+    if (response.status !== 200) throw new Error(`変更確認失敗: ${response.status}`);
+    const page = response.body.results[0];
+    return page ? `${page.id}@${page.last_edited_time}` : '';
+  }));
+  return parts.join('|');
 }
 
 async function addCreatorToWork(workId, creatorPageId) {
@@ -483,6 +501,7 @@ async function removeCreatorFromWork(workId, creatorPageId) {
 module.exports = {
   notionRequest,
   buildData,
+  getChangeSignature,
   addCreatorToWork,
   createCreator,
   createArtist,

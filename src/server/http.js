@@ -1,6 +1,7 @@
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let body = '';
+    req.setEncoding('utf8'); // 日本語が切れ目をまたいでも文字化けしないように
     req.on('data', chunk => body += chunk);
     req.on('end', () => {
       try {

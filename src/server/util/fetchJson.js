@@ -27,6 +27,7 @@ function fetchJson(url, {
       },
     }, (res) => {
       let data = '';
+      res.setEncoding('utf8'); // 日本語が切れ目をまたいでも文字化けしないように
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         const { statusCode } = res;

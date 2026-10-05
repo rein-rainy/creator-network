@@ -418,14 +418,12 @@ function _pullForNewLinks(links) {
   return pulled;
 }
 
-/* ─── relayoutAll: 「配置をやり直す」ボタン。保存した配置を捨てて一から配置し直す ─── */
-function relayoutAll() {
+/* ─── resetLayout: 保存した配置を捨てる（更新ボタン）。次の draw() で一から配置される ─── */
+function resetLayout() {
   AN.forEach(n => { delete n.x; delete n.y; n.vx = 0; n.vy = 0; n.fx = null; n.fy = null; });
   try { localStorage.removeItem(LAYOUT_KEY); } catch (e) { /* ignore */ }
   // 一から配置すると画面中央を基準に並ぶので、表示位置も初期状態に戻す
-  d3.select('#canvas').call(_zoomBehavior.transform, d3.zoomIdentity);
-  const { nodes, links } = filteredData();
-  draw(nodes, links);
+  if (_zoomBehavior) d3.select('#canvas').call(_zoomBehavior.transform, d3.zoomIdentity);
 }
 
 /* ─── redraw: 位置を維持したまま SVG と シミュのデータだけ更新 ───────────────

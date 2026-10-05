@@ -47,6 +47,7 @@ async function fetchIgProfilePic(username) {
 
     const req = https.request(options, (igRes) => {
       let data = '';
+      igRes.setEncoding('utf8'); // 日本語が切れ目をまたいでも文字化けしないように
       igRes.on('data', chunk => data += chunk);
       igRes.on('end', () => {
         try {
@@ -99,6 +100,7 @@ async function searchArtistImage(artistName) {
 
     https.get(options, (res) => {
       let data = '';
+      res.setEncoding('utf8'); // 日本語が切れ目をまたいでも文字化けしないように
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         try {

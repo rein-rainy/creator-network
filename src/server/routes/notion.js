@@ -10,8 +10,15 @@ async function handleNotionRoutes(req, res) {
         code: 'NOTION_TOKEN_MISSING',
       });
     }
+    // 目印は取得の前に取る（取得中に編集されても、次の変更確認で取り直される）
+    const signature = await notion.getChangeSignature();
     const { rows, creators, artists, count, tagColors } = await notion.buildData(database);
-    return { results: rows, creators, artists, count, tagColors };
+    return { results: rows, creators, artists, count, tagColors, signature };
+  })) return true;
+
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-changes', label: 'Notion Changes Error' }, async () => {
+    if (!config.NOTION_TOKEN) throw new HttpError(503, 'Notion token missing', { error: 'Notion API is not configured.' });
+    return { signature: await notion.getChangeSignature() };
   })) return true;
 
   if (await jsonRoute(req, res, { method: 'POST', path: '/notion-add-creator', label: 'Notion Add Error' }, async ({ workId, creatorPageId }) => {
