@@ -7,7 +7,7 @@
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<link rel="stylesheet" href="/css/styles.css?v=29">
+<link rel="stylesheet" href="/css/styles.css?v=30">
 </head>
 <body data-theme="dark">
 
@@ -35,7 +35,10 @@
     <span data-icon="list-filter" data-size="16" id="smb-icon-filter"></span>
     <span data-icon="zoom-in" data-size="16" id="smb-icon-nav" style="display:none"></span>
   </button>
-  <input type="text" id="search-box" placeholder="検索...">
+  <div id="search-wrap">
+    <input type="text" id="search-box" placeholder="検索" autocomplete="off">
+    <button type="button" class="icon-btn-xs" id="search-clear" title="検索をクリア"><span data-icon="x" data-size="14"></span></button>
+  </div>
   <div id="tag-filter-wrap">
     <button class="icon-btn" id="tag-filter-btn" title="タグで絞り込み">
       <span data-icon="funnel" data-size="16"></span>
@@ -242,9 +245,9 @@
   <div id="pc2"></div>
 </div>
 
-<script src="/js/core.js?v=14"></script>
+<script src="/js/core.js?v=15"></script>
 <script src="/js/filters.js?v=5"></script>
-<script src="/js/graph.js?v=8"></script>
+<script src="/js/graph.js?v=11"></script>
 <script src="/js/panel.js?v=10"></script>
 <script src="/js/imdb.js?v=10"></script>
 <script src="/js/tag-filter.js?v=5"></script>
@@ -252,7 +255,7 @@
 <script src="/js/director-suggest.js?v=3"></script>
 <script src="/js/recent-works.js?v=19"></script>
 <script src="/js/path-finder.js?v=6"></script>
-<script src="/js/main.js?v=9"></script>
+<script src="/js/main.js?v=11"></script>
 <!-- ── Role Picker Popover ── -->
 <div id="role-picker-popover" class="picker-popover">
   <div class="picker-popover-header">

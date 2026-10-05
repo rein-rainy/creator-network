@@ -205,7 +205,6 @@ function updateSearchModeBtn() {
   document.getElementById('smb-icon-nav').style.display    = isFilter ? 'none' : '';
   btn.classList.toggle('active', !isFilter);
   btn.title = isFilter ? '検索モード: フィルター' : '検索モード: 移動';
-  document.getElementById('search-box').placeholder = isFilter ? '検索（フィルター）...' : '検索（移動）...';
 }
 
 /** navigateモード: 一致ノードをハイライトし、その重心にズームで移動する */
@@ -260,9 +259,14 @@ function navigateToMatches(q) {
   const currentZoom = d3.zoomTransform(svg.node());
   const k = Math.max(currentZoom.k, 0.8); // 現在のズームが大きければ維持、小さければ0.8に
   svg.transition().duration(500)
-    .call(d3.zoom().scaleExtent([0.04,4]).on('zoom', e => {
-      svg.select('g').attr('transform', e.transform);
-    }).transform, d3.zoomIdentity.translate(W/2 - k*cx, H/2 - k*cy).scale(k));
+    .call(_zoomBehavior.transform, d3.zoomIdentity.translate(W/2 - k*cx, H/2 - k*cy).scale(k));
+}
+
+// 検索前の表示位置に戻す（検索中は freeLayout の draw() で初期位置にリセットされている）
+function restorePreSqTransform() {
+  if (!_preSqTransform) return;
+  d3.select('#canvas').call(_zoomBehavior.transform, _preSqTransform);
+  _preSqTransform = null;
 }
 
 document.getElementById('search-mode-btn').addEventListener('click', () => {
@@ -282,6 +286,7 @@ document.getElementById('search-mode-btn').addEventListener('click', () => {
       const { nodes, links } = filteredData();
       redraw(nodes, links);
       settleSimForces();  // 検索中に強まった力学パラメータを元の安定状態へ戻す
+      restorePreSqTransform();
       navigateToMatches(sq);
     }
   }
@@ -290,6 +295,7 @@ document.getElementById('search-mode-btn').addEventListener('click', () => {
 document.getElementById('search-box').addEventListener('input', e => {
   const prev = sq;
   sq = e.target.value.trim();
+  document.getElementById('search-wrap').classList.toggle('filled', !!e.target.value);
 
   if (searchMode === 'navigate') {
     // navigateモード: フィルターせずハイライト＋移動
@@ -302,6 +308,7 @@ document.getElementById('search-box').addEventListener('input', e => {
   if (!prev && sq) {
     _preSqSnapshot = {};
     AN.forEach(n => { if (n.x != null) _preSqSnapshot[n.id] = { x: n.x, y: n.y }; });
+    _preSqTransform = d3.zoomTransform(document.getElementById('canvas'));
   }
 
   if (!sq && _preSqSnapshot) {
@@ -313,9 +320,18 @@ document.getElementById('search-box').addEventListener('input', e => {
     const { nodes, links } = filteredData();
     redraw(nodes, links);
     settleSimForces();  // 検索中に強まった力学パラメータを元の安定状態へ戻す
+    restorePreSqTransform();
   } else {
     refresh({ freeLayout: true });
   }
+});
+
+const _searchClear = document.getElementById('search-clear');
+_searchClear.addEventListener('mousedown', e => e.preventDefault()); // フォーカス状態を変えない
+_searchClear.addEventListener('click', () => {
+  const box = document.getElementById('search-box');
+  box.value = '';
+  box.dispatchEvent(new Event('input'));
 });
 
 function stopYtIframe() {

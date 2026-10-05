@@ -18,12 +18,14 @@ let ALL_CREATORS = [];
 let ALL_ARTISTS = [];
 let aFilters = new Set(), sq = '', depth2 = false;  // aFilters: 空=全表示
 let searchMode = 'filter'; // 'filter' | 'navigate'
-let showDir = true, showArt = true, simTimer = null, baseLinkStrength = 0.5;
+let showDir = true, showArt = true, baseLinkStrength = 0.5;
 let hiddenIds = new Set();
 let selId = null, hovId = null;
 let sim = null, gDimRect = null, draggedNode = null, connectedToDragged = new Set();
 let _lpSel = null, _nSel = null; // tick ハンドラが参照する D3 セレクション
 let _preSqSnapshot = null; // 検索開始直前のノード座標スナップショット
+let _preSqTransform = null; // 検索開始直前の表示位置（ズーム・パン）
+let _zoomBehavior = null;  // draw() が #canvas に付けた d3.zoom（表示位置の変更はこれ経由で行う）
 
 /* ═══════════════════════════════════════════
    UTILS

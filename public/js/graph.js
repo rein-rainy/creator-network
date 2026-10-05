@@ -3,7 +3,7 @@
 ═══════════════════════════════════════════ */
 
 /* シミュレーションを初期レイアウト完了後の「安定状態」パラメータに戻す。
-   通常 draw() 後の simTimer と、検索終了時（検索ボックスが空）に共通で使う。
+   通常 draw() 後の安定化切り替えと、検索終了時（検索ボックスが空）に共通で使う。
    検索中（freeLayout）は起動時の強い力（charge -2500 / center あり / link 0.5）が
    残るため、これを呼ばないと解除後もノードが元と違う動きをしてしまう。 */
 function settleSimForces() {
@@ -25,7 +25,7 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   const svg = d3.select('#canvas').attr('width', W).attr('height', H);
   const g = svg.append('g');
 
-  svg.call(d3.zoom().scaleExtent([0.04, 4]).on('zoom', e => {
+  _zoomBehavior = d3.zoom().scaleExtent([0.04, 4]).on('zoom', e => {
     g.attr('transform', e.transform);
     // ズーム/パン後に画面内に入った未取得ノードをオブザーバーに再登録
     if (_avatarObserver) {
@@ -51,7 +51,8 @@ function draw(nodes, links, { freeLayout = false } = {}) {
         Promise.all(nowVisible.map(node => _fetchOneIgAvatar(node)));
       }
     }
-  }));
+  });
+  svg.call(_zoomBehavior);
   svg.on('click', e => {
     if (e.target.tagName === 'svg' || e.target.tagName === 'SVG') {
       selId = null; hovId = null; applyHL(null, null);
@@ -63,6 +64,12 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   gDimRect = g.append('rect').attr('x',-99999).attr('y',-99999).attr('width',199999).attr('height',199999)
     .style('fill', 'var(--bg-solid)').attr('fill-opacity', 0).attr('pointer-events', 'none')
     .style('transition', 'fill-opacity .18s');
+
+  // 表示位置は #canvas 側に記憶されているが、作り直した <g> には反映されないため合わせる。
+  // ずれたままだとドラッグ開始の瞬間に記憶側の位置へ飛ぶ。
+  // freeLayout（検索中）はシミュが画面中央に集めるので、表示位置も初期状態に戻す。
+  if (freeLayout) svg.call(_zoomBehavior.transform, d3.zoomIdentity);
+  else g.attr('transform', d3.zoomTransform(svg.node()));
 
   const gL = g.append('g').attr('class', 'layer-links');
   const gN = g.append('g').attr('class', 'layer-nodes');
@@ -121,43 +128,12 @@ function draw(nodes, links, { freeLayout = false } = {}) {
 
   _nSel.each(function(d) { _renderNodeContent(d3.select(this), d); });
 
-  // 描画後に各pnode-cardの実幅を測定し foreignObject を中心基準で更新
-  // avatar は fetchArtistAvatars() が非同期で差し込むため、ここでは寸法のみ処理
-  requestAnimationFrame(() => {
-    _nSel.each(function(d) {
-      if (d.type === 'work') return;
-      const fo = d3.select(this).select('foreignObject');
-      const cardEl = this.querySelector('.pnode-card');
-      if (!fo.empty() && cardEl) {
-        const rect = cardEl.getBoundingClientRect();
-        if (rect.width > 0) {
-          const w = Math.ceil(rect.width);
-          const h = Math.ceil(rect.height);
-          fo.attr('width', w).attr('height', h)
-            .attr('x', -w / 2).attr('y', -h / 2);
-          d.fw = w; d.fh = h;
-        }
-      }
-      // node.avatar が既にある場合（前回 fetch 済み）は即反映
-      if (d.avatar) {
-        const avatarDiv = this.querySelector('.pnode-avatar');
-        if (avatarDiv && !avatarDiv.querySelector('img')) {
-          avatarDiv.innerHTML = '';
-          const img = document.createElement('img');
-          img.src = d.avatar; img.alt = '';
-          img.style.cssText = 'width:100%;height:100%;object-fit:cover';
-          const initial = [...d.label][0] || '?';
-          img.onerror = () => { avatarDiv.innerHTML = `<span class="pnode-initial">${initial}</span>`; };
-          avatarDiv.appendChild(img);
-        }
-      }
-    });
-  });
+  _fitNodeCards(_nSel);
 
   // 既存ノードは現在位置を fx/fy で固定してからシミュに渡す。
   // これにより charge/center/link の力が一斉にかかっても既存ノードは動かない。
   // 新規ノード（x/y が未定義）のみ自然に配置される。
-  // simTimer の完了タイミングで fx/fy を解除する。
+  // 安定化フェーズへの切り替え時に fx/fy を解除する。
   // ただし freeLayout=true（検索時など）は固定しない——シミュに自由に動かせる。
   const isFirstDraw = !sim;
   if (!freeLayout) {
@@ -169,6 +145,13 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   // freeLayout（検索時）は前回の緩和後パラメータが残っているため初期値に戻す。
   // 通常の draw（初回・更新どちらも）も同様にリセットして、更新時に広がらないようにする。
   baseLinkStrength = 0.5;
+
+  // 安定化フェーズへ切り替える tick 数（60fps 換算で初回 約3秒 / 更新時 約0.8秒）。
+  // setTimeout だと別タブ表示中（rAF 停止でシミュが止まる）にも時間だけ進み、
+  // 広がる前に力が弱まって固まってしまうため、実際に進んだ tick 数で判定する。
+  // freeLayout は固定なしで自走させるので切り替えない。
+  let settleAtTick = freeLayout ? 0 : (isFirstDraw ? 180 : 48);
+  let tickCount = 0;
 
   if (sim) sim.stop();
   sim = d3.forceSimulation(nodes)
@@ -225,20 +208,13 @@ function draw(nodes, links, { freeLayout = false } = {}) {
         if (_lpSel) _lpSel.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
                           .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
         if (_nSel)  _nSel.attr('transform', d => `translate(${d.x},${d.y})`);
-      });
 
-  if (simTimer) clearTimeout(simTimer);
-  if (!freeLayout) {
-    simTimer = setTimeout(() => {
-      if (sim) {
-        settleSimForces();
-        sim.alpha(0.05).restart();
-      }
-    }, isFirstDraw ? 3000 : 800);
-  } else {
-    // freeLayout: 固定なしで起動したシミュをそのまま自走させる（pin 解除フェーズは不要）
-    simTimer = null;
-  }
+        if (settleAtTick && ++tickCount >= settleAtTick) {
+          settleAtTick = 0;
+          settleSimForces();
+          sim.alpha(0.05).restart();
+        }
+      });
 
   if (selId)      applyHL(selId, 'click');
   else if (hovId) applyHL(hovId, 'hover');
@@ -315,6 +291,7 @@ function redraw(nodes, links) {
       update => update,
       exit   => exit.remove()
     );
+  _fitNodeCards(_nSel);
 
   // シミュのデータを差し替え（alpha は触らない → 動かない）
   sim.stop();
@@ -338,6 +315,41 @@ function redraw(nodes, links) {
 
   if (selId)      applyHL(selId, 'click');
   else if (hovId) applyHL(hovId, 'hover');
+}
+
+/* ─── _fitNodeCards: 人物カードの実幅を測り foreignObject を中心基準に合わせる ───
+   カードは中身の幅に縮むため、測らないと線の集まる中心から左にずれる。
+   レイアウト上の寸法（computed style）はズーム倍率の影響を受けず、別タブ表示中（rAF 停止）でも測れるので、
+   描画直後にその場で測る。avatar は fetchArtistAvatars() が非同期で差し込む。
+─────────────────────────────────────────────────────────────────────────────── */
+function _fitNodeCards(sel) {
+  sel.each(function(d) {
+    if (d.type === 'work') return;
+    const fo = d3.select(this).select('foreignObject');
+    const cardEl = this.querySelector('.pnode-card');
+    if (!fo.empty() && cardEl && cardEl.offsetWidth > 0) {
+      // offsetWidth は整数に丸められ、切り捨て側だと文字が折り返すため小数の実寸を切り上げる
+      const cs = getComputedStyle(cardEl);
+      const w = Math.ceil(parseFloat(cs.width));
+      const h = Math.ceil(parseFloat(cs.height));
+      fo.attr('width', w).attr('height', h)
+        .attr('x', -w / 2).attr('y', -h / 2);
+      d.fw = w; d.fh = h;
+    }
+    // node.avatar が既にある場合（前回 fetch 済み）は即反映
+    if (d.avatar) {
+      const avatarDiv = this.querySelector('.pnode-avatar');
+      if (avatarDiv && !avatarDiv.querySelector('img')) {
+        avatarDiv.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = d.avatar; img.alt = '';
+        img.style.cssText = 'width:100%;height:100%;object-fit:cover';
+        const initial = [...d.label][0] || '?';
+        img.onerror = () => { avatarDiv.innerHTML = `<span class="pnode-initial">${initial}</span>`; };
+        avatarDiv.appendChild(img);
+      }
+    }
+  });
 }
 
 /* ─── _renderNodeContent: ノード1つ分の内部 DOM を構築 ─────────────────────── */
