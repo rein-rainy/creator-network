@@ -83,6 +83,7 @@ function _pathSetupPicker(slot) {
   const wrap   = document.getElementById(`pf-pick-${slot}`);
   const input  = wrap.querySelector('.pf-input');
   const list   = wrap.querySelector('.pf-options');
+  const clear  = wrap.querySelector('.pf-clear');
   let items = [], active = 0;
 
   const close = () => { list.classList.remove('visible'); };
@@ -122,9 +123,19 @@ function _pathSetupPicker(slot) {
   input.addEventListener('input', () => { wrap.classList.remove('filled'); render(); });
   input.addEventListener('blur', () => {
     close();
-    // 選び直さずに離れたら、選択中の作品名に戻す
+    // 文字を全部消して離れたら選択を外す。途中まで打って離れたら、選択中の作品名に戻す
+    if (!input.value.trim() && _pathSel[slot]) { _pathSel[slot] = null; renderPathResult(); }
     input.value = _pathSel[slot]?.label || '';
     wrap.classList.toggle('filled', !!_pathSel[slot]);
+  });
+  clear.addEventListener('mousedown', e => e.preventDefault());
+  clear.addEventListener('click', () => {
+    _pathSel[slot] = null;
+    input.value = '';
+    wrap.classList.remove('filled');
+    close();
+    input.blur();
+    renderPathResult();
   });
   input.addEventListener('keydown', e => {
     if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(active + 1, items.length - 1); highlight(); }
@@ -181,6 +192,7 @@ function renderPathResult() {
   const nav  = document.getElementById('pf-route-nav');
   const { a, b } = _pathSel;
   nav.hidden = true;
+  document.getElementById('pf-farthest').disabled = !a && !b;
 
   if (!a || !b) {
     sub.textContent = '';
@@ -271,6 +283,34 @@ function _pathRandomPair() {
   renderPathResult();
 }
 
+/** 選ばれている側（A を優先）から最も遠い作品を、もう一方にセットする。
+    同じ距離の作品が複数あれば、押すたびにその中から選び直す */
+function _pathFarthest() {
+  const fromSlot = _pathSel.a ? 'a' : 'b';
+  const toSlot = fromSlot === 'a' ? 'b' : 'a';
+  const from = _pathSel[fromSlot];
+  if (!from) return;
+  const adj = _pathAdjacency();
+  const dist = new Map([[from.id, 0]]);
+  let frontier = [from.id], last = [];
+  while (frontier.length) {
+    const next = [];
+    for (const u of frontier) {
+      for (const { id: v } of adj.get(u) || []) {
+        if (!dist.has(v)) { dist.set(v, dist.get(u) + 1); next.push(v); }
+      }
+    }
+    const works = next.filter(id => AN.find(n => n.id === id)?.type === 'work');
+    if (works.length) last = works;
+    frontier = next;
+  }
+  if (!last.length) { showToast('この作品は他の作品とつながっていません', 'err'); return; }
+  const others = last.filter(id => id !== _pathSel[toSlot]?.id);
+  const pool = others.length ? others : last;
+  _pathPickers[toSlot].set(AN.find(n => n.id === pool[Math.floor(Math.random() * pool.length)]));
+  renderPathResult();
+}
+
 document.getElementById('path-btn').addEventListener('click', openPathFinder);
 document.getElementById('pf-close').addEventListener('click', closePathFinder);
 document.getElementById('pf-swap').addEventListener('click', () => {
@@ -279,6 +319,7 @@ document.getElementById('pf-swap').addEventListener('click', () => {
   renderPathResult();
 });
 document.getElementById('pf-random').addEventListener('click', _pathRandomPair);
+document.getElementById('pf-farthest').addEventListener('click', _pathFarthest);
 document.getElementById('pf-prev').addEventListener('click', () => _pathStepRoute(-1));
 document.getElementById('pf-next').addEventListener('click', () => _pathStepRoute(1));
 // 長いチェーンは縦ホイールでも横に送れるようにする

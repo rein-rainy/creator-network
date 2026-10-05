@@ -1049,11 +1049,14 @@ g.nd { transition: opacity .18s; }
 .pf-pick.filled .pf-pick-label { background: var(--ink); color: var(--bg2); box-shadow: none; }
 .pf-input {
   width: 100%; background: var(--bg3); border: none; box-shadow: var(--shadow-control);
-  color: var(--ink); padding: 8px 12px 8px 36px; font-size: 13px; border-radius: var(--r-sm);
+  color: var(--ink); padding: 8px 36px 8px 36px; font-size: 13px; border-radius: var(--r-sm);
   outline: none; font-family: var(--sans); transition: box-shadow .18s var(--ease);
   text-overflow: ellipsis;
 }
 .pf-input:focus { box-shadow: 0 0 0 1px var(--ink-3); }
+.pf-clear { position: absolute; right: 4px; display: none; }
+.pf-clear:hover { background: var(--hairline-2); }
+.pf-pick.filled .pf-clear { display: flex; }
 .pf-options {
   position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 10;
   background: var(--bg2); box-shadow: var(--shadow-pop); border-radius: var(--r-xl);
@@ -1107,6 +1110,7 @@ g.nd { transition: opacity .18s; }
   padding: 10px 20px; border-top: 1px solid var(--hairline); flex-shrink: 0;
 }
 .pf-route-nav[hidden] { display: none; }
+#pf-farthest:disabled { opacity: .4; pointer-events: none; }
 .pf-route-count { font-family: var(--mono); font-size: 11px; color: var(--ink-2); font-variant-numeric: tabular-nums; min-width: 64px; text-align: center; }
 
 @media (max-width: 600px) {

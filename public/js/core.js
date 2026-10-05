@@ -18,12 +18,14 @@ let ALL_CREATORS = [];
 let ALL_ARTISTS = [];
 let aFilters = new Set(), sq = '', depth2 = false;  // aFilters: 空=全表示
 let searchMode = 'filter'; // 'filter' | 'navigate'
-let showDir = true, showArt = true, simTimer = null, baseLinkStrength = 0.5;
+let showDir = true, showArt = true, baseLinkStrength = 0.5;
 let hiddenIds = new Set();
 let selId = null, hovId = null;
 let sim = null, gDimRect = null, draggedNode = null, connectedToDragged = new Set();
 let _lpSel = null, _nSel = null; // tick ハンドラが参照する D3 セレクション
 let _preSqSnapshot = null; // 検索開始直前のノード座標スナップショット
+let _preSqTransform = null; // 検索開始直前の表示位置（ズーム・パン）
+let _zoomBehavior = null;  // draw() が #canvas に付けた d3.zoom（表示位置の変更はこれ経由で行う）
 
 /* ═══════════════════════════════════════════
    UTILS
@@ -55,6 +57,7 @@ const _ICON_PATHS = {
   route:          '<circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/>',
   shuffle:        '<path d="m18 14 4 4-4 4"/><path d="m18 2 4 4-4 4"/><path d="M2 18h1.973a4 4 0 0 0 3.3-1.7l5.454-7.6a4 4 0 0 1 3.3-1.7H22"/><path d="M2 6h1.972a4 4 0 0 1 3.6 2.2"/><path d="M22 18h-6.041a4 4 0 0 1-3.3-1.8l-.359-.45"/>',
   'arrow-left-right': '<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
+  'arrow-right-to-line': '<path d="M17 12H3"/><path d="m11 18 6-6-6-6"/><path d="M21 5v14"/>',
   'chevron-left': '<path d="m15 18-6-6 6-6"/>',
   'chevron-right':'<path d="m9 18 6-6-6-6"/>',
   pencil:         '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/>',

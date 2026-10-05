@@ -7,7 +7,7 @@
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<link rel="stylesheet" href="/css/styles.css?v=27">
+<link rel="stylesheet" href="/css/styles.css?v=29">
 </head>
 <body data-theme="dark">
 
@@ -143,6 +143,9 @@
         <div class="fm2-name">作品のつながり</div>
         <div class="fm2-sub" id="pf-sub"></div>
       </div>
+      <button class="icon-btn-sm" id="pf-farthest" title="選んだ作品から一番遠い作品を表示" disabled>
+        <span data-icon="arrow-right-to-line" data-size="14"></span>
+      </button>
       <button class="icon-btn-sm" id="pf-random" title="ランダムに2作品を選ぶ">
         <span data-icon="shuffle" data-size="14"></span>
       </button>
@@ -152,6 +155,7 @@
       <div class="pf-pick" id="pf-pick-a">
         <span class="pf-pick-label">A</span>
         <input type="text" class="pf-input" placeholder="作品Aを検索..." autocomplete="off">
+        <button type="button" class="icon-btn-xs pf-clear" title="作品Aの選択を外す"><span data-icon="x" data-size="14"></span></button>
         <div class="pf-options"></div>
       </div>
       <button class="icon-btn-sm" id="pf-swap" title="AとBを入れ替え">
@@ -160,6 +164,7 @@
       <div class="pf-pick" id="pf-pick-b">
         <span class="pf-pick-label">B</span>
         <input type="text" class="pf-input" placeholder="作品Bを検索..." autocomplete="off">
+        <button type="button" class="icon-btn-xs pf-clear" title="作品Bの選択を外す"><span data-icon="x" data-size="14"></span></button>
         <div class="pf-options"></div>
       </div>
     </div>
@@ -237,17 +242,17 @@
   <div id="pc2"></div>
 </div>
 
-<script src="/js/core.js?v=13"></script>
+<script src="/js/core.js?v=15"></script>
 <script src="/js/filters.js?v=5"></script>
-<script src="/js/graph.js?v=8"></script>
+<script src="/js/graph.js?v=10"></script>
 <script src="/js/panel.js?v=10"></script>
 <script src="/js/imdb.js?v=10"></script>
 <script src="/js/tag-filter.js?v=5"></script>
 <script src="/js/avatars.js?v=6"></script>
 <script src="/js/director-suggest.js?v=3"></script>
 <script src="/js/recent-works.js?v=19"></script>
-<script src="/js/path-finder.js?v=4"></script>
-<script src="/js/main.js?v=9"></script>
+<script src="/js/path-finder.js?v=6"></script>
+<script src="/js/main.js?v=10"></script>
 <!-- ── Role Picker Popover ── -->
 <div id="role-picker-popover" class="picker-popover">
   <div class="picker-popover-header">
