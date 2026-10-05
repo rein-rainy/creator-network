@@ -7,7 +7,7 @@
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<link rel="stylesheet" href="/css/styles.css?v=24">
+<link rel="stylesheet" href="/css/styles.css?v=27">
 </head>
 <body data-theme="dark">
 
@@ -63,6 +63,9 @@
     </button>
     <button class="icon-btn" id="recent-btn" title="登録クリエイターの最新作品（IMDb）">
       <span data-icon="calendar" data-size="16"></span>
+    </button>
+    <button class="icon-btn" id="path-btn" title="作品と作品のつながりをたどる">
+      <span data-icon="route" data-size="16"></span>
     </button>
     <button id="notion-sync-btn" title="Notionから自動取得"><span class="nsb-dot"></span><span>更新</span></button>
   </div>
@@ -133,6 +136,42 @@
   </div>
 </div>
 
+<div id="path-overlay" class="fm2-overlay">
+  <div id="path-modal" class="fm2-modal">
+    <div class="fm2-header">
+      <div class="fm2-title-wrap">
+        <div class="fm2-name">作品のつながり</div>
+        <div class="fm2-sub" id="pf-sub"></div>
+      </div>
+      <button class="icon-btn-sm" id="pf-random" title="ランダムに2作品を選ぶ">
+        <span data-icon="shuffle" data-size="14"></span>
+      </button>
+      <button class="icon-btn-sm" id="pf-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
+    </div>
+    <div class="pf-pickers">
+      <div class="pf-pick" id="pf-pick-a">
+        <span class="pf-pick-label">A</span>
+        <input type="text" class="pf-input" placeholder="作品Aを検索..." autocomplete="off">
+        <div class="pf-options"></div>
+      </div>
+      <button class="icon-btn-sm" id="pf-swap" title="AとBを入れ替え">
+        <span data-icon="arrow-left-right" data-size="14"></span>
+      </button>
+      <div class="pf-pick" id="pf-pick-b">
+        <span class="pf-pick-label">B</span>
+        <input type="text" class="pf-input" placeholder="作品Bを検索..." autocomplete="off">
+        <div class="pf-options"></div>
+      </div>
+    </div>
+    <div class="fm2-body" id="pf-body"></div>
+    <div class="pf-route-nav" id="pf-route-nav" hidden>
+      <button class="icon-btn-sm" id="pf-prev" title="前のルート"><span data-icon="chevron-left" data-size="14"></span></button>
+      <span class="pf-route-count" id="pf-route-count"></span>
+      <button class="icon-btn-sm" id="pf-next" title="次のルート"><span data-icon="chevron-right" data-size="14"></span></button>
+    </div>
+  </div>
+</div>
+
 <div id="filmography-overlay" class="fm2-overlay">
   <div id="filmography-modal" class="fm2-modal">
     <div class="fm2-header">
@@ -198,7 +237,7 @@
   <div id="pc2"></div>
 </div>
 
-<script src="/js/core.js?v=12"></script>
+<script src="/js/core.js?v=13"></script>
 <script src="/js/filters.js?v=5"></script>
 <script src="/js/graph.js?v=8"></script>
 <script src="/js/panel.js?v=10"></script>
@@ -207,6 +246,7 @@
 <script src="/js/avatars.js?v=6"></script>
 <script src="/js/director-suggest.js?v=3"></script>
 <script src="/js/recent-works.js?v=19"></script>
+<script src="/js/path-finder.js?v=4"></script>
 <script src="/js/main.js?v=9"></script>
 <!-- ── Role Picker Popover ── -->
 <div id="role-picker-popover" class="picker-popover">
