@@ -200,9 +200,10 @@ function draw(nodes, links, { freeLayout = false } = {}) {
       .on('end', () => { if (!freeLayout) saveLayout(); });
 
   // 配置はアニメーションさせず、描画なしで一気に計算してから一度だけ描く（1 tick ≒ 2ms / 600ノード）。
+  // ただしフィルター検索（freeLayout）は、絞り込まれたノードが集まってくる動きを見せるためアニメーションさせる。
   if (freeLayout) {
-    // 検索中：固定なしで強い力のまま止まるまで回す
-    _runToRest();
+    // 検索中：固定なしで強い力のまま、止まるまで tick ごとに描く
+    sim.alpha(1).restart();
   } else if (!hasPlaced) {
     // 一から配置：強い力で広げてから、弱い力で全体をなじませる
     sim.tick(180);
