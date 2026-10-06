@@ -27,6 +27,11 @@ function filteredData() {
     const direct = new Set(nodes.filter(n => n.label.toLowerCase().includes(q)).map(n => n.id));
     const exp = new Set(direct);
     links.forEach(l => { const s = lid(l.source), t = lid(l.target); if (direct.has(s)) exp.add(t); if (direct.has(t)) exp.add(s); });
+    // 監督にヒットしたときは、その作品に関わった人物まで2次展開する
+    const dirs = new Set(nodes.filter(n => n.type === 'director' && direct.has(n.id)).map(n => n.id));
+    const dirWorks = new Set();
+    links.forEach(l => { const s = lid(l.source), t = lid(l.target); if (dirs.has(s)) dirWorks.add(t); if (dirs.has(t)) dirWorks.add(s); });
+    links.forEach(l => { const s = lid(l.source), t = lid(l.target); if (dirWorks.has(s)) exp.add(t); if (dirWorks.has(t)) exp.add(s); });
     nodes = nodes.filter(n => exp.has(n.id));
     links = links.filter(l => exp.has(lid(l.source)) && exp.has(lid(l.target)));
   }
