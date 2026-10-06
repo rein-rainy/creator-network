@@ -2,7 +2,7 @@
 
 /* ═══════════════════════════════════════════
    EDIT MODE（編集はパスワードを入れた人だけ。それ以外はゲストとして閲覧のみ）
-   パスワードは ⌘/Ctrl+Shift+E で開く入力欄から任意で入力する（画面上にボタンは置かない）。通ればトークンを保存し、次回からは入力不要。
+   パスワードは Shift+E で開く入力欄から任意で入力する（画面上にボタンは置かない）。通ればトークンを保存し、次回からは入力不要。
    編集用の UI は .edit-only を付けるか canEdit() で出し分ける（body.can-edit のときだけ表示）。
 ═══════════════════════════════════════════ */
 const EDIT_TOKEN_KEY = 'creator_network_edit_token';
@@ -99,9 +99,12 @@ async function _checkEditMode() {
   }
 }
 
-// ⌘/Ctrl+Shift+E：ゲストならパスワード入力を開く（もう一度で閉じる）、編集モードならゲストに戻る
+// Shift+E：ゲストならパスワード入力を開く（もう一度で閉じる）、編集モードならゲストに戻る
+// ブラウザのショートカットと重ならないよう ⌘/Ctrl/Alt は使わない。文字入力中は反応しない
 document.addEventListener('keydown', e => {
-  if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey || e.code !== 'KeyE') return;
+  if (!e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.repeat || e.code !== 'KeyE') return;
+  const t = e.target;
+  if (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName)) return;
   e.preventDefault();
   if (_editOpen) { showToast('この環境はパスワードなしで編集できます'); return; }
   if (canEdit()) {
