@@ -339,7 +339,7 @@ function _loadWorkCategoryOptions() {
 
 /** YouTube の動画（サムネイル取得と同じ検索。結果は共有キャッシュに入る） */
 async function _recentYoutube(entry) {
-  const query = `${entry.title} Music Video`;
+  const query = entry.ytQuery || `${entry.title} Music Video`;
   if (!_fmgYoutubeCache.has(query)) {
     const data = await _recentPost('/youtube-video-search', { titles: [query] });
     _fmgYoutubeCache.set(query, data.results?.[query] || null);
@@ -397,13 +397,14 @@ _editablePeople.render = el => {
   addBtn.addEventListener('click', () => onAdd(addBtn));
 };
 
-function _raiseInfoPanel() {
-  document.getElementById('info-panel').classList.add('above-gallery');
-  document.getElementById('info-overlay').classList.add('above-gallery');
+function _raiseInfoPanel(cls = 'above-gallery') {
+  document.getElementById('info-panel').classList.add(cls);
+  document.getElementById('info-overlay').classList.add(cls);
 }
 
-function openRecentWorkPanel(entry) {
-  _raiseInfoPanel();
+/** opts.aboveFilmography — IMDb のフィルモグラフィー画面から開くときはその上に出す */
+function openRecentWorkPanel(entry, opts = {}) {
+  _raiseInfoPanel(opts.aboveFilmography ? 'above-filmography' : 'above-gallery');
   // 登録済みの作品は通常の作品パネルをそのまま開く
   if (entry.workNode && AN.includes(entry.workNode)) {
     showPanel(entry.workNode);
@@ -430,7 +431,8 @@ function openRecentWorkPanel(entry) {
     <div class="player" id="rw-player"><div class="player-msg"><div class="spinner"></div>動画を検索中…</div></div>
     <div class="panel-meta">
       <span class="chip">${esc(_formatRecentDate(entry))}</span>
-      ${entry.rating ? `<span class="fmg-rating">${STAR_ICON}${entry.rating.toFixed(1)}</span><span class="fmg-votes">${entry.votes.toLocaleString()}票</span>` : ''}
+      ${entry.rating ? `<span class="fmg-rating">${STAR_ICON}${entry.rating.toFixed(1)}</span>` : ''}
+      ${entry.rating && entry.votes ? `<span class="fmg-votes">${entry.votes.toLocaleString()}票</span>` : ''}
     </div>
     <div class="panel-section" id="rw-save">
       <div class="section-label"><span>Notion に保存</span></div>
@@ -511,11 +513,11 @@ function openRecentWorkPanel(entry) {
   });
 
   // IMDb 情報（tt は分かっているので検索を飛ばす）
-  _imdbTtCache.set(entry.title, entry.tt);
+  if (entry.tt) _imdbTtCache.set(entry.title, entry.tt);
   fetchImdbInfo(panelId, entry.title, null);
 
   // カテゴリ（選んだタグ＋追加ボタン。追加はドロップダウンから）
-  const selected = new Set(RECENT_DEFAULT_TAGS);
+  const selected = new Set(entry.defaultTags || RECENT_DEFAULT_TAGS);
   const tagsEl = document.getElementById('rw-save-tags');
   let categoryOptions = [];
   const renderTags = () => {
@@ -549,7 +551,7 @@ function openRecentWorkPanel(entry) {
     try {
       await _saveRecentWork(entry, [...selected], creators, artists);
       showToast('Notion に保存しました');
-      if (document.getElementById('rw-save')?.isConnected) openRecentWorkPanel(entry); // 通常の作品パネルに切り替える
+      if (document.getElementById('rw-save')?.isConnected) openRecentWorkPanel(entry, opts); // 通常の作品パネルに切り替える
     } catch (e) {
       console.error('[RecentWorks Save]', e);
       showToast(`✗ 保存に失敗しました: ${e.message}`, 'err', 6000);

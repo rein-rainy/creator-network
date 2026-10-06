@@ -416,6 +416,8 @@ body {
 #info-overlay.above-gallery { z-index: 8050; }
 #info-panel.above-gallery   { z-index: 8060; }
 #filmography-overlay { z-index: 8100; }
+#info-overlay.above-filmography { z-index: 8150; }
+#info-panel.above-filmography   { z-index: 8160; }
 
 #info-panel.mode-modal.visible { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 

@@ -222,8 +222,8 @@ function stopYtIframe() {
 
 function closeInfoPanel() {
   stopYtIframe();
-  document.getElementById('info-panel').classList.remove('visible', 'above-gallery');
-  document.getElementById('info-overlay').classList.remove('visible', 'above-gallery');
+  document.getElementById('info-panel').classList.remove('visible', 'above-gallery', 'above-filmography');
+  document.getElementById('info-overlay').classList.remove('visible', 'above-gallery', 'above-filmography');
   selId = null; hovId = null; applyHL(null, null);
 }
 

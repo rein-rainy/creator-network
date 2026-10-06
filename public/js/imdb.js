@@ -481,6 +481,7 @@ const FMG_TAB_ORDER = ['musicVideo', 'movie', 'tvSeries', 'tvMiniSeries', 'tvMov
 
 let _fmgCurrentTab  = null;
 let _fmgCurrentName = null;
+let _fmgCurrentPerson = null; // { name, nameId, image } — 作品パネルの初期クリエイターに使う
 let _fmgGroups      = {};
 
 function fmgTitleObject(item) {
@@ -661,6 +662,7 @@ function linkedWorkTitles(nodeId) {
  */
 async function openFilmographyModal(personName, avatarSrc, opts = {}) {
   _fmgCurrentName = personName;
+  _fmgCurrentPerson = { name: personName, nameId: opts.nameId || '', image: '' };
 
   // モーダルを開く
   const overlay = document.getElementById('filmography-overlay');
@@ -702,6 +704,7 @@ async function openFilmographyModal(personName, avatarSrc, opts = {}) {
       }
       nameId = d1.nameId;
       _fmgNameIdCache.set(cacheKey, nameId);
+      if (_fmgCurrentName === personName) _fmgCurrentPerson = { name: personName, nameId, image: d1.image || '' };
       // アバター画像を IMDB画像で更新
       if (d1.image) {
         avatarEl.innerHTML = `${esc(initial)}<img src="/imdb-img/${btoa(d1.image)}" alt="" onerror="this.remove()">`;
@@ -795,7 +798,7 @@ function renderFmgList(type) {
     return;
   }
 
-  const html = items.map(item => {
+  const html = items.map((item, i) => {
     const titleObj = fmgTitleObject(item);
     const title   = fmgCreditTitle(item);
     const year    = item.year ?? item.startYear ?? titleObj.startYear ?? '';
@@ -810,7 +813,7 @@ function renderFmgList(type) {
     const roleLabels = item._fmgRoles || [];
     const roleHtml = roleLabels.map(role => `<span class="fmg-role">${esc(role)}</span>`).join('');
 
-    return `<a class="fmg-item" href="${esc(youtubeUrl)}" target="_blank" rel="noopener" data-yt-query="${esc(searchQuery)}">
+    return `<a class="fmg-item" href="${esc(youtubeUrl)}" target="_blank" rel="noopener" data-yt-query="${esc(searchQuery)}" data-idx="${i}">
       ${thumbHtml}
       <div class="fmg-info">
         <div class="fmg-title">${esc(title)}</div>
@@ -826,11 +829,46 @@ function renderFmgList(type) {
 
   body.innerHTML = html;
   enrichFmgYoutubeLinks(body);
+
+  // 作品は最新作品と同じくページ内のパネルで開く（Cmd/Ctrl クリックなどは YouTube を新しいタブで）
+  body.querySelectorAll('.fmg-item').forEach(row => row.addEventListener('click', e => {
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    openRecentWorkPanel(_fmgWorkEntry(items[Number(row.dataset.idx)], type, row.dataset.ytQuery), { aboveFilmography: true });
+  }));
+}
+
+/** フィルモグラフィーの1件を、最新作品パネル（openRecentWorkPanel）が扱う形にする */
+function _fmgWorkEntry(item, type, ytQuery) {
+  const titleObj = fmgTitleObject(item);
+  const title = fmgCreditTitle(item);
+  const entry = {
+    title,
+    tt: fmgTitleId(item),
+    year: item.year ?? item.startYear ?? titleObj.startYear ?? null,
+    rating: item.rating?.aggregateRating ?? titleObj.rating?.aggregateRating ?? null,
+    ytQuery,
+    defaultTags: fmgTitleType(item) === 'musicVideo' ? ['MV'] : [],
+    directors: [],
+  };
+  entry.workNode = _findRegisteredWork(entry);
+  entry.registered = !!entry.workNode;
+  // フィルモグラフィーの本人が登録済みのクリエイターなら、保存時のクリエイターに最初から入れておく
+  const p = _fmgCurrentPerson;
+  const node = p && AN.find(n => n.type === 'director' && n.notionPageId && _compact(_normName(n.label)) === _compact(_normName(p.name)));
+  if (node) entry.directors.push({ name: node.label, nameId: p.nameId, nodeId: node.id, imdbImage: p.image });
+  return entry;
 }
 
 function closeFilmographyModal() {
   document.getElementById('filmography-overlay').classList.remove('visible');
   _fmgCurrentName = null;
+  _fmgCurrentPerson = null;
+  // フィルモグラフィーから保存した作品をグラフに描き足す
+  if (_recentGraphDirty) {
+    _recentGraphDirty = false;
+    refresh();
+  }
 }
 
 document.getElementById('fm2-close').addEventListener('click', closeFilmographyModal);
