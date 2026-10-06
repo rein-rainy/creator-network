@@ -435,7 +435,7 @@ function openRecentWorkPanel(entry) {
     <div class="panel-section" id="rw-save">
       <div class="section-label"><span>Notion に保存</span></div>
       <div class="prop-list">
-        <div class="prop-row"><div class="prop-label">カテゴリ</div><div class="prop-value" id="rw-save-tags"></div></div>
+        <div class="prop-row prop-row-sm"><div class="prop-label">カテゴリ</div><div class="prop-value" id="rw-save-tags"></div></div>
         <div class="prop-row"><div class="prop-label">クリエイター</div><div class="prop-value" id="rw-creators"></div></div>
         <div class="prop-row"><div class="prop-label">アーティスト</div><div class="prop-value" id="rw-artists"></div></div>
       </div>

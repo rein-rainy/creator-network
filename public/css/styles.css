@@ -677,7 +677,7 @@ g.nd { transition: opacity .18s; }
 .rw-director:hover .rw-director-name { color: var(--ink); }
 #rw-loading.rw-loading-more { padding: 8px 20px 28px; }
 /* 最新作品 → 未登録作品のパネル */
-/* Notion に保存：Notion のプロパティ欄のように「項目名 | 値」を1行ずつ。値はすべて高さ 28px */
+/* Notion に保存：Notion のプロパティ欄のように「項目名 | 値」を1行ずつ。値は高さ 28px（カテゴリの行だけ 25px） */
 #rw-save { padding-top: 20px; padding-bottom: 24px; }
 #rw-save > .section-label { margin-bottom: 16px; }
 .prop-list { display: flex; flex-direction: column; gap: 14px; }
@@ -687,7 +687,7 @@ g.nd { transition: opacity .18s; }
   font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .04em; color: var(--ink-3);
 }
 .prop-value { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.prop-value .tag { height: 28px; padding: 0 2px 0 8px; gap: 2px; font-size: 13px; border-radius: var(--r-sm); }
+.prop-value .tag { height: 25px; padding: 0 2px 0 10px; gap: 2px; font-size: 12px; font-weight: 500; border-radius: var(--r-sm); }
 .person-pill {
   display: inline-flex; align-items: center; gap: 6px; height: 28px; max-width: 100%;
   padding: 0 2px 0 4px; border-radius: 999px; background: var(--bg3);
@@ -707,6 +707,9 @@ g.nd { transition: opacity .18s; }
   transition: background .15s, color .15s;
 }
 .prop-add:hover { background: var(--bg3); color: var(--ink); }
+/* カテゴリの行はタグ・「＋」・項目名を 25px にそろえる */
+.prop-row-sm .prop-label { line-height: 25px; }
+.prop-row-sm .prop-add { width: 25px; height: 25px; }
 .prop-submit { height: 36px; margin-top: 20px; font-size: 13px; }
 
 /* サムネイル左上のバッジ */
