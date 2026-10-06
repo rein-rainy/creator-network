@@ -564,7 +564,17 @@ function normalizeFilmographyCredits(fmgData) {
   return credits.filter(item => item && typeof item === 'object');
 }
 
-async function enrichFmgYoutubeLinks(body, rowSelector = '.fmg-item[data-yt-query]') {
+/** カードの .yt-channel に、動画を投稿したチャンネルのアイコンと名前を入れる */
+function _fillYtChannel(row, channel) {
+  const el = row.querySelector('.yt-channel');
+  if (!el || !channel?.name || el.dataset.filled) return;
+  el.dataset.filled = '1';
+  const img = channel.icon ? `<img src="${esc(channel.icon)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : '';
+  el.innerHTML = `<span class="avatar avatar-xs">${esc([...channel.name][0] || '?')}${img}</span><span class="yt-channel-name">${esc(channel.name)}</span>`;
+  el.title = channel.name;
+}
+
+async function enrichFmgYoutubeLinks(body, rowSelector) {
   const rows = [...body.querySelectorAll(rowSelector)];
 
   const updateRow = (row) => {
@@ -574,11 +584,13 @@ async function enrichFmgYoutubeLinks(body, rowSelector = '.fmg-item[data-yt-quer
 
     // 結果なし（取得失敗 or 見つからなかった）→ スケルトン解除だけ
     if (!result?.url) {
+      if (_fmgYoutubeCache.has(query)) row.querySelector('.yt-channel')?.remove(); // 取得済みで見つからなかったときだけ
       if (thumbSlot?.classList.contains('fmg-ph')) thumbSlot.classList.add('done');
       return;
     }
 
     if (result.url) row.href = result.url;
+    _fillYtChannel(row, result.channel);
 
     if (!result.thumbnail || !thumbSlot || thumbSlot.classList.contains('loaded')) {
       if (thumbSlot?.classList.contains('fmg-ph')) thumbSlot.classList.add('done');
@@ -803,35 +815,35 @@ function renderFmgList(type) {
     const title   = fmgCreditTitle(item);
     const year    = item.year ?? item.startYear ?? titleObj.startYear ?? '';
     const rating  = item.rating?.aggregateRating ?? titleObj.rating?.aggregateRating ?? null;
-    const imgUrl  = titleObj.primaryImage?.url ?? item.primaryImage?.url ?? item.image ?? '';
     const searchQuery = `${title} ${fmgTypeLabel(type)}`;
     const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
     const titleType = fmgTitleType(item);
+    const registered = !!_findRegisteredWork({ title });
+    const roleHtml = (item._fmgRoles || []).map(role => `<span class="fmg-role">${esc(role)}</span>`).join('');
 
-    const thumbHtml = '<div class="fmg-ph"></div>';
-
-    const roleLabels = item._fmgRoles || [];
-    const roleHtml = roleLabels.map(role => `<span class="fmg-role">${esc(role)}</span>`).join('');
-
-    return `<a class="fmg-item" href="${esc(youtubeUrl)}" target="_blank" rel="noopener" data-yt-query="${esc(searchQuery)}" data-idx="${i}">
-      ${thumbHtml}
-      <div class="fmg-info">
-        <div class="fmg-title">${esc(title)}</div>
-        <div class="fmg-meta">
+    return `<a class="rw-card" href="${esc(youtubeUrl)}" target="_blank" rel="noopener" data-yt-query="${esc(searchQuery)}" data-idx="${i}">
+      <div class="rw-thumb-wrap">
+        <div class="fmg-ph"></div>
+        ${registered ? '<span class="thumb-badge rw-registered">登録済み</span>' : ''}
+      </div>
+      <div class="rw-info">
+        <div class="rw-title">${esc(title)}</div>
+        <div class="rw-meta">
           ${year ? `<span class="fmg-year">${esc(String(year))}</span>` : ''}
           ${roleHtml}
           ${titleType && titleType !== type ? `<span class="fmg-type">${esc(fmgTypeLabel(titleType))}</span>` : ''}
           ${rating ? `<span class="fmg-rating">${STAR_ICON}${rating}</span>` : ''}
         </div>
+        <div class="yt-channel"></div>
       </div>
     </a>`;
   }).join('');
 
-  body.innerHTML = html;
-  enrichFmgYoutubeLinks(body);
+  body.innerHTML = `<div class="rw-grid">${html}</div>`;
+  enrichFmgYoutubeLinks(body, '.rw-card[data-yt-query]');
 
   // 作品は最新作品と同じくページ内のパネルで開く（Cmd/Ctrl クリックなどは YouTube を新しいタブで）
-  body.querySelectorAll('.fmg-item').forEach(row => row.addEventListener('click', e => {
+  body.querySelectorAll('.rw-card').forEach(row => row.addEventListener('click', e => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
     openRecentWorkPanel(_fmgWorkEntry(items[Number(row.dataset.idx)], type, row.dataset.ytQuery), { aboveFilmography: true });

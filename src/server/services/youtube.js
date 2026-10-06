@@ -47,10 +47,17 @@ async function searchYoutubeVideos(titles = []) {
         ?? video.thumbnails?.[0]?.url
         ?? `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`;
 
+      // 投稿したチャンネル（名前とアイコン）。検索結果に含まれているので追加の問い合わせは不要
+      const author = video.author;
+      const channel = author?.name
+        ? { id: author.id || '', name: author.name, icon: author.best_thumbnail?.url ?? author.thumbnails?.[0]?.url ?? '' }
+        : null;
+
       return {
         url: `https://www.youtube.com/watch?v=${video.id}`,
         thumbnail,
         title: video.title?.text ?? title,
+        channel,
       };
     } catch (error) {
       console.warn(`[YouTube.js] "${title}" 検索失敗 (${Date.now() - t0}ms): ${error.message || String(error)}`);

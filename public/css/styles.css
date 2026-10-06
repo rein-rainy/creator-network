@@ -606,15 +606,7 @@ g.nd { transition: opacity .18s; }
 .fm2-modal .fm2-error { margin: 16px 20px; }
 .fm2-fallback { padding: 0 20px 16px; font-size: 12px; }
 
-/* フィルモグラフィーの各作品行 */
-.fmg-item {
-  display: flex; gap: 12px; padding: 12px 20px;
-  border-bottom: 1px solid var(--hairline); cursor: pointer;
-  text-decoration: none; color: inherit; transition: background .12s;
-  align-items: flex-start;
-}
-.fmg-item:hover { background: var(--bg3); }
-.fmg-item:last-child { border-bottom: none; }
+/* 作品カードのサムネイル（YouTube）。位置と大きさは .rw-thumb-wrap 側で決める */
 .fmg-thumb {
   width: 88px; height: 54px; object-fit: cover; border-radius: var(--r-sm);
   flex-shrink: 0; background: var(--bg3);
@@ -632,13 +624,6 @@ g.nd { transition: opacity .18s; }
   0%   { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
-.fmg-info { flex: 1; min-width: 0; }
-.fmg-title {
-  font-size: 13px; font-weight: 600; color: var(--ink);
-  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical; line-height: 1.4; margin-bottom: 4px; text-wrap: pretty;
-}
-.fmg-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-variant-numeric: tabular-nums; }
 .fmg-year { font-family: var(--mono); font-size: 11px; color: var(--ink-3); }
 .fmg-role { font-size: 11px; color: var(--ink-2); font-weight: 500; }
 .fmg-type { font-size: 10px; padding: 1px 6px; color: var(--ink-3); }
@@ -667,7 +652,7 @@ g.nd { transition: opacity .18s; }
   font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.4; text-wrap: pretty;
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-.rw-meta { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.rw-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .rw-directors { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; }
 .rw-director {
   display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%;
@@ -677,6 +662,11 @@ g.nd { transition: opacity .18s; }
 .rw-director:hover { background: var(--bg3); }
 .rw-director-name { font-size: 11px; font-weight: 500; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rw-director:hover .rw-director-name { color: var(--ink); }
+/* フィルモグラフィー：動画を投稿した YouTube チャンネル */
+#filmography-modal { width: min(94vw, 1080px); height: 88vh; max-height: 88vh; }
+.yt-channel { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 8px; }
+.yt-channel:empty { display: none; }
+.yt-channel-name { font-size: 11px; font-weight: 500; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #rw-loading.rw-loading-more { padding: 8px 20px 28px; }
 /* 最新作品 → 未登録作品のパネル */
 /* Notion に保存：Notion のプロパティ欄のように「項目名 | 値」を1行ずつ。値は高さ 28px（カテゴリの行だけ 25px） */
