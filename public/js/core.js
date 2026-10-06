@@ -118,6 +118,8 @@ function parseCSV(text) {
 
 function xname(s) { if (!s) return null; const m = s.match(/^(.+?)\s*\(https?:/); return m ? m[1].trim() : s.trim(); }
 function xnames(s) { return s ? s.split(',').map(p => xname(p.trim())).filter(Boolean) : []; }
+// サーバーが配列で渡したリレーション名を優先する（「,」を含む名前が分割されないように）
+function relNames(row, key) { const a = row._relNames?.[key]; return Array.isArray(a) ? a.map(xname).filter(Boolean) : xnames(row[key] || ''); }
 
 // SNS URL からサービス名とアイコンを判定
 function snsFromUrl(url) {
@@ -189,14 +191,14 @@ function buildGraph(rows) {
     // Notion の並び順で振ると作品が増えたときに全部ずれるため、ページ ID で振る（最新作品の追加と同じ形）
     const wid = notionPageId ? `w_${notionPageId}` : `w${i}`;
     ensure(wid, 'work', title, { url, th, cats, notionPageId });
-    xnames(row['Director / Creator'] || '').forEach(d => {
+    relNames(row, 'Director / Creator').forEach(d => {
       const did = `d_${d}`;
       const meta = getCreatorMeta(d);
       ensure(did, 'director', d, { role: meta.role, sns: meta.sns, avatar: meta.avatar, avatarType: meta.avatarType, notionPageId: meta.notionPageId || '' });
       nm.get(did).works.push(wid);
       links.push({ source: did, target: wid, ltype: 'dir' });
     });
-    xnames(row['Artist'] || '').forEach(a => {
+    relNames(row, 'Artist').forEach(a => {
       const aid = `a_${a}`;
       const meta = getCreatorMeta(a);
       const existingNode = nm.get(aid);

@@ -217,6 +217,12 @@ async function buildData(targetDb = 'all') {
       row[key] = extractValue(page.properties[key], creatorMap, artistMap);
     });
     row._notionPageId = page.id;
+    // 名前に「,」を含む人物（Tyler, The Creator など）を「, 」連結の文字列から復元できないので、リレーションは配列でも渡す
+    row._relNames = {};
+    keys.forEach(key => {
+      const prop = page.properties[key];
+      if (prop?.type === 'relation') row._relNames[key] = prop.relation.map(r => creatorMap[r.id] ?? artistMap[r.id] ?? r.id);
+    });
 
     const relProp = page.properties[creatorRelProp];
     row._creatorRelIds = (relProp?.type === 'relation') ? relProp.relation.map(r => r.id) : [];
