@@ -236,7 +236,7 @@ function _createRecentCard(entry, igCache) {
       ${entry.registered ? '<span class="thumb-badge rw-registered">登録済み</span>' : ''}
     </div>
     <div class="rw-info">
-      <div class="rw-title">${esc(entry.title)}</div>
+      <div class="rw-title" title="${esc(entry.title)}">${esc(entry.title)}</div>
       <div class="rw-meta">
         <span class="fmg-year">${esc(_formatRecentDate(entry))}</span>
         ${entry.rating ? `<span class="fmg-rating">${STAR_ICON}${entry.rating.toFixed(1)}</span><span class="fmg-votes">${entry.votes.toLocaleString()}票</span>` : ''}

@@ -37,7 +37,13 @@ function _setEditMode(on) {
   if (sel && sel.type !== 'work' && document.getElementById('info-panel').classList.contains('visible')) showPanel(sel);
 }
 
+// パスワード欄は type="text" にして伏せ字は CSS で出す。type="password" がページにあると、ブラウザがログインフォームと見なして
+// 「パスワードを保存しますか？」を出したり、検索ボックスにパスワードの候補を出したりするため。
+// 伏せ字の CSS に対応していないブラウザだけ type="password" に戻す（見えてしまうよりはよい）
+if (!CSS.supports('-webkit-text-security', 'disc')) document.getElementById('edit-password').type = 'password';
+
 function _closeEditLogin() {
+  document.getElementById('edit-password').value = ''; // 入力値を残さない
   document.getElementById('edit-login-popover').classList.remove('open');
   document.removeEventListener('mousedown', _closeEditLoginOnOutside);
 }

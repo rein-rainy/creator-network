@@ -649,8 +649,8 @@ g.nd { transition: opacity .18s; }
 .rw-card:hover .fmg-thumb { scale: 1.03; }
 .rw-info { min-width: 0; }
 .rw-title {
-  font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.4; text-wrap: pretty;
-  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.4;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .rw-meta { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .rw-directors { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; }
@@ -1018,6 +1018,6 @@ body:not(.can-edit) #dir-suggest-btn,
 body:not(.can-edit) .wc-suggest,
 body:not(.can-edit) .ds-section,
 body:not(.can-edit) #rw-save { display: none !important; }
-#edit-login-popover input { flex: none; padding: 6px 9px; }
+#edit-login-popover input { flex: none; padding: 6px 9px; -webkit-text-security: disc; }
 .edit-login-error { font-size: 11px; color: var(--accent-red); }
 .edit-login-error:empty { display: none; }

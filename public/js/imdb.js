@@ -837,7 +837,7 @@ function renderFmgList(type) {
         ${registered ? '<span class="thumb-badge rw-registered">登録済み</span>' : ''}
       </div>
       <div class="rw-info">
-        <div class="rw-title">${esc(title)}</div>
+        <div class="rw-title" title="${esc(title)}">${esc(title)}</div>
         <div class="rw-meta">
           ${year ? `<span class="fmg-year">${esc(String(year))}</span>` : ''}
           ${roleHtml}
