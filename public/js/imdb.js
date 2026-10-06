@@ -367,7 +367,7 @@ function addImdbPersonToWork(workNode, personName, rawImgUrl = '') {
   // 3. バックグラウンドで Notion に反映（fire-and-forget）
   fetch('/notion-create-creator', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: editHeaders(),
     body: JSON.stringify({ name: personName, imageUrl: rawImgUrl || undefined }),
   })
   .then(r => r.json())
@@ -384,7 +384,7 @@ function addImdbPersonToWork(workNode, personName, rawImgUrl = '') {
     }
     return fetch('/notion-add-creator', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: editHeaders(),
       body: JSON.stringify({ workId: workNode.notionPageId, creatorPageId }),
     });
   })

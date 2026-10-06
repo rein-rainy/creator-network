@@ -13,6 +13,8 @@ const { handleAvatarRoutes } = require('./server/routes/avatars');
 const { handleImdbRoutes } = require('./server/routes/imdb');
 const { handleMiscRoutes } = require('./server/routes/misc');
 const { handleNotionRoutes } = require('./server/routes/notion');
+const { handleAuthRoutes } = require('./server/routes/auth');
+const { TOKEN_HEADER, isOpenEditing } = require('./server/auth');
 
 if (!config.NOTION_TOKEN) {
   console.warn('[Warning] 環境変数 NOTION_TOKEN が設定されていません。');
@@ -25,10 +27,11 @@ if (!config.NOTION_TOKEN) {
 function setCorsHeaders(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', `Content-Type, ${TOKEN_HEADER}`);
 }
 
 const routeHandlers = [
+  handleAuthRoutes,
   handleAvatarRoutes,
   handleImdbRoutes,
   handleMiscRoutes,
@@ -87,6 +90,7 @@ server.listen(config.PORT, () => {
   console.log('    NOTION_TOKEN — Notion 統合トークン（必須）');
   console.log('    DEEPL_API_KEY — DeepL APIキー（オプション）');
   console.log('    YOUTUBE_API_KEY — YouTube APIキー（オプション）');
+  console.log('    EDIT_PASSWORD — 編集用パスワード（未設定なら本番は閲覧のみ）');
   console.log('    RAPIDAPI_KEY — RapidAPI キー（instagram-best-experience.p.rapidapi.com / spotify23.p.rapidapi.com）');
   console.log('');
   console.log(config.NOTION_TOKEN
@@ -95,5 +99,10 @@ server.listen(config.PORT, () => {
   console.log(config.RAPIDAPI_KEY
     ? '  RapidAPI avatar endpoints are enabled'
     : '  RAPIDAPI_KEY 未設定 — avatar endpoints are limited');
+  console.log(config.EDIT_PASSWORD
+    ? '  EDIT_PASSWORD が設定されています — 編集にはパスワードが必要'
+    : isOpenEditing()
+      ? '  EDIT_PASSWORD 未設定 — ローカルなので誰でも編集できます'
+      : '  EDIT_PASSWORD 未設定 — 編集はできません（閲覧のみ）');
   console.log('');
 });

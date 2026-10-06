@@ -21,27 +21,27 @@ async function handleNotionRoutes(req, res) {
     return { signature: await notion.getChangeSignature() };
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-add-creator', label: 'Notion Add Error' }, async ({ workId, creatorPageId }) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-add-creator', label: 'Notion Add Error', editor: true }, async ({ workId, creatorPageId }) => {
     if (!workId || !creatorPageId) throw new Error('workId, creatorPageId が必要です');
     return notion.addCreatorToWork(workId, creatorPageId);
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-create-creator', label: 'Notion Create Creator Error' }, async ({ name, imageUrl }) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-create-creator', label: 'Notion Create Creator Error', editor: true }, async ({ name, imageUrl }) => {
     if (!name) throw new Error('name が必要です');
     return notion.createCreator(name, imageUrl);
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-create-artist', label: 'Notion Create Artist Error' }, async ({ name }) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-create-artist', label: 'Notion Create Artist Error', editor: true }, async ({ name }) => {
     if (!name) throw new Error('name が必要です');
     return notion.createArtist(name);
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-set-creator-cover', label: 'Notion Cover Error' }, async ({ creatorPageId, imageUrl }) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-set-creator-cover', label: 'Notion Cover Error', editor: true }, async ({ creatorPageId, imageUrl }) => {
     if (!creatorPageId || !imageUrl) throw new Error('creatorPageId, imageUrl が必要です');
     return notion.setCreatorCover(creatorPageId, imageUrl);
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-upload-creator-cover', label: 'Notion Upload Cover Error' }, async ({ creatorPageId, dataUrl }) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-upload-creator-cover', label: 'Notion Upload Cover Error', editor: true }, async ({ creatorPageId, dataUrl }) => {
     const match = /^data:(image\/[\w.+-]+);base64,(.+)$/.exec(dataUrl || '');
     if (!creatorPageId || !match) throw new Error('creatorPageId と画像の data URL が必要です');
     return notion.uploadCreatorCover(creatorPageId, Buffer.from(match[2], 'base64'), match[1]);
@@ -51,7 +51,7 @@ async function handleNotionRoutes(req, res) {
     return notion.getWorkCategoryOptions();
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-create-work', label: 'Notion Create Work Error' }, async (work) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-create-work', label: 'Notion Create Work Error', editor: true }, async (work) => {
     if (!work.title) throw new Error('title が必要です');
     return notion.createWork(work);
   })) return true;
@@ -60,17 +60,17 @@ async function handleNotionRoutes(req, res) {
     return notion.getRoleOptions();
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-update-creator-meta', label: 'UpdateCreatorMeta Error' }, async ({ creatorPageId, role, sns }) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-update-creator-meta', label: 'UpdateCreatorMeta Error', editor: true }, async ({ creatorPageId, role, sns }) => {
     if (!creatorPageId) throw new Error('creatorPageId が必要です');
     return notion.updateCreatorMeta(creatorPageId, role, sns);
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-rename-creator', label: 'Notion Rename Error' }, async ({ creatorPageId, newName }) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-rename-creator', label: 'Notion Rename Error', editor: true }, async ({ creatorPageId, newName }) => {
     if (!creatorPageId || !newName) throw new Error('creatorPageId, newName が必要です');
     return notion.renameCreator(creatorPageId, newName);
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-remove-creator', label: 'Notion Remove Error' }, async ({ workId, creatorPageId }) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-remove-creator', label: 'Notion Remove Error', editor: true }, async ({ workId, creatorPageId }) => {
     if (!workId || !creatorPageId) throw new Error('workId, creatorPageId が必要です');
     return notion.removeCreatorFromWork(workId, creatorPageId);
   })) return true;

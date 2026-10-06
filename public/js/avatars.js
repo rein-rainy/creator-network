@@ -338,7 +338,9 @@ async function _fetchOneIgAvatar(node) {
 const _notionAvatarQueue = [];
 let _notionAvatarUploading = false;
 
+// ゲスト（閲覧のみ）のときは Notion に保存しない。表示はブラウザのキャッシュから行う
 function queueAvatarToNotion(node, dataUrl) {
+  if (!canEdit()) return;
   if (!node.notionPageId || !dataUrl?.startsWith('data:')) return;
   if (_notionAvatarQueue.some(item => item.node.id === node.id)) return;
   _notionAvatarQueue.push({ node, pageId: node.notionPageId, dataUrl });
@@ -347,6 +349,7 @@ function queueAvatarToNotion(node, dataUrl) {
 
 // avatar はブラウザのキャッシュと同じ `/avatar-img/<base64(画像URL)>` 形式。Notion には元の画像 URL を保存する
 function queueArtistCoverToNotion(node, avatar) {
+  if (!canEdit()) return;
   if (node.type !== 'artist' || !node.artistPageId || node.avatarType) return;
   let imageUrl = avatar;
   try { if (avatar?.startsWith('/avatar-img/')) imageUrl = atob(avatar.slice('/avatar-img/'.length)); } catch { return; }
@@ -366,7 +369,7 @@ async function _processNotionAvatarQueue() {
       // 外部 URL の設定は（名前に反して）ページを問わず使える
       const res = await fetch(dataUrl ? '/notion-upload-creator-cover' : '/notion-set-creator-cover', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: editHeaders(),
         body: JSON.stringify(dataUrl ? { creatorPageId: pageId, dataUrl } : { creatorPageId: pageId, imageUrl }),
       });
       const data = await res.json();

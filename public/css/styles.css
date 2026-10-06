@@ -1119,3 +1119,17 @@ g.nd { transition: opacity .18s; }
   .pf-pickers #pf-swap { align-self: center; rotate: 90deg; }
   .pf-track { padding: 24px 16px; }
 }
+
+/* ── edit mode（ゲストは閲覧のみ。編集用の UI は body.can-edit のときだけ出す）── */
+body:not(.can-edit) .edit-only,
+body:not(.can-edit) #add-creator-btn,
+body:not(.can-edit) .remove-creator-btn,
+body:not(.can-edit) .cmeta-edit-btn,
+body:not(.can-edit) .imdb-add-creator-btn,
+body:not(.can-edit) #dir-suggest-btn,
+body:not(.can-edit) .wc-suggest,
+body:not(.can-edit) .ds-section,
+body:not(.can-edit) #rw-save { display: none !important; }
+#edit-login-popover input { flex: none; padding: 6px 9px; }
+.edit-login-error { font-size: 11px; color: var(--accent-red); }
+.edit-login-error:empty { display: none; }

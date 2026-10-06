@@ -1,3 +1,5 @@
+const { isEditor } = require('./auth');
+
 function readJson(req) {
   return new Promise((resolve, reject) => {
     let body = '';
@@ -38,11 +40,16 @@ class HttpError extends Error {
 
 /**
  * Match a JSON endpoint and run `fn` with the parsed request body.
+ * `editor: true` limits the endpoint to clients that logged in with the edit password.
  * Handles body parsing, success response, and unified error handling.
  * Returns true if the request matched (and a response was sent).
  */
-async function jsonRoute(req, res, { method, path, label }, fn) {
+async function jsonRoute(req, res, { method, path, label, editor = false }, fn) {
   if (req.method !== method || req.url !== path) return false;
+  if (editor && !isEditor(req)) {
+    sendJson(res, 403, { error: '編集するにはパスワードを入力してください', code: 'EDIT_FORBIDDEN' });
+    return true;
+  }
   try {
     const body = await readJson(req);
     sendJson(res, 200, await fn(body));

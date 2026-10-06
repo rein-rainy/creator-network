@@ -38,7 +38,7 @@ function _saveRecentCache() {
 
 function _recentPost(url, body) {
   return fetch(url, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    method: 'POST', headers: editHeaders(), body: JSON.stringify(body),
   }).then(r => r.json()).then(d => { if (d.error) throw new Error(d.error); return d; });
 }
 

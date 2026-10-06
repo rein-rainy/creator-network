@@ -9,9 +9,9 @@ function showPanel(d) {
   const pnEl = document.getElementById('pn');
   pnEl.textContent = d.label;
 
-  // クリエイター / アーティストのみ: ダブルクリックで名前を編集
+  // クリエイター / アーティストのみ: ダブルクリックで名前を編集（編集モードのときだけ）
   pnEl.ondblclick = null;
-  if (d.type === 'director' || d.type === 'artist') {
+  if ((d.type === 'director' || d.type === 'artist') && canEdit()) {
     pnEl.title = 'ダブルクリックで名前を編集';
     pnEl.style.cursor = 'text';
     pnEl.ondblclick = () => {
@@ -52,7 +52,7 @@ function showPanel(d) {
         try {
           const r = await fetch('/notion-rename-creator', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: editHeaders(),
             body: JSON.stringify({ creatorPageId: d.notionPageId, newName }),
           });
           const json = await r.json();
@@ -377,7 +377,7 @@ function showPanel(d) {
       if (!d.notionPageId || !personNode?.notionPageId) return;
       fetch('/notion-remove-creator', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: editHeaders(),
         body: JSON.stringify({
           workId:        d.notionPageId,
           creatorPageId: personNode.notionPageId,
@@ -536,7 +536,7 @@ function showPanel(d) {
           if (d.notionPageId) {
             fetch('/notion-update-creator-meta', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: editHeaders(),
               body: JSON.stringify({ creatorPageId: d.notionPageId, role: newRole }),
             }).then(r => r.json()).catch(err => console.error('[UpdateMeta Role]', err));
           }
@@ -613,7 +613,7 @@ function showPanel(d) {
       if (d.notionPageId) {
         fetch('/notion-update-creator-meta', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: editHeaders(),
           body: JSON.stringify({ creatorPageId: d.notionPageId, sns: newSns.map(s => s.url) }),
         }).then(r => r.json()).catch(err => console.error('[UpdateMeta SNS]', err));
       }
@@ -776,7 +776,7 @@ function addCreatorToWork(workNode, creator) {
   // 2. バックグラウンドで非同期にNotionへリクエスト（awaitしない）
   fetch('/notion-add-creator', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: editHeaders(),
     body: JSON.stringify({
       workId: workNode.notionPageId,
       creatorPageId: creator.notionPageId
