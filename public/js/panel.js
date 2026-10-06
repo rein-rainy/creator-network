@@ -110,11 +110,9 @@ function showPanel(d) {
     overlay.classList.remove('visible');
   }
 
-  const hideBtn = document.getElementById('pc-hide');
   const searchBtn = document.getElementById('pc-search');
   const notionBtn = document.getElementById('pc-notion');
   if (d.type === 'work') {
-    hideBtn.style.display = 'none';
     searchBtn.style.display = 'none';
     if (d.notionPageId) {
       notionBtn.style.display = 'flex';
@@ -126,15 +124,7 @@ function showPanel(d) {
     }
   } else {
     notionBtn.style.display = 'none';
-    hideBtn.style.display = 'flex';
     searchBtn.style.display = 'flex';
-    hideBtn.onclick = () => {
-      stopYtIframe();
-      hiddenIds.add(d.id); updateHiddenUI(); refresh();
-      panel.classList.remove('visible');
-      overlay.classList.remove('visible');
-      selId = null;
-    };
     searchBtn.onclick = () => {
       openFilmographyModal(d.label, d.avatar || '', { workTitles: linkedWorkTitles(d.id) });
     };
@@ -259,7 +249,7 @@ function showPanel(d) {
 
     html += `</div>`; // cmeta-section end
 
-    // --- Top co-workers (非表示ノードを除外) ---
+    // --- Top co-workers ---
     const counterType = d.type === 'director' ? 'artist' : 'director';
     const counterLabel = d.type === 'director' ? '担当アーティスト TOP 3' : '担当クリエイター TOP 3';
     const countMap = new Map();
@@ -271,7 +261,6 @@ function showPanel(d) {
         const peerId = s === w.id ? t : s;
         const peer = AN.find(n => n.id === peerId && n.type === counterType);
         if (!peer) return;
-        if (hiddenIds.has(peer.id)) return;
         countMap.set(peer.id, { label: peer.label, count: (countMap.get(peer.id)?.count || 0) + 1 });
       });
     });

@@ -7,9 +7,9 @@
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<link rel="stylesheet" href="/css/styles.css?v=35">
+<link rel="stylesheet" href="/css/styles.css?v=37">
 </head>
-<body data-theme="dark">
+<body>
 
 <div id="bg-grid"></div>
 
@@ -51,15 +51,6 @@
       <div class="tog"></div><span>2次展開</span>
     </label>
     <div class="sep"></div>
-    <button class="icon-btn" id="filter-modal-btn" title="表示フィルター" style="display:none">
-      <span data-icon="layout-grid" data-size="16"></span>
-    </button>
-    <button class="icon-btn" id="theme-btn" title="ダーク/ライト切替">
-      <span data-icon="contrast" data-size="16"></span>
-    </button>
-    <button class="icon-btn" id="hidden-btn" title="非表示リスト">
-      <span data-icon="eye-off" data-size="16"></span>
-    </button>
     <button class="icon-btn" id="dir-suggest-btn" title="IMDbで監督が見つかった未登録の作品" style="display:none">
       <span data-icon="video" data-size="16"></span>
       <span id="dir-suggest-count"></span>
@@ -70,36 +61,15 @@
     <button class="icon-btn" id="path-btn" title="作品と作品のつながりをたどる">
       <span data-icon="route" data-size="16"></span>
     </button>
-    <button class="icon-btn" id="edit-btn" title="パスワードを入力して編集する">
-      <span data-icon="lock" data-size="16" id="edit-icon-locked"></span>
-      <span data-icon="lock-open" data-size="16" id="edit-icon-open" style="display:none"></span>
-    </button>
     <button id="notion-sync-btn" title="Notion から最新を取得して、全体を配置し直す"><span class="nsb-dot"></span><span>更新</span></button>
   </div>
 </div>
 
 <div id="ctx-menu">
-  <div class="ctx-item" id="ctx-hide">
-    <span data-icon="eye-off" data-size="14"></span>
-    このノードを非表示
-  </div>
-  <div class="ctx-item" id="ctx-hide-connected">
-    <span data-icon="link" data-size="14"></span>
-    関連作品ごと非表示
-  </div>
-  <div class="ctx-sep"></div>
   <div class="ctx-item" id="ctx-open">
     <span data-icon="play" data-size="14"></span>
     YouTubeで開く
   </div>
-</div>
-
-<div id="hidden-panel">
-  <div class="hp-header">
-    <div class="hp-title">非表示リスト <span id="hp-count"></span></div>
-    <div><button class="btn btn-secondary" id="hp-restore-all">すべて復元</button></div>
-  </div>
-  <div id="hp-list"></div>
 </div>
 
 <div id="dir-suggest-panel">
@@ -107,24 +77,6 @@
     <div class="hp-title">監督候補 <span id="ds-count"></span></div>
   </div>
   <div id="ds-list"></div>
-</div>
-
-<div id="filter-modal">
-  <div class="fm-box">
-    <button class="fm-close icon-btn-sm" id="fm-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
-    <div class="fm-title">表示フィルター</div>
-    <div class="fm-tabs">
-      <button class="fm-tab active" id="fm-tab-work">作品</button>
-      <button class="fm-tab" id="fm-tab-director">Creator</button>
-      <button class="fm-tab" id="fm-tab-artist">Artist</button>
-    </div>
-    <input class="fm-search" id="fm-search" type="text" placeholder="名前で絞り込み...">
-    <div class="fm-list" id="fm-list"></div>
-    <div class="fm-footer">
-      <span class="fm-count" id="fm-count"></span>
-      <button class="btn btn-primary" id="fm-done">完了</button>
-    </div>
-  </div>
 </div>
 
 <div id="recent-overlay" class="fm2-overlay">
@@ -238,9 +190,6 @@
       <button class="icon-btn-sm" id="pc-search" title="このクリエイターを検索" style="display:none">
         <span data-icon="search" data-size="14"></span>
       </button>
-      <button class="icon-btn-sm" id="pc-hide" title="このノードを非表示" style="display:none">
-        <span data-icon="eye-off" data-size="14"></span>
-      </button>
       <button class="icon-btn-sm" id="pc" title="閉じる"><span data-icon="x" data-size="14"></span></button>
     </div>
   </div>
@@ -260,18 +209,18 @@
   </div>
 </div>
 
-<script src="/js/core.js?v=21"></script>
-<script src="/js/edit-auth.js?v=1"></script>
-<script src="/js/filters.js?v=5"></script>
+<script src="/js/core.js?v=23"></script>
+<script src="/js/edit-auth.js?v=3"></script>
+<script src="/js/filters.js?v=6"></script>
 <script src="/js/graph.js?v=25"></script>
-<script src="/js/panel.js?v=12"></script>
+<script src="/js/panel.js?v=13"></script>
 <script src="/js/imdb.js?v=11"></script>
 <script src="/js/tag-filter.js?v=5"></script>
 <script src="/js/avatars.js?v=8"></script>
 <script src="/js/director-suggest.js?v=4"></script>
-<script src="/js/recent-works.js?v=20"></script>
+<script src="/js/recent-works.js?v=21"></script>
 <script src="/js/path-finder.js?v=8"></script>
-<script src="/js/main.js?v=19"></script>
+<script src="/js/main.js?v=20"></script>
 <!-- ── Role Picker Popover ── -->
 <div id="role-picker-popover" class="picker-popover">
   <div class="picker-popover-header">

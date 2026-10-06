@@ -3,7 +3,6 @@
 ═══════════════════════════════════════════ */
 function visibleNodeIds() {
   return new Set(AN.filter(n => {
-    if (hiddenIds.has(n.id)) return false;
     if (n.type === 'director') return showDir;
     if (n.type === 'artist')   return showArt;
     return true;

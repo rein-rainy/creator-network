@@ -41,60 +41,13 @@ function init(rows) {
   //   fetchArtistAvatars() 内で ytId 取得後にキャッシュ保存する設計のまま進む）
 
   hideGraphOverlay(0);
-  loadHiddenState();
   makeFilter();
   refresh();
-  updateHiddenUI();
   fetchArtistAvatars();
   // Director/Creator の Instagram アバターを取得（Notionカバー画像がない場合）
   requestAnimationFrame(() => fetchDirectorIgAvatars());
   // クリエイター未登録の作品について IMDb の監督候補を調べる（自動登録はしない）
   scanDirectorSuggestions();
-}
-
-/* ═══════════════════════════════════════════
-   HIDDEN STATE PERSISTENCE
-═══════════════════════════════════════════ */
-function saveHiddenState() {
-  const labels = [...hiddenIds].map(id => AN.find(n => n.id === id)?.label).filter(Boolean);
-  localStorage.setItem(HIDDEN_KEY, JSON.stringify(labels));
-}
-
-function loadHiddenState() {
-  try {
-    const saved = localStorage.getItem(HIDDEN_KEY);
-    if (!saved) return;
-    const labels = new Set(JSON.parse(saved));
-    hiddenIds.clear();
-    AN.forEach(n => { if (labels.has(n.label)) hiddenIds.add(n.id); });
-  } catch (e) { /* ignore */ }
-}
-
-/* ═══════════════════════════════════════════
-   HIDDEN PANEL UI
-═══════════════════════════════════════════ */
-function updateHiddenUI() {
-  document.getElementById('hp-count').textContent = `(${hiddenIds.size})`;
-  const list = document.getElementById('hp-list');
-  if (!list) return;
-  list.innerHTML = '';
-  [...hiddenIds].forEach(id => {
-    const node = AN.find(n => n.id === id);
-    if (!node) return;
-    const typeLabel = node.type === 'director' ? 'CREATOR' : node.type === 'artist' ? 'ART' : 'WORK';
-    const row = document.createElement('div');
-    row.className = 'hp-item';
-    row.innerHTML = `
-      <span class="hp-item-type">${typeLabel}</span>
-      <span class="hp-item-label" title="${esc(node.label)}">${esc(node.label)}</span>
-      <button class="icon-btn-xs hp-restore" data-id="${esc(id)}" title="復元">${icon('undo-2', 14)}</button>`;
-    row.querySelector('.hp-restore').addEventListener('click', () => {
-      hiddenIds.delete(id); updateHiddenUI(); refresh();
-      if (hiddenIds.size === 0) document.getElementById('hidden-panel').classList.remove('visible');
-    });
-    list.appendChild(row);
-  });
-  saveHiddenState();
 }
 
 /* ═══════════════════════════════════════════
@@ -105,11 +58,12 @@ const ctxMenu = document.getElementById('ctx-menu');
 
 function showCtx(e, d) {
   e.preventDefault(); e.stopPropagation();
+  hideCtx();
+  if (d.type !== 'work' || !d.url) return; // メニューは「YouTubeで開く」だけなので、開ける作品のときだけ出す
   ctxTarget = d;
-  document.getElementById('ctx-open').style.display = (d.type === 'work' && d.url) ? 'flex' : 'none';
   ctxMenu.style.display = 'block';
   ctxMenu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px';
-  ctxMenu.style.top  = Math.min(e.clientY, window.innerHeight - 150) + 'px';
+  ctxMenu.style.top  = Math.min(e.clientY, window.innerHeight - 60) + 'px';
 }
 function hideCtx() { ctxMenu.style.display = 'none'; ctxTarget = null; }
 
@@ -117,86 +71,9 @@ document.addEventListener('click', hideCtx);
 document.addEventListener('contextmenu', hideCtx);
 ctxMenu.addEventListener('click', e => e.stopPropagation());
 
-document.getElementById('ctx-hide').addEventListener('click', () => {
-  if (!ctxTarget) return;
-  hiddenIds.add(ctxTarget.id); updateHiddenUI(); refresh(); hideCtx();
-});
-document.getElementById('ctx-hide-connected').addEventListener('click', () => {
-  if (!ctxTarget) return;
-  hiddenIds.add(ctxTarget.id);
-  AL.forEach(l => { const s = lid(l.source), t = lid(l.target); if (s === ctxTarget.id) hiddenIds.add(t); if (t === ctxTarget.id) hiddenIds.add(s); });
-  updateHiddenUI(); refresh(); hideCtx();
-});
 document.getElementById('ctx-open').addEventListener('click', () => {
   if (ctxTarget?.url) window.open(ctxTarget.url, '_blank'); hideCtx();
 });
-
-/* ═══════════════════════════════════════════
-   FILTER MODAL
-═══════════════════════════════════════════ */
-let fmCurrentTab = 'work';
-
-function openFilterModal()  { document.getElementById('filter-modal').classList.add('visible'); document.getElementById('fm-search').value = ''; renderFmList(); }
-function closeFilterModal() { document.getElementById('filter-modal').classList.remove('visible'); refresh(); }
-
-function renderFmList() {
-  const tab = fmCurrentTab;
-  const q = document.getElementById('fm-search').value.trim().toLowerCase();
-  const list = document.getElementById('fm-list');
-  list.innerHTML = '';
-
-  let nodes = AN.filter(n => n.type === tab);
-  if (tab !== 'work') nodes = nodes.filter(n => hiddenIds.has(n.id));
-  if (q) nodes = nodes.filter(n => n.label.toLowerCase().includes(q));
-  nodes.sort((a, b) => a.label.localeCompare(b.label, 'ja'));
-
-  if (nodes.length === 0 && tab !== 'work') {
-    const empty = document.createElement('div');
-    empty.style.cssText = 'padding:24px 12px;text-align:center;color:var(--text-dim);font-size:13px';
-    empty.textContent = '非表示のノードはありません';
-    list.appendChild(empty);
-    document.getElementById('fm-count').textContent = `${AN.filter(n => n.type===tab).length}件すべて表示中`;
-    return;
-  }
-
-  nodes.forEach(node => {
-    const isVisible = !hiddenIds.has(node.id);
-    const subText = tab === 'work' ? (node.cats || []).join(', ') : `${(node.works||[]).length} 作品`;
-    const item = document.createElement('div');
-    item.className = 'fm-item';
-    item.innerHTML = `
-      <div class="fm-item-label" title="${esc(node.label)}">${esc(node.label)}</div>
-      ${subText ? `<div class="fm-item-sub">${esc(subText)}</div>` : ''}
-      <button class="fm-toggle ${isVisible ? 'on' : ''}" data-id="${esc(node.id)}" title="${isVisible ? '非表示にする' : '表示する'}"></button>`;
-    item.querySelector('.fm-toggle').addEventListener('click', function(e) {
-      e.stopPropagation();
-      const id = this.dataset.id;
-      if (hiddenIds.has(id)) { hiddenIds.delete(id); this.classList.add('on'); }
-      else { hiddenIds.add(id); this.classList.remove('on'); }
-      updateHiddenUI();
-      if (tab !== 'work') renderFmList();
-    });
-    list.appendChild(item);
-  });
-
-  const total = AN.filter(n => n.type === tab).length;
-  const hidden = AN.filter(n => n.type === tab && hiddenIds.has(n.id)).length;
-  document.getElementById('fm-count').textContent = hidden > 0 ? `${hidden}件非表示` : `${total}件すべて表示中`;
-}
-
-document.getElementById('filter-modal-btn').addEventListener('click', openFilterModal);
-document.getElementById('fm-close').addEventListener('click', closeFilterModal);
-document.getElementById('fm-done').addEventListener('click', closeFilterModal);
-document.getElementById('filter-modal').addEventListener('click', e => { if (e.target === document.getElementById('filter-modal')) closeFilterModal(); });
-['work', 'director', 'artist'].forEach(tab => {
-  document.getElementById(`fm-tab-${tab}`).addEventListener('click', () => {
-    fmCurrentTab = tab;
-    document.querySelectorAll('.fm-tab').forEach(t => t.classList.remove('active'));
-    document.getElementById(`fm-tab-${tab}`).classList.add('active');
-    renderFmList();
-  });
-});
-document.getElementById('fm-search').addEventListener('input', renderFmList);
 
 /* ═══════════════════════════════════════════
    TOPBAR EVENTS
@@ -219,7 +96,7 @@ function navigateToMatches(q) {
     return;
   }
   const ql = q.toLowerCase();
-  const matched = AN.filter(n => !hiddenIds.has(n.id) && n.label.toLowerCase().includes(ql));
+  const matched = AN.filter(n => n.label.toLowerCase().includes(ql));
   if (!matched.length) { applyHL(null, null); return; }
 
   // 複数一致の場合は重心を計算、単一なら applyHL でハイライト
@@ -359,24 +236,9 @@ document.getElementById('depth-tog').addEventListener('click', () => {
   if (selId) applyHL(selId, 'click'); else if (hovId) applyHL(hovId, 'hover');
 });
 
-document.getElementById('theme-btn').addEventListener('click', () => {
-  const dark = document.body.dataset.theme === 'dark';
-  document.body.dataset.theme = dark ? 'light' : 'dark';
-  document.getElementById('theme-btn').textContent = dark ? '◑' : '◐';
-});
-
 document.addEventListener('click', e => {
   const panel = document.getElementById('dir-suggest-panel');
   if (panel.classList.contains('visible') && !panel.contains(e.target)) panel.classList.remove('visible');
-});
-
-document.getElementById('hidden-btn').addEventListener('click', () => {
-  document.getElementById('hidden-panel').classList.toggle('visible');
-});
-
-document.getElementById('hp-restore-all').addEventListener('click', () => {
-  hiddenIds.clear(); updateHiddenUI(); refresh();
-  document.getElementById('hidden-panel').classList.remove('visible');
 });
 
 document.getElementById('fi0').addEventListener('change', e => {
@@ -434,7 +296,7 @@ const _notionDataSig = json => json.replace(/(https:\/\/prod-files-secure\.s3[^"
 // 検索・ドラッグ・パネルやモーダルの表示中に作り直すと、表示が飛んだり入力中の内容が消えたりするので待つ
 function _isUserBusy() {
   if (sq || draggedNode) return true;
-  if (['info-panel', 'filter-modal', 'hidden-panel', 'recent-overlay', 'path-overlay', 'dir-suggest-panel']
+  if (['info-panel', 'recent-overlay', 'path-overlay', 'dir-suggest-panel']
       .some(id => document.getElementById(id)?.classList.contains('visible'))) return true;
   if (document.querySelector('#tag-filter-dropdown.open, #ctx-menu[style*="block"]')) return true;
   return false;

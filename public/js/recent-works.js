@@ -415,7 +415,7 @@ function openRecentWorkPanel(entry) {
   pnEl.textContent = entry.title;
   pnEl.ondblclick = null; pnEl.title = ''; pnEl.style.cursor = '';
   document.getElementById('ph-avatar').style.display = 'none';
-  ['pc-hide', 'pc-search', 'pc-notion'].forEach(id => { document.getElementById(id).style.display = 'none'; });
+  ['pc-search', 'pc-notion'].forEach(id => { document.getElementById(id).style.display = 'none'; });
 
   const panelId = `imdb_rw_${Date.now()}`;
   const igCache = loadIgAvatarCache();

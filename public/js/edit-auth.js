@@ -2,7 +2,7 @@
 
 /* ═══════════════════════════════════════════
    EDIT MODE（編集はパスワードを入れた人だけ。それ以外はゲストとして閲覧のみ）
-   パスワードはトップバーの鍵ボタンから任意で入力する。通ればトークンを保存し、次回からは入力不要。
+   パスワードは ⌘/Ctrl+Shift+E で開く入力欄から任意で入力する（画面上にボタンは置かない）。通ればトークンを保存し、次回からは入力不要。
    編集用の UI は .edit-only を付けるか canEdit() で出し分ける（body.can-edit のときだけ表示）。
 ═══════════════════════════════════════════ */
 const EDIT_TOKEN_KEY = 'creator_network_edit_token';
@@ -28,12 +28,6 @@ function editHeaders() {
 function _setEditMode(on) {
   const changed = canEdit() !== on;
   document.body.classList.toggle('can-edit', on);
-  const btn = document.getElementById('edit-btn');
-  btn.classList.toggle('active', on);
-  btn.title = _editOpen ? '編集できます（パスワード未設定）'
-    : on ? '編集モード中 — クリックでゲストに戻る' : 'パスワードを入力して編集する';
-  btn.querySelector('#edit-icon-locked').style.display = on ? 'none' : '';
-  btn.querySelector('#edit-icon-open').style.display = on ? '' : 'none';
   // 編集用のポップオーバーやパネルが開いたまま残らないように
   if (!on) {
     ['role-picker-popover', 'sns-picker-popover', 'add-creator-dropdown'].forEach(id => document.getElementById(id)?.classList.remove('open'));
@@ -49,19 +43,18 @@ function _closeEditLogin() {
 }
 function _closeEditLoginOnOutside(e) {
   const pop = document.getElementById('edit-login-popover');
-  if (!pop.contains(e.target) && !document.getElementById('edit-btn').contains(e.target)) _closeEditLogin();
+  if (!pop.contains(e.target)) _closeEditLogin();
 }
 
 function _openEditLogin() {
   const pop = document.getElementById('edit-login-popover');
-  const btn = document.getElementById('edit-btn');
   const input = document.getElementById('edit-password');
   document.getElementById('edit-login-error').textContent = '';
   input.value = '';
   pop.classList.add('open');
-  const rect = btn.getBoundingClientRect();
-  pop.style.top = (rect.bottom + 6) + 'px';
-  pop.style.left = Math.max(8, rect.right - pop.offsetWidth) + 'px';
+  // 押すボタンがないので、トップバーの下の中央に出す
+  pop.style.top = 'calc(var(--topbar-h) + 12px)';
+  pop.style.left = Math.max(8, (window.innerWidth - pop.offsetWidth) / 2) + 'px';
   input.focus();
   setTimeout(() => document.addEventListener('mousedown', _closeEditLoginOnOutside), 0);
 }
@@ -106,9 +99,11 @@ async function _checkEditMode() {
   }
 }
 
-document.getElementById('edit-btn').addEventListener('click', e => {
-  e.stopPropagation();
-  if (_editOpen) return;
+// ⌘/Ctrl+Shift+E：ゲストならパスワード入力を開く（もう一度で閉じる）、編集モードならゲストに戻る
+document.addEventListener('keydown', e => {
+  if (!(e.metaKey || e.ctrlKey) || !e.shiftKey || e.altKey || e.code !== 'KeyE') return;
+  e.preventDefault();
+  if (_editOpen) { showToast('この環境はパスワードなしで編集できます'); return; }
   if (canEdit()) {
     _saveEditToken('');
     _setEditMode(false);

@@ -7,83 +7,6 @@
    - 影とブラーは使わない。区切りは 1px の線（--line / --line-2）だけ。
    ══════════════════════════════════════════════════════════════ */
 :root {
-  /* surfaces & ink */
-  --bg:          #fafafa;
-  --bg-solid:    #fafafa;
-  --bg2:         #ffffff;            /* panels / control surface */
-  --bg3:         #f5f5f5;            /* subtle fill: tracks, hovers, inputs */
-  --control-bg:  #ffffff;
-  --bg-glass:    #ffffff;            /* legacy name: solid, no blur */
-  --ink:         #171717;
-  --ink-2:       #525252;
-  --ink-3:       #a3a3a3;
-  --ink-4:       #d4d4d4;
-  --hairline:    #ebebeb;
-  --hairline-2:  #dcdcdc;
-  --tabs-bg:     #f0f0f0;
-
-  /* legacy aliases (consumed by JS / existing selectors) */
-  --text:        #171717;
-  --text-2:      #525252;
-  --text-dim:    #a3a3a3;
-  --text-dimmer: #d4d4d4;
-  --border:      #ebebeb;
-  --border-hi:   #dcdcdc;
-  --card-bg:     #ffffff;
-  --card-border: #ebebeb;
-
-  /* status only */
-  --green:       #22c55e;
-  --amber:       #a3a3a3;            /* legacy: amber is no longer used in the UI */
-  --red:         #ef4444;
-  --accent:      #171717;            /* chrome active / selected / primary button */
-  --accent2:     #a3a3a3;
-  --accent-red:  #ef4444;
-  --scrim:       rgba(0,0,0,.4);
-
-  /* graph data colors (blue / cyan only) */
-  --node-dir:  #2563eb;
-  --node-art:  #38bdf8;
-  --link-dir:  #2563eb;
-  --link-art:  #38bdf8;
-
-  /* lines — the only "depth" in the UI. Kept under the old shadow names so existing rules stay valid. */
-  --shadow-control: 0 0 0 1px #dcdcdc;
-  --shadow-card:    0 0 0 1px #ebebeb;
-  --shadow-pill:    none;
-  --shadow-pop:     0 0 0 1px #dcdcdc;
-
-  /* Notion tag colors (light) */
-  --tag-ink:     #32302c;
-  --tag-default: #ebeae8;
-  --tag-gray:    #e3e2e0;
-  --tag-brown:   #eee0da;
-  --tag-orange:  #fadec9;
-  --tag-yellow:  #fdecc8;
-  --tag-green:   #dbeddb;
-  --tag-blue:    #d3e5ef;
-  --tag-purple:  #e8deee;
-  --tag-pink:    #f5e0e9;
-  --tag-red:     #ffe2dd;
-
-  /* geometry — machined, compact */
-  --topbar-h: 52px;
-  --control-h: 32px;
-  --r-sm: 6px;   /* controls */
-  --r:    9px;   /* fields / cards */
-  --r-lg: 10px;  /* code / large cards */
-  --r-xl: 12px;  /* modals / popovers */
-
-  /* motion */
-  --ease: cubic-bezier(0.2, 0, 0, 1);
-
-  /* type */
-  --sans: 'Geist', 'Noto Sans JP', ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', sans-serif;
-  --mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
-}
-
-/* data-theme は <body> にあるので、値はすべてここで直接書く（var() の連鎖は :root で解決済みになるため） */
-[data-theme="dark"] {
   --bg:          #131313;
   --bg-solid:    #131313;
   --bg2:         #1c1c1c;
@@ -125,7 +48,7 @@
   --shadow-pill:    none;
   --shadow-pop:     0 0 0 1px #333333;
 
-  /* Notion tag colors (dark) */
+  /* Notion tag colors */
   --tag-ink:     rgba(255,255,255,.9);
   --tag-default: #373737;
   --tag-gray:    #5a5a5a;
@@ -137,7 +60,23 @@
   --tag-purple:  #6a557f;
   --tag-pink:    #7b5166;
   --tag-red:     #8e524b;
+
+  /* geometry — machined, compact */
+  --topbar-h: 52px;
+  --control-h: 32px;
+  --r-sm: 6px;   /* controls */
+  --r:    9px;   /* fields / cards */
+  --r-lg: 10px;  /* code / large cards */
+  --r-xl: 12px;  /* modals / popovers */
+
+  /* motion */
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* type */
+  --sans: 'Geist', 'Noto Sans JP', ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  --mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }
+
 
 /* ── reset ── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -148,7 +87,6 @@ body {
   overflow: hidden; height: 100vh; width: 100vw;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  transition: background-color .3s, color .3s;
 }
 
 #bg-grid {
@@ -165,7 +103,7 @@ body {
   border-bottom: 1px solid var(--hairline);
   display: flex; align-items: center; padding: 0 16px; gap: 10px;
 }
-.logo { display: flex; align-items: center; color: var(--ink); white-space: nowrap; flex-shrink: 0; transition: color .3s; }
+.logo { display: flex; align-items: center; color: var(--ink); white-space: nowrap; flex-shrink: 0; }
 .sep { width: 1px; height: 16px; background: var(--hairline); flex-shrink: 0; }
 
 #search-wrap { position: relative; flex-shrink: 0; display: flex; align-items: center; }
@@ -351,7 +289,7 @@ body {
 }
 
 /* chips: mono metadata pills */
-.chip, .fmg-type, .hp-item-type, .cmeta-role-chip, .imdb-chip {
+.chip, .fmg-type, .cmeta-role-chip, .imdb-chip {
   display: inline-flex; align-items: center; gap: 4px;
   font-family: var(--mono); font-size: 11px; font-weight: 400; line-height: 1.4;
   padding: 2px 7px; border-radius: 4px; white-space: nowrap;
@@ -795,59 +733,9 @@ g.nd { transition: opacity .18s; }
 .ctx-item:hover { background: var(--bg3); }
 .ctx-sep { height: 1px; background: var(--hairline); }
 
-/* ── hidden panel ── */
-#hidden-panel {
-  position: fixed; top: calc(var(--topbar-h) + 12px); left: 14px; width: 272px; z-index: 200;
-  background: var(--bg-glass);
-  box-shadow: var(--shadow-pop); border-radius: var(--r-xl);
-  display: none; max-height: calc(100vh - 90px); overflow-y: auto;
-  animation: slideIn .22s var(--ease);
-}
-#hidden-panel.visible { display: block; }
-#hidden-panel::-webkit-scrollbar { width: 4px; }
-#hidden-panel::-webkit-scrollbar-thumb { background: var(--hairline-2); border-radius: 2px; }
 .hp-header { padding: 12px 14px; border-bottom: 1px solid var(--hairline); display: flex; align-items: center; justify-content: space-between; }
 .hp-title  { font-size: 13px; font-weight: 600; color: var(--ink); }
-.hp-title #hp-count { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-3); }
-.hp-item   { display: flex; align-items: center; justify-content: space-between; padding: 9px 14px; border-bottom: 1px solid var(--hairline); gap: 10px; }
-.hp-item-label { font-size: 12px; font-weight: 500; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hp-item-type { flex-shrink: 0; font-size: 10px; padding: 1px 6px; color: var(--ink-3); }
 
-/* ── filter modal ── */
-#filter-modal {
-  position: fixed; inset: 0; z-index: 7000;
-  background: var(--scrim);
-  display: none; align-items: center; justify-content: center;
-}
-#filter-modal.visible { display: flex; }
-.fm-box {
-  background: var(--bg2); box-shadow: var(--shadow-pop);
-  padding: 22px 22px 18px; width: 520px; max-width: 92vw; max-height: 80vh;
-  position: relative; border-radius: var(--r-xl);
-  animation: slideIn .25s var(--ease);
-  display: flex; flex-direction: column;
-}
-.fm-title  { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 16px; }
-.fm-tabs   { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--tabs-bg); margin-bottom: 14px; align-self: flex-start; }
-.fm-tab    { padding: 5px 12px; border: none; border-radius: var(--r-sm); font-size: 12px; font-weight: 500; cursor: pointer; background: none; color: var(--ink-2); transition: color .15s, background .15s, box-shadow .15s; font-family: var(--sans); }
-.fm-tab:hover:not(.active) { color: var(--ink); }
-.fm-tab.active { background: var(--bg2); color: var(--ink); box-shadow: var(--shadow-pill); }
-.fm-search { width: 100%; background: var(--bg3); border: none; box-shadow: var(--shadow-control); color: var(--ink); padding: 8px 12px; font-size: 13px; border-radius: var(--r-sm); outline: none; transition: box-shadow .18s var(--ease); margin-bottom: 10px; font-family: var(--sans); }
-.fm-search:focus { box-shadow: 0 0 0 1px var(--ink-3); }
-.fm-list   { flex: 1; overflow-y: auto; min-height: 0; max-height: 340px; display: flex; flex-direction: column; gap: 2px; }
-.fm-list::-webkit-scrollbar { width: 4px; }
-.fm-list::-webkit-scrollbar-thumb { background: var(--hairline-2); border-radius: 2px; }
-.fm-item   { display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-radius: var(--r-sm); cursor: pointer; transition: background .12s; gap: 10px; }
-.fm-item:hover { background: var(--bg3); }
-.fm-item-label { font-size: 13px; font-weight: 500; color: var(--ink); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fm-item-sub   { font-family: var(--mono); font-size: 11px; color: var(--ink-3); white-space: nowrap; }
-.fm-toggle { width: 38px; height: 22px; background: var(--bg3); border-radius: 100px; position: relative; box-shadow: var(--shadow-pill); transition: background .2s var(--ease); flex-shrink: 0; cursor: pointer; border: none; outline: none; }
-.fm-toggle::after { content: ''; position: absolute; left: 2px; top: 2px; width: 18px; height: 18px; background: #fff; border-radius: 50%; transition: translate .22s var(--ease); }
-.fm-toggle.on { background: var(--accent); }
-.fm-toggle.on::after { translate: 16px 0; }
-.fm-footer { display: flex; align-items: center; justify-content: space-between; padding-top: 14px; border-top: 1px solid var(--hairline); margin-top: 10px; }
-.fm-count  { font-family: var(--mono); font-size: 12px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-.fm-close  { position: absolute; top: 16px; right: 16px; }
 
 /* ── Notion sync button (tactile, status dot) ── */
 #notion-sync-btn {
