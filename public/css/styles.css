@@ -652,7 +652,7 @@ g.nd { transition: opacity .18s; }
   font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.4; text-wrap: pretty;
   overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
-.rw-meta { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.rw-meta { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .rw-directors { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 8px; }
 .rw-director {
   display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%;
@@ -665,6 +665,11 @@ g.nd { transition: opacity .18s; }
 /* フィルモグラフィー：動画を投稿した YouTube チャンネル */
 #filmography-modal { width: min(94vw, 1080px); height: 88vh; max-height: 88vh; }
 .yt-channel { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 8px; }
+.yt-channel-avatars { display: flex; flex-shrink: 0; }
+.yt-channel-avatars .avatar + .avatar { margin-left: -7px; box-shadow: 0 0 0 2px var(--bg2); }
+/* 年・役職・評価は1行に収め、はみ出す役職は省略する */
+.rw-meta > * { flex-shrink: 0; white-space: nowrap; }
+.rw-meta > .fmg-role { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .yt-channel:empty { display: none; }
 .yt-channel-name { font-size: 11px; font-weight: 500; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #rw-loading.rw-loading-more { padding: 8px 20px 28px; }

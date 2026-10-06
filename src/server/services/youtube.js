@@ -2,6 +2,17 @@ const { processInChunks } = require('../util/concurrency');
 
 const youtubeVideoCache = new Map();
 
+/** 共同投稿（「A and B」）の動画は、投稿者のリンクが共同チャンネル一覧のダイアログになっている。そこから各チャンネルを取り出す */
+function collaboratorChannels(author) {
+  const items = author?.endpoint?.payload?.panelLoadingStrategy?.inlineContent?.dialogViewModel
+    ?.customContent?.listViewModel?.listItems ?? [];
+  return items.map(({ listItemViewModel: item }) => ({
+    id: item?.rendererContext?.commandContext?.onTap?.innertubeCommand?.browseEndpoint?.browseId ?? '',
+    name: item?.title?.content ?? '',
+    icon: item?.leadingAccessory?.avatarViewModel?.image?.sources?.[0]?.url ?? '',
+  })).filter(c => c.name);
+}
+
 async function searchYoutubeVideos(titles = []) {
   const uniqueTitles = [...new Set(titles.map(title => String(title || '').trim()).filter(Boolean))].slice(0, 100);
   const startTime = Date.now();
@@ -48,9 +59,15 @@ async function searchYoutubeVideos(titles = []) {
         ?? `https://i.ytimg.com/vi/${video.id}/mqdefault.jpg`;
 
       // 投稿したチャンネル（名前とアイコン）。検索結果に含まれているので追加の問い合わせは不要
+      // 共同投稿なら name は「A and B」で、members に各チャンネルが入る
       const author = video.author;
       const channel = author?.name
-        ? { id: author.id || '', name: author.name, icon: author.best_thumbnail?.url ?? author.thumbnails?.[0]?.url ?? '' }
+        ? {
+            id: author.id && author.id !== 'N/A' ? author.id : '',
+            name: author.name,
+            icon: author.best_thumbnail?.url ?? author.thumbnails?.[0]?.url ?? '',
+            members: collaboratorChannels(author),
+          }
         : null;
 
       return {

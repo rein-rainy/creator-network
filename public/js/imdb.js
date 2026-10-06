@@ -569,8 +569,13 @@ function _fillYtChannel(row, channel) {
   const el = row.querySelector('.yt-channel');
   if (!el || !channel?.name || el.dataset.filled) return;
   el.dataset.filled = '1';
-  const img = channel.icon ? `<img src="${esc(channel.icon)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : '';
-  el.innerHTML = `<span class="avatar avatar-xs">${esc([...channel.name][0] || '?')}${img}</span><span class="yt-channel-name">${esc(channel.name)}</span>`;
+  // 共同投稿は各チャンネルのアイコンを少し重ねて並べる（3つまで）
+  const members = channel.members?.length ? channel.members.slice(0, 3) : [channel];
+  const avatars = members.map(c => {
+    const img = c.icon ? `<img src="${esc(c.icon)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : '';
+    return `<span class="avatar avatar-xs" title="${esc(c.name)}">${esc([...c.name][0] || '?')}${img}</span>`;
+  }).join('');
+  el.innerHTML = `<span class="yt-channel-avatars">${avatars}</span><span class="yt-channel-name">${esc(channel.name)}</span>`;
   el.title = channel.name;
 }
 
@@ -819,7 +824,8 @@ function renderFmgList(type) {
     const youtubeUrl = `https://www.youtube.com/results?search_query=${encodeURIComponent(searchQuery)}`;
     const titleType = fmgTitleType(item);
     const registered = !!_findRegisteredWork({ title });
-    const roleHtml = (item._fmgRoles || []).map(role => `<span class="fmg-role">${esc(role)}</span>`).join('');
+    const roles = (item._fmgRoles || []).join('・');
+    const roleHtml = roles ? `<span class="fmg-role" title="${esc(roles)}">${esc(roles)}</span>` : '';
 
     return `<a class="rw-card" href="${esc(youtubeUrl)}" target="_blank" rel="noopener" data-yt-query="${esc(searchQuery)}" data-idx="${i}">
       <div class="rw-thumb-wrap">
