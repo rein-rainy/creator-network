@@ -330,6 +330,9 @@ const FILMOGRAPHY_QUERY = `query Filmography($id: ID!, $after: ID) {
           id titleText { text } originalTitleText { text }
           titleType { id } releaseYear { year }
           ratingsSummary { aggregateRating } primaryImage { url }
+          directors: credits(first: 5, filter: { categories: ["director"] }) {
+            edges { node { name { id nameText { text } primaryImage { url } } } }
+          }
         }
         ... on Cast { characters { name } }
         ... on Crew { jobs { text } }
@@ -352,6 +355,12 @@ function toFilmographyCredit(node) {
       startYear: title.releaseYear?.year ?? null,
       rating: title.ratingsSummary?.aggregateRating ? { aggregateRating: title.ratingsSummary.aggregateRating } : null,
       primaryImage: title.primaryImage?.url ? { url: title.primaryImage.url } : null,
+      // アーティストのフィルモグラフィーで各作品の監督を見せるため
+      directors: (title.directors?.edges ?? []).map(({ node: d }) => ({
+        id: d.name?.id ?? '',
+        name: d.name?.nameText?.text ?? '',
+        image: d.name?.primaryImage?.url ?? '',
+      })).filter(d => d.name),
     },
   };
 }

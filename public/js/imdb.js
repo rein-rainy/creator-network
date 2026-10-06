@@ -482,6 +482,7 @@ const FMG_TAB_ORDER = ['musicVideo', 'movie', 'tvSeries', 'tvMiniSeries', 'tvMov
 let _fmgCurrentTab  = null;
 let _fmgCurrentName = null;
 let _fmgCurrentPerson = null; // { name, nameId, image } — 作品パネルの初期クリエイターに使う
+let _fmgShowDirectors = false; // カードにチャンネルではなく各作品の監督を出す（アーティストなど監督でない人のとき）
 let _fmgGroups      = {};
 
 function fmgTitleObject(item) {
@@ -680,6 +681,7 @@ function linkedWorkTitles(nodeId) {
 async function openFilmographyModal(personName, avatarSrc, opts = {}) {
   _fmgCurrentName = personName;
   _fmgCurrentPerson = { name: personName, nameId: opts.nameId || '', image: '' };
+  _fmgShowDirectors = opts.personType === 'artist';
 
   // モーダルを開く
   const overlay = document.getElementById('filmography-overlay');
@@ -746,6 +748,8 @@ async function openFilmographyModal(personName, avatarSrc, opts = {}) {
     // サーバーが整形したフィルモグラフィーレスポンス形式に対応
     _fmgGroups = {};
     const creditArray = normalizeFilmographyCredits(fmgData);
+    // 種別が分からない人（IMDb の出演者カードから開いたときなど）は、監督の仕事が1つもなければ監督を出す
+    if (!opts.personType) _fmgShowDirectors = !creditArray.some(item => fmgRawRoleValues(item).includes('director'));
 
     creditArray.forEach(item => {
       const type = fmgTitleType(item);
@@ -840,7 +844,9 @@ function renderFmgList(type) {
           ${titleType && titleType !== type ? `<span class="fmg-type">${esc(fmgTypeLabel(titleType))}</span>` : ''}
           ${rating ? `<span class="fmg-rating">${STAR_ICON}${rating}</span>` : ''}
         </div>
-        <div class="yt-channel"></div>
+        ${_fmgShowDirectors
+          ? `<div class="rw-directors">${_fmgDirectorsHtml(fmgDirectors(item))}</div>`
+          : '<div class="yt-channel"></div>'}
       </div>
     </a>`;
   }).join('');
@@ -852,8 +858,43 @@ function renderFmgList(type) {
   body.querySelectorAll('.rw-card').forEach(row => row.addEventListener('click', e => {
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();
+    // 監督を押したらその人のフィルモグラフィーへ
+    const dirEl = e.target.closest('.rw-director');
+    if (dirEl) {
+      e.stopPropagation();
+      const d = fmgDirectors(items[Number(row.dataset.idx)])[Number(dirEl.dataset.idx)];
+      openFilmographyModal(d.name, _fmgDirectorAvatar(d), { nameId: d.id, personType: _fmgDirectorNode(d) ? 'director' : '' });
+      return;
+    }
     openRecentWorkPanel(_fmgWorkEntry(items[Number(row.dataset.idx)], type, row.dataset.ytQuery), { aboveFilmography: true });
   }));
+}
+
+/** 作品の監督（IMDb）。{ id, name, image } */
+function fmgDirectors(item) {
+  return fmgTitleObject(item).directors || [];
+}
+
+/** IMDb の監督に当たる、グラフ上の登録済みクリエイター */
+function _fmgDirectorNode(d) {
+  const key = _compact(_normName(d.name));
+  return AN.find(n => n.type === 'director' && _compact(_normName(n.label)) === key) || null;
+}
+
+/** アイコンはグラフと同じ画像を優先し、なければ IMDb の顔写真 */
+function _fmgDirectorAvatar(d) {
+  const node = _fmgDirectorNode(d);
+  return node?.avatar || (d.image ? imdbProxyImg(d.image) : '');
+}
+
+function _fmgDirectorsHtml(directors) {
+  return directors.map((d, i) => {
+    const src = _fmgDirectorAvatar(d);
+    const img = src ? `<img src="${esc(src)}" alt="" loading="lazy" onerror="this.remove()">` : '';
+    return `<span class="rw-director" data-idx="${i}" role="button" tabindex="0" title="${esc(d.name)} のフィルモグラフィー">
+      <span class="avatar avatar-xs">${esc([...d.name][0] || '?')}${img}</span><span class="rw-director-name">${esc(d.name)}</span>
+    </span>`;
+  }).join('');
 }
 
 /** フィルモグラフィーの1件を、最新作品パネル（openRecentWorkPanel）が扱う形にする */
@@ -871,10 +912,18 @@ function _fmgWorkEntry(item, type, ytQuery) {
   };
   entry.workNode = _findRegisteredWork(entry);
   entry.registered = !!entry.workNode;
-  // フィルモグラフィーの本人が登録済みのクリエイターなら、保存時のクリエイターに最初から入れておく
+  // 保存時のクリエイターの初期値：作品の監督のうち登録済みの人。監督が取れないときはフィルモグラフィーの本人（登録済みなら）
+  fmgDirectors(item).forEach(d => {
+    const node = _fmgDirectorNode(d);
+    if (node?.notionPageId && !entry.directors.some(x => x.nodeId === node.id)) {
+      entry.directors.push({ name: node.label, nameId: d.id, nodeId: node.id, imdbImage: d.image });
+    }
+  });
   const p = _fmgCurrentPerson;
-  const node = p && AN.find(n => n.type === 'director' && n.notionPageId && _compact(_normName(n.label)) === _compact(_normName(p.name)));
-  if (node) entry.directors.push({ name: node.label, nameId: p.nameId, nodeId: node.id, imdbImage: p.image });
+  const self = p && _fmgDirectorNode(p);
+  if (!fmgDirectors(item).length && self?.notionPageId) {
+    entry.directors.push({ name: self.label, nameId: p.nameId, nodeId: self.id, imdbImage: p.image });
+  }
   return entry;
 }
 

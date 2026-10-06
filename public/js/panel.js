@@ -126,7 +126,7 @@ function showPanel(d) {
     notionBtn.style.display = 'none';
     searchBtn.style.display = 'flex';
     searchBtn.onclick = () => {
-      openFilmographyModal(d.label, d.avatar || '', { workTitles: linkedWorkTitles(d.id) });
+      openFilmographyModal(d.label, d.avatar || '', { workTitles: linkedWorkTitles(d.id), personType: d.type });
     };
   }
 
