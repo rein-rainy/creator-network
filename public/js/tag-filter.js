@@ -22,10 +22,11 @@ function renderTagDropdown() {
     clear.innerHTML = `${icon('x', 14)}<span>絞り込みをクリア</span>`;
     clear.addEventListener('click', e => {
       e.stopPropagation();
+      const was = isLayoutFiltered();
       aFilters.clear();
       updateTagFilterBtn();
       renderTagDropdown();
-      refresh();
+      applyFilterLayout(was);
     });
     dd.appendChild(clear);
     const sep = document.createElement('div');
@@ -39,10 +40,11 @@ function renderTagDropdown() {
     item.innerHTML = `<div class="tfd-check"></div>${tagHtml(cat)}`;
     item.addEventListener('click', e => {
       e.stopPropagation();
+      const was = isLayoutFiltered();
       if (aFilters.has(cat)) aFilters.delete(cat); else aFilters.add(cat);
       updateTagFilterBtn();
       renderTagDropdown();
-      refresh();
+      applyFilterLayout(was);
     });
     dd.appendChild(item);
   });

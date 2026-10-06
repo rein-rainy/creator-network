@@ -150,26 +150,45 @@ function restorePreSqTransform() {
   _preSqTransform = null;
 }
 
+/* フィルター検索・タグ絞り込みのどちらかで絞り込み中か（絞り込み中はノードを再配置する） */
+function isLayoutFiltered() {
+  return aFilters.size > 0 || (!!sq && searchMode === 'filter');
+}
+
+/* 絞り込み条件が変わったあとに呼ぶ。wasFiltered は変更前の isLayoutFiltered()。
+   絞り込み開始時に座標と表示位置を記憶し、絞り込み中は再配置、解除したら記憶した配置に戻す。 */
+function applyFilterLayout(wasFiltered) {
+  const nowFiltered = isLayoutFiltered();
+  if (!wasFiltered && nowFiltered) {
+    _preSqSnapshot = {};
+    AN.forEach(n => { if (n.x != null) _preSqSnapshot[n.id] = { x: n.x, y: n.y }; });
+    _preSqTransform = d3.zoomTransform(document.getElementById('canvas'));
+  }
+
+  if (nowFiltered) { refresh({ freeLayout: true }); return; }
+  if (!wasFiltered) return;
+
+  if (!_preSqSnapshot) { refresh(); return; }
+  AN.forEach(n => {
+    const s = _preSqSnapshot[n.id];
+    if (s) { n.x = s.x; n.y = s.y; n.vx = 0; n.vy = 0; }
+  });
+  _preSqSnapshot = null;
+  const { nodes, links } = filteredData();
+  redraw(nodes, links);
+  settleSimForces();  // 絞り込み中に強まった力学パラメータを元の安定状態へ戻す
+  restorePreSqTransform();
+}
+
 document.getElementById('search-mode-btn').addEventListener('click', () => {
+  const was = isLayoutFiltered();
   searchMode = searchMode === 'filter' ? 'navigate' : 'filter';
   updateSearchModeBtn();
 
   // モード切替時に現在の検索クエリで再適用
   if (sq) {
-    if (searchMode === 'filter') {
-      refresh({ freeLayout: true });
-    } else {
-      // filterモードから抜けるので全ノードを戻す
-      if (_preSqSnapshot) {
-        AN.forEach(n => { const s = _preSqSnapshot[n.id]; if (s) { n.x = s.x; n.y = s.y; n.vx = 0; n.vy = 0; } });
-        _preSqSnapshot = null;
-      }
-      const { nodes, links } = filteredData();
-      redraw(nodes, links);
-      settleSimForces();  // 検索中に強まった力学パラメータを元の安定状態へ戻す
-      restorePreSqTransform();
-      navigateToMatches(sq);
-    }
+    applyFilterLayout(was);
+    if (searchMode === 'navigate') navigateToMatches(sq);
   }
 });
 
@@ -185,26 +204,8 @@ document.getElementById('search-box').addEventListener('input', e => {
     return;
   }
 
-  // filterモード（従来の動作）
-  if (!prev && sq) {
-    _preSqSnapshot = {};
-    AN.forEach(n => { if (n.x != null) _preSqSnapshot[n.id] = { x: n.x, y: n.y }; });
-    _preSqTransform = d3.zoomTransform(document.getElementById('canvas'));
-  }
-
-  if (!sq && _preSqSnapshot) {
-    AN.forEach(n => {
-      const s = _preSqSnapshot[n.id];
-      if (s) { n.x = s.x; n.y = s.y; n.vx = 0; n.vy = 0; }
-    });
-    _preSqSnapshot = null;
-    const { nodes, links } = filteredData();
-    redraw(nodes, links);
-    settleSimForces();  // 検索中に強まった力学パラメータを元の安定状態へ戻す
-    restorePreSqTransform();
-  } else {
-    refresh({ freeLayout: true });
-  }
+  // filterモード
+  applyFilterLayout(aFilters.size > 0 || !!prev);
 });
 
 const _searchClear = document.getElementById('search-clear');
