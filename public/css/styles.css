@@ -832,6 +832,8 @@ g.nd { transition: opacity .18s; }
   border-radius: var(--r-sm); outline: none; transition: box-shadow .18s var(--ease); min-width: 0;
 }
 .cmeta-input:focus { box-shadow: 0 0 0 1px var(--ink-3); }
+.cmeta-alias-input { width: 100%; resize: vertical; line-height: 1.5; padding: 6px 9px; }
+.cmeta-alias-chip { font-size: 11px; color: var(--ink-2); background: var(--bg3); padding: 2px 8px; border-radius: 4px; }
 .cmeta-sns-list { display: flex; flex-direction: column; gap: 4px; width: 100%; }
 .cmeta-sns-item { display: flex; align-items: center; gap: 5px; }
 .cmeta-add-sns-btn {

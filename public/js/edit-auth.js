@@ -30,7 +30,7 @@ function _setEditMode(on) {
   document.body.classList.toggle('can-edit', on);
   // 編集用のポップオーバーやパネルが開いたまま残らないように
   if (!on) {
-    ['role-picker-popover', 'sns-picker-popover', 'add-creator-dropdown'].forEach(id => document.getElementById(id)?.classList.remove('open'));
+    ['role-picker-popover', 'sns-picker-popover', 'alias-picker-popover', 'add-creator-dropdown'].forEach(id => document.getElementById(id)?.classList.remove('open'));
   }
   // 開いている人物パネルを描き直す（名前のダブルクリック編集の有無を切り替える）
   const sel = changed && typeof AN !== 'undefined' && AN.find(n => n.id === selId);

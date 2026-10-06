@@ -43,6 +43,16 @@ function findRoleProp(props) {
   return Object.keys(props).find(key => key === 'Role' || key === '役職') || 'Role';
 }
 
+/** Name of the aliases property (English or Japanese), defaulting to '別名'. */
+function findAliasesProp(props) {
+  return Object.keys(props).find(key => key === '別名' || key.toLowerCase() === 'aliases') || '別名';
+}
+
+/** 別名テキストを配列にする（改行・カンマ・読点区切り） */
+function splitAliases(text) {
+  return (text || '').split(/[\n,、]/).map(s => s.trim()).filter(Boolean);
+}
+
 /** Name of the SNS property (case-insensitive), defaulting to 'SNS'. */
 function findSnsProp(props) {
   return Object.keys(props).find(key => key.toLowerCase() === 'sns') || 'SNS';
@@ -85,12 +95,16 @@ async function fetchPersonDB(dbId, label) {
       if (snsProp?.type === 'url') sns = snsProp.url ?? '';
       else if (snsProp?.type === 'rich_text') sns = snsProp.rich_text.map(t => t.plain_text).join('');
 
+      // 別名は表示には使わず、検索だけに使う
+      const aliasesProp = props[findAliasesProp(props)];
+      const aliases = aliasesProp?.type === 'rich_text' ? splitAliases(aliasesProp.rich_text.map(t => t.plain_text).join('')) : [];
+
       // ページのカバー画像をアイコンとして使う（Notion にアップロードした画像の URL は1時間で失効するため毎回取り直す）
       // AvatarType: 'file' = このアプリが Notion にアップロードした画像 / 'external' = 外部 URL（IMDb など）
       const avatar = page.cover?.external?.url ?? page.cover?.file?.url ?? '';
       const avatarType = avatar ? page.cover.type : '';
 
-      persons.push({ Name: name, Role: role, SNS: sns, Avatar: avatar, AvatarType: avatarType, notionPageId: page.id });
+      persons.push({ Name: name, Role: role, SNS: sns, Aliases: aliases, Avatar: avatar, AvatarType: avatarType, notionPageId: page.id });
     }
 
     hasMore = response.body.has_more;
@@ -433,7 +447,7 @@ async function getRoleOptions() {
   return { options: options.map(option => ({ id: option.id, name: option.name, color: option.color })) };
 }
 
-async function updateCreatorMeta(creatorPageId, role, sns) {
+async function updateCreatorMeta(creatorPageId, role, sns, aliases) {
   const dbRes = await notionRequest('GET', `/v1/databases/${config.DB_CREATORS}`);
   if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
   const props = dbRes.body.properties;
@@ -459,6 +473,11 @@ async function updateCreatorMeta(creatorPageId, role, sns) {
     const snsProp = props[snsPropName];
     if (snsProp?.type === 'url') patchProps[snsPropName] = { url: firstUrl || null };
     else patchProps[snsPropName] = { rich_text: firstUrl ? [{ text: { content: firstUrl } }] : [] };
+  }
+
+  if (aliases !== undefined) {
+    const text = (aliases || []).map(a => String(a).trim()).filter(Boolean).join('\n');
+    patchProps[findAliasesProp(props)] = { rich_text: text ? [{ text: { content: text } }] : [] };
   }
 
   if (Object.keys(patchProps).length === 0) return { success: true, noop: true };

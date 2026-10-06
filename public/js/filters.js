@@ -24,7 +24,7 @@ function filteredData() {
 
   if (sq && searchMode === 'filter') {
     const q = sq.toLowerCase();
-    const direct = new Set(nodes.filter(n => n.label.toLowerCase().includes(q)).map(n => n.id));
+    const direct = new Set(nodes.filter(n => nodeMatchesQuery(n, q)).map(n => n.id));
     const exp = new Set(direct);
     links.forEach(l => { const s = lid(l.source), t = lid(l.target); if (direct.has(s)) exp.add(t); if (direct.has(t)) exp.add(s); });
     // 監督にヒットしたときは、その作品に関わった人物まで2次展開する

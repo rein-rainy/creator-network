@@ -151,13 +151,19 @@ function loadCreatorMeta(rows) {
     const avatar        = (row['Avatar']         || '').trim();
     const avatarType    = row['AvatarType'] || '';
     const notionPageId  = (row['notionPageId']   || '').trim();
+    const aliases       = row['Aliases'] || [];
     const sns = snsRaw ? [snsFromUrl(snsRaw)].filter(Boolean) : [];
-    creatorMetaMap.set(name, { role, sns, avatar, avatarType, notionPageId });
+    creatorMetaMap.set(name, { role, sns, aliases, avatar, avatarType, notionPageId });
   });
 }
 
 function getCreatorMeta(name) {
-  return creatorMetaMap.get(name) || { role: '', sns: [], avatar: '', avatarType: '', notionPageId: '' };
+  return creatorMetaMap.get(name) || { role: '', sns: [], aliases: [], avatar: '', avatarType: '', notionPageId: '' };
+}
+
+/** 検索語（小文字）がノードの名前か別名に含まれるか。別名は表示には使わず検索だけに使う */
+function nodeMatchesQuery(n, q) {
+  return n.label.toLowerCase().includes(q) || (n.aliases || []).some(a => a.toLowerCase().includes(q));
 }
 
 /* ═══════════════════════════════════════════
@@ -194,7 +200,7 @@ function buildGraph(rows) {
     relNames(row, 'Director / Creator').forEach(d => {
       const did = `d_${d}`;
       const meta = getCreatorMeta(d);
-      ensure(did, 'director', d, { role: meta.role, sns: meta.sns, avatar: meta.avatar, avatarType: meta.avatarType, notionPageId: meta.notionPageId || '' });
+      ensure(did, 'director', d, { role: meta.role, sns: meta.sns, aliases: meta.aliases || [], avatar: meta.avatar, avatarType: meta.avatarType, notionPageId: meta.notionPageId || '' });
       nm.get(did).works.push(wid);
       links.push({ source: did, target: wid, ltype: 'dir' });
     });

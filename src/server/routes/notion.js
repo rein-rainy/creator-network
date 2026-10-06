@@ -60,9 +60,9 @@ async function handleNotionRoutes(req, res) {
     return notion.getRoleOptions();
   })) return true;
 
-  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-update-creator-meta', label: 'UpdateCreatorMeta Error', editor: true }, async ({ creatorPageId, role, sns }) => {
+  if (await jsonRoute(req, res, { method: 'POST', path: '/notion-update-creator-meta', label: 'UpdateCreatorMeta Error', editor: true }, async ({ creatorPageId, role, sns, aliases }) => {
     if (!creatorPageId) throw new Error('creatorPageId が必要です');
-    return notion.updateCreatorMeta(creatorPageId, role, sns);
+    return notion.updateCreatorMeta(creatorPageId, role, sns, aliases);
   })) return true;
 
   if (await jsonRoute(req, res, { method: 'POST', path: '/notion-rename-creator', label: 'Notion Rename Error', editor: true }, async ({ creatorPageId, newName }) => {

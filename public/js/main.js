@@ -96,7 +96,7 @@ function navigateToMatches(q) {
     return;
   }
   const ql = q.toLowerCase();
-  const matched = AN.filter(n => n.label.toLowerCase().includes(ql));
+  const matched = AN.filter(n => nodeMatchesQuery(n, ql));
   if (!matched.length) { applyHL(null, null); return; }
 
   // 複数一致の場合は重心を計算、単一なら applyHL でハイライト

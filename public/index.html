@@ -7,7 +7,7 @@
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<link rel="stylesheet" href="/css/styles.css?v=46">
+<link rel="stylesheet" href="/css/styles.css?v=47">
 </head>
 <body>
 
@@ -209,18 +209,18 @@
   </div>
 </div>
 
-<script src="/js/core.js?v=24"></script>
-<script src="/js/edit-auth.js?v=5"></script>
-<script src="/js/filters.js?v=7"></script>
+<script src="/js/core.js?v=25"></script>
+<script src="/js/edit-auth.js?v=6"></script>
+<script src="/js/filters.js?v=8"></script>
 <script src="/js/graph.js?v=25"></script>
-<script src="/js/panel.js?v=14"></script>
+<script src="/js/panel.js?v=15"></script>
 <script src="/js/imdb.js?v=17"></script>
 <script src="/js/tag-filter.js?v=5"></script>
 <script src="/js/avatars.js?v=8"></script>
 <script src="/js/director-suggest.js?v=4"></script>
 <script src="/js/recent-works.js?v=24"></script>
 <script src="/js/path-finder.js?v=8"></script>
-<script src="/js/main.js?v=21"></script>
+<script src="/js/main.js?v=22"></script>
 <!-- ── Role Picker Popover ── -->
 <div id="role-picker-popover" class="picker-popover">
   <div class="picker-popover-header">
@@ -241,6 +241,18 @@
   </div>
   <div class="picker-popover-body">
     <div class="cmeta-sns-list" id="sns-popover-list"></div>
+  </div>
+</div>
+
+<!-- ── Aliases Popover ── -->
+<div id="alias-picker-popover" class="picker-popover">
+  <div class="picker-popover-header">
+    <span class="picker-popover-label">別名（検索用・1行に1つ）</span>
+    <button class="icon-btn-xs" id="alias-popover-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
+  </div>
+  <div class="picker-popover-body">
+    <textarea class="cmeta-input cmeta-alias-input" id="alias-popover-input" rows="4" placeholder="例: 別表記、ローマ字名"></textarea>
+    <button class="btn btn-primary btn-block" id="alias-popover-save">保存</button>
   </div>
 </div>
 

@@ -247,6 +247,17 @@ function showPanel(d) {
       </div>
     </div>`;
 
+    // 別名行（監督のみ。表示名には使わず検索用）
+    if (d.type === 'director') {
+      html += `<div class="cmeta-row">
+        <span class="cmeta-label">別名</span>
+        <div class="cmeta-chips" id="${esc(metaId)}_alias_chips">${aliasChipsHtml(d.aliases)}</div>
+        <button class="icon-btn-xs cmeta-edit-btn" id="${esc(metaId)}_alias_editbtn" title="別名を編集">
+          ${icon('pencil', 14)}
+        </button>
+      </div>`;
+    }
+
     html += `</div>`; // cmeta-section end
 
     // --- Top co-workers ---
@@ -400,7 +411,7 @@ function showPanel(d) {
             const name = (c.Name || '').trim();
             if (name) {
               const sns = c.SNS ? [snsFromUrl(c.SNS)].filter(Boolean) : [];
-              creatorMetaMap.set(name, { role: c.Role || '', sns, avatar: c.Avatar || '' });
+              creatorMetaMap.set(name, { role: c.Role || '', sns, aliases: c.Aliases || [], avatar: c.Avatar || '' });
             }
           });
         }
@@ -475,6 +486,7 @@ function showPanel(d) {
         e.stopPropagation();
         // 他のポップオーバーを閉じる
         document.getElementById('sns-picker-popover').classList.remove('open');
+        document.getElementById('alias-picker-popover').classList.remove('open');
 
         _selectedRoles = new Set(
           (d.role || '').split(',').map(r => r.trim()).filter(Boolean)
@@ -613,6 +625,7 @@ function showPanel(d) {
         e.stopPropagation();
         // 他のポップオーバーを閉じる
         rolePopover.classList.remove('open');
+        document.getElementById('alias-picker-popover').classList.remove('open');
 
         editingSns = d.sns && d.sns.length > 0 ? [{ ...d.sns[0] }] : [{ url: '', label: 'Web', icon: '🔗' }];
         renderSnsEditList(saveSns);
@@ -634,7 +647,71 @@ function showPanel(d) {
         setTimeout(() => document.addEventListener('mousedown', outsideHandler), 0);
       });
     }
+
+    // ── 別名 編集（監督のみ）──
+    const aliasEditBtn  = document.getElementById(`${metaId}_alias_editbtn`);
+    const aliasPopover  = document.getElementById('alias-picker-popover');
+    const aliasInput    = document.getElementById('alias-popover-input');
+    const aliasPopSave  = document.getElementById('alias-popover-save');
+    const aliasPopClose = document.getElementById('alias-popover-close');
+
+    function closeAliasPopover() {
+      aliasPopover.classList.remove('open');
+      aliasPopSave.onclick = null;
+      aliasPopClose.onclick = null;
+      document.removeEventListener('mousedown', aliasPopover._outsideHandler);
+    }
+
+    function saveAliases() {
+      const newAliases = [...new Set(aliasInput.value.split('\n').map(s => s.trim()).filter(Boolean))];
+      d.aliases = newAliases;
+      const meta = creatorMetaMap.get(d.label) || {};
+      meta.aliases = newAliases;
+      creatorMetaMap.set(d.label, meta);
+      const creator = ALL_CREATORS.find(c => c.notionPageId === d.notionPageId);
+      if (creator) creator.Aliases = newAliases;
+      const chipsEl = document.getElementById(`${metaId}_alias_chips`);
+      if (chipsEl) chipsEl.innerHTML = aliasChipsHtml(newAliases);
+      closeAliasPopover();
+      if (d.notionPageId) {
+        fetch('/notion-update-creator-meta', {
+          method: 'POST',
+          headers: editHeaders(),
+          body: JSON.stringify({ creatorPageId: d.notionPageId, aliases: newAliases }),
+        }).then(r => r.json()).catch(err => console.error('[UpdateMeta Aliases]', err));
+      }
+    }
+
+    if (aliasEditBtn) {
+      aliasEditBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        // 他のポップオーバーを閉じる
+        rolePopover.classList.remove('open');
+        snsPopover.classList.remove('open');
+
+        aliasInput.value = (d.aliases || []).join('\n');
+        aliasPopover.classList.add('open');
+        positionPopover(aliasPopover, aliasEditBtn);
+        setTimeout(() => aliasInput.focus(), 50);
+
+        aliasPopSave.onclick = saveAliases;
+        aliasPopClose.onclick = closeAliasPopover;
+        // ⌘/Ctrl+Enter で保存（Enter は改行）
+        aliasInput.onkeydown = ev => { if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) saveAliases(); };
+
+        const outsideHandler = (ev) => {
+          if (!aliasPopover.contains(ev.target) && ev.target !== aliasEditBtn) closeAliasPopover();
+        };
+        aliasPopover._outsideHandler = outsideHandler;
+        setTimeout(() => document.addEventListener('mousedown', outsideHandler), 0);
+      });
+    }
   }
+}
+
+function aliasChipsHtml(aliases) {
+  if (!aliases || !aliases.length) return `<span class="cmeta-empty">未設定</span>`;
+  return aliases.map(a => `<span class="cmeta-alias-chip">${esc(a)}</span>`).join('');
 }
 
 /* ═══════════════════════════════════════════
@@ -653,6 +730,7 @@ function showPersonPicker(anchor, { people, onPick, onCreate, avatarClass = '' }
   showPicker(anchor, {
     items: () => people,
     label: p => p.Name,
+    keywords: p => p.Aliases || [],
     itemHtml: p => `
       <span class="avatar avatar-xs${avatarClass}">${esc([...p.Name][0] || '?')}${p.Avatar ? `<img src="${esc(p.Avatar)}" alt="" onerror="this.remove()">` : ''}</span>
       <div class="acd-name">${esc(p.Name)}</div>
@@ -666,7 +744,7 @@ function showPersonPicker(anchor, { people, onPick, onCreate, avatarClass = '' }
  * 検索つきの選択ドロップダウン（クリエイター・アーティスト・カテゴリ共通）。
  * items() は開くたび・選ぶたびに呼ぶ（選んだものを候補から外せる）。keepOpen なら選んでも閉じない。
  */
-function showPicker(anchor, { items, label, itemHtml, onPick, onCreate, keepOpen = false, placeholder = '検索...' }) {
+function showPicker(anchor, { items, label, keywords = () => [], itemHtml, onPick, onCreate, keepOpen = false, placeholder = '検索...' }) {
   const dropdown = document.getElementById('add-creator-dropdown');
   const search = dropdown.querySelector('.acd-search');
   const list = dropdown.querySelector('.acd-list');
@@ -686,7 +764,9 @@ function showPicker(anchor, { items, label, itemHtml, onPick, onCreate, keepOpen
   const render = () => {
     const query = search.value.trim();
     const all = items();
-    const filtered = all.filter(it => label(it).toLowerCase().includes(query.toLowerCase())).slice(0, 50);
+    const q = query.toLowerCase();
+    // keywords（人物の別名など）にも一致させる
+    const filtered = all.filter(it => [label(it), ...keywords(it)].some(s => s.toLowerCase().includes(q))).slice(0, 50);
     list.innerHTML = '';
     filtered.forEach(it => {
       const item = document.createElement('div');
@@ -743,6 +823,7 @@ function addCreatorToWork(workNode, creator) {
       label: creator.Name,
       role: creator.Role,
       sns: sns,
+      aliases: creator.Aliases || [],
       avatar: creator.Avatar,
       notionPageId: creator.notionPageId || '',
       works: [workNode.id]
