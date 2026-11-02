@@ -274,7 +274,7 @@ function _observeRecentThumb(card) {
       });
       enrichFmgYoutubeLinks(body, '.rw-card[data-yt-pending]');
       visible.forEach(el => delete el.dataset.ytPending);
-    }, { root: body, rootMargin: '400px 0px' });
+    }, { root: body, rootMargin: '1000px 0px' });   // 画面に入る前に読み込みと展開を済ませておく
   }
   _recentThumbObserver.observe(card);
 }

@@ -587,6 +587,18 @@ function _fmgThumbSrc(result) {
   return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : result.thumbnail;
 }
 
+/* 展開の済んだサムネイルの差し替えは、次のフレームでまとめて行う（届くたびに書き換えると、そのたびに描き直しが起きる） */
+const _thumbSwaps = [];
+function _queueThumbSwap(slot, img) {
+  if (!_thumbSwaps.length) requestAnimationFrame(() => {
+    const swaps = _thumbSwaps.splice(0);
+    swaps.forEach(([slot, img]) => { if (slot.isConnected) slot.replaceWith(img); });
+    // 入れたフレームの次にフェードを始める（同じフレームだと透明からの変化にならない）
+    requestAnimationFrame(() => swaps.forEach(([, img]) => img.classList.add('loaded')));
+  });
+  _thumbSwaps.push([slot, img]);
+}
+
 async function enrichFmgYoutubeLinks(body, rowSelector) {
   const rows = [...body.querySelectorAll(rowSelector)];
 
@@ -610,19 +622,19 @@ async function enrichFmgYoutubeLinks(body, rowSelector) {
       return;
     }
 
-    const img = document.createElement('img');
+    if (thumbSlot.dataset.thumbPending) return;   // 同じ行への2回目の呼び出し（展開中）
+    thumbSlot.dataset.thumbPending = '1';
+    // 画像はページに入れる前に展開（decode）まで済ませてから差し替える。
+    // 読み込み途中の img をそのまま入れると、展開が描画のときにメインスレッドで行われてスクロールが引っかかる
+    const img = new Image();
     img.className = 'fmg-thumb';
     img.alt = '';
-    img.loading = 'lazy';
-    img.onload = () => img.classList.add('loaded');
-    img.onerror = () => {
-      const ph = document.createElement('div');
-      ph.className = 'fmg-ph done';
-      img.replaceWith(ph);
-    };
     img.decoding = 'async';
     img.src = _fmgThumbSrc(result);
-    thumbSlot.replaceWith(img);
+    img.decode()
+      .catch(() => { if (!img.naturalWidth) throw new Error('thumbnail failed'); })
+      .then(() => _queueThumbSwap(thumbSlot, img),
+            () => { delete thumbSlot.dataset.thumbPending; thumbSlot.classList.add('done'); });
   };
 
   // 1. すでにキャッシュにあるものは即座に反映
