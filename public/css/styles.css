@@ -1119,10 +1119,11 @@ g.nd { transition: opacity .18s; }
 .hp-item-label { font: 500 var(--text-body-2) var(--sans); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-item-sub { font: 500 var(--text-caption-1) var(--sans); letter-spacing: var(--tracking-caption-1); color: var(--ink-2); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.wcard { position: relative; }
+/* グラフのカード（foreignObject の中）では position / transform を使わない。
+   iOS Safari は foreignObject の中の位置指定した要素を、SVG の移動・拡大縮小を無視して画面の左上に描いてしまう */
 .wc-suggest {
-  position: absolute; top: 6px; right: 6px;
-  font-size: 9px; font-weight: 600; line-height: 1; padding: 3px 4px; border-radius: calc(var(--radius-2lg) - 6px);
+  display: inline-flex; align-items: center;
+  font-size: 9px; font-weight: 600; line-height: 1.2; padding: 2px 5px; border-radius: calc(var(--radius-2lg) - 8px);
   background: var(--color-badge-new-background); color: var(--color-badge-new-text);
 }
 

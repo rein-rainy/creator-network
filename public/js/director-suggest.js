@@ -84,11 +84,11 @@ function refreshDirSuggestUI() {
     const has = !!dirSuggestFor(work);
     const badge = card.querySelector('.wc-suggest');
     if (has && !badge) {
-      const b = document.createElement('div');
+      const b = document.createElement('span');
       b.className = 'wc-suggest';
       b.title = 'IMDbに監督候補あり';
       b.textContent = '監督候補';
-      card.appendChild(b);
+      card.querySelector('.wc-tags')?.prepend(b);   // タグの行の先頭（graph.js と同じ位置）
     } else if (!has && badge) {
       badge.remove();
     }

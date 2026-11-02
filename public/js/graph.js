@@ -628,8 +628,9 @@ function _renderNodeContent(grp, d) {
     const bd = card.append('xhtml:div').attr('class', 'wc-bd');
     bd.append('xhtml:div').attr('class', 'wc-tt').text(d.label);
     const tgs = bd.append('xhtml:div').attr('class', 'wc-tags');
+    // 監督候補のバッジはタグの行の先頭に並べる（カードの角に重ねると position 指定が要り、iOS Safari で崩れる）
+    if (dirSuggestFor(d)) tgs.append('xhtml:span').attr('class', 'wc-suggest').attr('title', 'IMDbに監督候補あり').text('監督候補');
     (d.cats || []).slice(0, 3).forEach(c => tgs.append('xhtml:span').attr('class', 'tag wc-tag').attr('data-color', tagColor(c)).text(c));
-    if (dirSuggestFor(d)) card.append('xhtml:div').attr('class', 'wc-suggest').attr('title', 'IMDbに監督候補あり').text('監督候補');
   } else {
     const isDir = d.type === 'director';
     const col   = isDir ? 'var(--node-dir)' : 'var(--node-art)';
