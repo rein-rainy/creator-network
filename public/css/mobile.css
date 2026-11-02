@@ -1,0 +1,216 @@
+/* ══════════════════════════════════════════════════════════════
+   スマホ（600px 以下）のレイアウト
+   - 上：ロゴと検索だけの 1 段のバー。入力中はロゴを隠して検索欄を広げ、文字があるときだけ検索モードを出す
+   - 下：機能ボタンを名前つきで並べたナビ（#mobile-bar）。親指の届く位置に置く。
+     ボタンはトップバーの各ボタンを押すだけで、オン・件数・読み込み中の状態は mobile.js が写す
+   - パネル・モーダル・メニューは画面の下から出るシート。上の取っ手や見出しを下に引くと閉じる
+   - 部品は PC と同じ BoardUI（styles.css の .btn / .seg / .tb-count など）を使い、色・角丸・影・文字は
+     boardui-theme.css のトークンだけで決める。スマホでは大きさを一段上げる（Input / IconButton は medium 36px）。
+     小さな部品は見た目を変えず、::after で押せる範囲を広げる
+   - 入力欄の文字は headline（16px）。iOS は 16px 未満の入力欄を押すと拡大してしまう
+   ══════════════════════════════════════════════════════════════ */
+
+/* PC では使わない部品 */
+#mobile-bar, .sheet-handle, #sheet-scrim { display: none; }
+
+@keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
+@keyframes sheetDown { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 600px) {
+  :root {
+    --topbar-h: calc(56px + env(safe-area-inset-top, 0px));
+    --bottombar-h: calc(60px + env(safe-area-inset-bottom, 0px));
+    --sheet-r: var(--radius-3xl);   /* BoardUI settings modal と同じ角丸 */
+  }
+
+  /* ── 上のバー ── */
+  #topbar {
+    gap: 12px;
+    padding: env(safe-area-inset-top, 0px) max(12px, env(safe-area-inset-right, 0px)) 0 max(12px, env(safe-area-inset-left, 0px));
+  }
+  .logo { padding: 0; }
+  .logo svg { height: 14px; }
+  #topbar > .sep, .topbar-right, #tag-filter-btn, #depth-tog { display: none; }
+  /* 検索中はロゴを隠して検索欄を画面幅いっぱいにする */
+  #topbar:has(#search-box:focus) .logo,
+  #topbar:has(#search-wrap.filled) .logo { display: none; }
+
+  .topbar-search { flex: 1; min-width: 0; gap: 8px; }
+  #search-wrap { flex: 1; min-width: 0; }
+  /* BoardUI Input (medium: 36px)。丸い端（角丸 18）は中の ×（直径 20・余白 8）と同心：10 + 8 = 18 */
+  #search-box {
+    width: 100%; height: 36px; border-radius: 18px;
+    padding: 0 36px 0 34px; font: 400 var(--text-headline) var(--sans);
+    background-position: 8px center;
+  }
+  #search-clear { right: 8px; }
+  #search-clear::after { content: ''; position: absolute; inset: -10px; }
+  /* BoardUI SegmentedControl (medium: 36px)。検索モードは文字を入れているときだけ出す（空のときは意味がない） */
+  #search-mode-seg { display: none; height: 36px; }
+  .topbar-search:has(#search-wrap.filled) #search-mode-seg { display: inline-flex; }
+  #search-mode-seg .seg-item { width: 36px; height: 32px; }
+
+  /* ── 下のナビ ── */
+  #mobile-bar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 300;
+    height: var(--bottombar-h);
+    padding: 0 max(4px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(4px, env(safe-area-inset-left, 0px));
+    display: flex; align-items: stretch;
+    background: var(--bg); border-top: 1px solid var(--line);
+  }
+  .mb-item {
+    flex: 1 1 0; min-width: 0; padding: 6px 0 4px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    background: none; border: none; cursor: pointer; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    color: var(--ink-2);
+    font: 500 var(--text-caption-2) var(--sans); letter-spacing: var(--tracking-caption-2);
+  }
+  .mb-item[hidden] { display: none; }
+  .mb-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 選択中の印はアイコンの後ろの面。オンは PC のトップバーのボタンと同じ BoardUI nav-selected のアクセント */
+  .mb-icon {
+    position: relative; width: 48px; height: 30px; border-radius: var(--radius-2lg);
+    display: flex; align-items: center; justify-content: center;
+    transition: background-color .2s var(--ease), transform .2s var(--ease);
+  }
+  .mb-icon .icon { width: 20px; height: 20px; color: var(--icon-2); transition: color .2s var(--ease); }
+  .mb-item:active .mb-icon { background: var(--field); transform: scale(.98); }
+  .mb-item.open .mb-icon { background: var(--field); }
+  .mb-item.open, .mb-item.open .icon { color: var(--ink); }
+  .mb-item.active { color: var(--ink); }
+  .mb-item.active .mb-icon {
+    background: linear-gradient(to bottom, var(--color-accent-500), var(--color-accent-600));
+    box-shadow: var(--shadow-xs), inset 0 1px 0 0 rgb(255 255 255 / 0.251);
+  }
+  .mb-item.active .icon { color: var(--color-text-white); }
+  .mb-item.loading .icon { animation: spin .9s linear infinite; }
+  /* 件数は PC と同じ BoardUI TabCount（.tb-count）をアイコンの右上に重ねる */
+  .mb-icon .tb-count { position: absolute; top: -5px; right: -2px; box-shadow: 0 0 0 2px var(--bg); }
+  .mb-item.active .tb-count { background: var(--color-badge-new-background); color: var(--color-badge-new-text); }
+
+  /* ── グラフまわり ── */
+  #view-dock { left: 12px; bottom: calc(var(--bottombar-h) + 12px); }
+  .leg-label { display: none; }
+  #notion-toast {
+    bottom: calc(var(--bottombar-h) + 60px);
+    max-width: calc(100vw - 32px); white-space: normal; text-align: center;
+  }
+
+  /* ── シート共通：取っ手 ── */
+  .sheet-handle {
+    display: block; position: relative; flex-shrink: 0; height: 20px;
+    touch-action: none; cursor: grab;
+  }
+  .sheet-handle::before {
+    content: ''; position: absolute; top: 8px; left: 50%; width: 36px; height: 4px; margin-left: -18px;
+    border-radius: var(--radius-xs); background: var(--line-strong);
+  }
+
+  /* ── 人物パネル・作品モーダル → 下からのシート ──
+     人物は下半分（上でグラフの強調が見えるように、背景は暗くしない）、作品はほぼ全画面 */
+  #info-panel.mode-side, #info-panel.mode-modal {
+    top: auto; left: 0; right: 0; bottom: 0;
+    width: 100%; max-width: none;
+    border: none; border-top: 1px solid var(--border);
+    border-radius: var(--sheet-r) var(--sheet-r) 0 0;
+    box-shadow: var(--shadow-xl);
+    transform: none; filter: none; opacity: 1;
+    --outer-r: var(--sheet-r);
+  }
+  /* 人物のシートは下のナビの上に置く（人物を選んだまま 2次展開などを切り替えられるように） */
+  #info-panel.mode-side { bottom: var(--bottombar-h); max-height: calc(64dvh - var(--bottombar-h)); }
+  #info-panel.mode-modal { max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 16px); background: var(--bg); }
+  #info-panel.visible { animation: sheetUp .35s var(--ease-modal); }
+  #info-panel.mode-modal.visible { transform: none; }
+  #info-panel.mode-side .ph, #info-panel.mode-modal .ph { padding: 0 16px 12px; touch-action: pan-x; }
+  #info-panel.mode-modal .ph-name { font: 500 var(--text-headline) var(--sans); }
+  #info-panel.mode-modal #ph-avatar { width: 36px; height: 36px; }
+  #info-panel.mode-modal .ps-title { padding: 16px 16px 6px; }
+  #info-panel.mode-modal .panel-meta { padding: 12px 16px; }
+  #info-panel.mode-side #pc2 { padding-bottom: 12px; }
+  #info-panel.mode-modal #pc2 { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+  .prop-row { flex-direction: column; gap: 4px; }
+  .prop-label { flex: none; line-height: 20px; }
+  .prop-row-sm .prop-label { line-height: 20px; }
+
+  /* ── 最新作品・つながり・フィルモグラフィー → ほぼ全画面のシート ── */
+  .fm2-overlay { padding: 0; align-items: flex-end; }
+  .fm2-modal, #recent-modal, #filmography-modal, #path-modal {
+    width: 100%; max-width: none;
+    height: calc(100dvh - env(safe-area-inset-top, 0px) - 16px); max-height: none;
+    border-radius: var(--sheet-r) var(--sheet-r) 0 0;
+    animation: sheetUp .35s var(--ease-modal);
+  }
+  .fm2-modal .fm2-header { padding: 0 16px 12px; gap: 8px; touch-action: pan-x; }
+  .fm2-modal .fm2-name { font: 500 var(--text-headline) var(--sans); }
+  .fm2-modal .fm2-tabs { overflow-x: auto; scrollbar-width: none; }
+  .fm2-modal .fm2-tabs::-webkit-scrollbar { display: none; }
+  .fm2-modal .fm2-body { padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .fm2-modal .fm2-tabs:not(:empty) + .fm2-body { padding-top: 16px; }
+  .rw-grid { gap: 20px 12px; }
+  #rw-loading.rw-loading-more { padding: 8px 16px 24px; }
+
+  /* つながり：ルートは縦に並べて、縦スクロールでたどる */
+  #pf-body { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+  .pf-track { flex-direction: column; width: 100%; padding: 20px 16px 24px; }
+  .pf-work { width: min(100%, 300px); }
+  .pf-person { max-width: min(100%, 300px); }
+  .pf-edge { width: 24px; height: 28px; justify-content: center; }
+  .pf-edge-line { width: 2px; height: 100%; }
+  .pf-route-nav { padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .pf-input { font: 400 var(--text-headline) var(--sans); }   /* 大きさは PC と同じ BoardUI Input (medium) */
+  .pf-pickers { gap: 8px; }
+
+  /* ── タグの絞り込み・監督候補 → 下からのシート（後ろは #sheet-scrim で暗くする） ── */
+  #tag-filter-dropdown, #dir-suggest-panel {
+    top: auto !important; left: 0 !important; right: 0; bottom: 0;
+    width: 100%; min-width: 0; max-width: none; max-height: 70dvh;
+    z-index: 400;
+    border: none; border-top: 1px solid var(--border);
+    border-radius: var(--sheet-r) var(--sheet-r) 0 0;
+    box-shadow: var(--shadow-xl);
+    --outer-r: var(--sheet-r); --outer-pad: 8px;
+    animation: sheetUp .3s var(--ease-modal);
+  }
+  #tag-filter-dropdown::before, #dir-suggest-panel::before {
+    content: ''; display: block; flex-shrink: 0; width: 36px; height: 4px; margin: 8px auto 4px;
+    border-radius: var(--radius-xs); background: var(--line-strong);
+  }
+  #tag-filter-dropdown .menu-scroll { padding: 4px 8px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  #ds-list { padding-bottom: calc(var(--outer-pad) + env(safe-area-inset-bottom, 0px)); }
+  /* BoardUI menu item。指で押せるよう行の高さだけ 40px にする（中の Checkbox / Tag は PC と同じ大きさ） */
+  .tfd-item, .hp-item { min-height: 40px; padding: 8px 10px; }
+
+  #sheet-scrim {
+    display: block; position: fixed; inset: 0; z-index: 399;
+    background: var(--scrim); opacity: 0; pointer-events: none;
+    transition: opacity .25s ease-out;
+  }
+  #sheet-scrim.visible { opacity: 1; pointer-events: auto; }
+
+  /* ── 入力欄つきの小さなポップオーバー → 上のバーの下に画面幅で出す（下に出すとキーボードに隠れる） ── */
+  .picker-popover, #add-creator-dropdown {
+    top: calc(var(--topbar-h) + 8px) !important; left: 8px !important; right: 8px;
+    width: auto; min-width: 0; max-width: none;
+    transform-origin: top center; animation: sheetDown .2s ease-out;
+  }
+  #add-creator-dropdown { max-height: min(380px, 50dvh); }
+  .acd-item { min-height: 40px; }
+  /* BoardUI Input (medium: 36px) */
+  .cmeta-input, .acd-search, .ph-name-input { font: 400 var(--text-headline) var(--sans); }
+  .cmeta-input, .acd-search { height: 36px; }
+
+  /* ── 押しやすさ：見た目は BoardUI のまま、押せる範囲を ::after で 40px 以上に広げる ── */
+  .close-btn::after { content: ''; position: absolute; inset: -10px; }
+  .icon-btn-sm { width: 36px; height: 36px; border-radius: var(--radius-2lg); }   /* BoardUI IconButton (medium) */
+  .icon-btn-sm::after { content: ''; position: absolute; inset: -4px; }
+  .pw-item { padding: 10px 8px; }
+  .person-card { padding-top: 10px; padding-bottom: 10px; }
+  .rw-director { padding-top: 4px; padding-bottom: 4px; }
+}
+
+/* 指で操作する端末ではホバーで出すボタンを最初から出しておく */
+@media (hover: none) {
+  .card-corner-btn { opacity: 1; pointer-events: auto; }
+}

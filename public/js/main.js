@@ -134,7 +134,7 @@ function navigateToMatches(q) {
   if (!xs.length) return;
   const cx = xs.reduce((a,b) => a+b, 0) / xs.length;
   const cy = ys.reduce((a,b) => a+b, 0) / ys.length;
-  const W = window.innerWidth, H = window.innerHeight - 48;
+  const { W, H } = canvasSize();
   const svg = d3.select('#canvas');
   const currentZoom = d3.zoomTransform(svg.node());
   const k = Math.max(currentZoom.k, 0.8); // 現在のズームが大きければ維持、小さければ0.8に
@@ -249,7 +249,14 @@ document.getElementById('fi0').addEventListener('change', e => {
   const r = new FileReader(); r.onload = ev => init(parseCSV(ev.target.result)); r.readAsText(f, 'UTF-8');
 });
 
-window.addEventListener('resize', () => { if (AN.length) { const { nodes, links } = filteredData(); draw(nodes, links); } });
+// 幅が変わったときだけ描き直す（スマホではキーボードやアドレスバーの出し入れで高さだけが頻繁に変わる。
+// キャンバスの大きさは CSS で決まるので、高さの変化は描き直さなくても表示は追従する）
+let _lastResizeW = window.innerWidth;
+window.addEventListener('resize', () => {
+  if (window.innerWidth === _lastResizeW) return;
+  _lastResizeW = window.innerWidth;
+  if (AN.length) { const { nodes, links } = filteredData(); draw(nodes, links); }
+});
 
 /* ═══════════════════════════════════════════
    NOTION SYNC

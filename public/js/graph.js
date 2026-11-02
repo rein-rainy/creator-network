@@ -17,8 +17,23 @@ function settleSimForces() {
   sim.force('center', null);
 }
 
+/* キャンバスの表示サイズ（トップバーやスマホの下のナビを除いた領域）。配置の中心はここの中央 */
+function canvasSize() {
+  const r = document.getElementById('canvas').getBoundingClientRect();
+  return { W: r.width || window.innerWidth, H: r.height || window.innerHeight };
+}
+
+/* 初期の表示位置。配置は PC の画面幅を前提にした大きさなので、スマホでは画面中央を基準に縮小して全体を見やすくする */
+const MOBILE_MQ = window.matchMedia('(max-width: 600px)');
+function baseTransform() {
+  if (!MOBILE_MQ.matches) return d3.zoomIdentity;
+  const { W, H } = canvasSize(), k = 0.7;
+  return d3.zoomIdentity.translate(W / 2 * (1 - k), H / 2 * (1 - k)).scale(k);
+}
+let _initialViewSet = false;
+
 function draw(nodes, links, { freeLayout = false } = {}) {
-  const W = window.innerWidth, H = window.innerHeight - 48;
+  const { W, H } = canvasSize();
   d3.select('#canvas').selectAll('*').remove();
   gDimRect = null;
 
@@ -68,8 +83,10 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   // 表示位置は #canvas 側に記憶されているが、作り直した <g> には反映されないため合わせる。
   // ずれたままだとドラッグ開始の瞬間に記憶側の位置へ飛ぶ。
   // freeLayout（検索中）はシミュが画面中央に集めるので、表示位置も初期状態に戻す。
-  if (freeLayout) svg.call(_zoomBehavior.transform, d3.zoomIdentity);
+  if (freeLayout) svg.call(_zoomBehavior.transform, baseTransform());
+  else if (!_initialViewSet) svg.call(_zoomBehavior.transform, baseTransform());
   else g.attr('transform', d3.zoomTransform(svg.node()));
+  _initialViewSet = true;
 
   const gL = g.append('g').attr('class', 'layer-links');
   const gN = g.append('g').attr('class', 'layer-nodes');
@@ -462,7 +479,7 @@ function resetLayout() {
   AN.forEach(n => { delete n.x; delete n.y; n.vx = 0; n.vy = 0; n.fx = null; n.fy = null; });
   try { localStorage.removeItem(LAYOUT_KEY); } catch (e) { /* ignore */ }
   // 一から配置すると画面中央を基準に並ぶので、表示位置も初期状態に戻す
-  if (_zoomBehavior) d3.select('#canvas').call(_zoomBehavior.transform, d3.zoomIdentity);
+  if (_zoomBehavior) d3.select('#canvas').call(_zoomBehavior.transform, baseTransform());
 }
 
 /* ─── redraw: 位置を維持したまま SVG と シミュのデータだけ更新 ───────────────

@@ -261,7 +261,8 @@ function openPathFinder() {
     if (cur && !AN.includes(cur)) _pathPickers[slot].set(AN.find(n => n.type === 'work' && n.label === cur.label) || null);
   });
   renderPathResult();
-  if (!_pathSel.a) document.querySelector('#pf-pick-a .pf-input').focus();
+  // スマホではキーボードが画面の半分を覆うので、自分で入力欄を押すまで出さない
+  if (!_pathSel.a && !MOBILE_MQ.matches) document.querySelector('#pf-pick-a .pf-input').focus();
 }
 
 function closePathFinder() {

@@ -87,7 +87,8 @@ html { background: var(--bg); }
 body {
   background: var(--bg); color: var(--ink);
   font: 400 var(--text-body) var(--sans);
-  overflow: hidden; height: 100vh; width: 100vw;
+  overflow: hidden; height: 100vh; height: 100dvh; width: 100vw;
+  overscroll-behavior: none;
   -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   font-variant-ligatures: contextual; font-kerning: normal;
 }
@@ -251,7 +252,11 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 
 /* ── canvas ── */
-#canvas { position: fixed; top: var(--topbar-h); left: 0; width: 100vw; height: calc(100vh - var(--topbar-h)); display: block; }
+#canvas {
+  position: fixed; top: var(--topbar-h); left: 0; width: 100vw; display: block;
+  height: calc(100vh - var(--topbar-h) - var(--bottombar-h, 0px));
+  height: calc(100dvh - var(--topbar-h) - var(--bottombar-h, 0px));
+}
 /* node cards live in <foreignObject>; let the highlight border paint outside its bounds */
 #canvas foreignObject { overflow: visible; }
 
@@ -287,14 +292,7 @@ button, input, textarea { font: inherit; color: inherit; }
   .leg { gap: 6px; }
   .leg-n { margin-left: 0; padding-left: 0; }
 }
-/* スマホ：2段のトップバー（上段：ロゴと機能ボタン／下段：検索まわり） */
-@media (max-width: 600px) {
-  :root { --topbar-h: 92px; }
-  #topbar { flex-wrap: wrap; align-content: center; row-gap: 8px; padding: 0 12px; }
-  #topbar > .sep { display: none; }
-  .topbar-search { order: 3; flex: 1 0 100%; }
-  .leg-label { display: none; }
-}
+/* スマホ（600px 以下）のレイアウトは mobile.css */
 
 /* ── shared motion ── */
 @keyframes slideIn { from { opacity: 0; transform: translateY(-6px) scale(.98); } to { opacity: 1; transform: none; } }
