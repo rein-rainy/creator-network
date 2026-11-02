@@ -580,6 +580,13 @@ function _fillYtChannel(row, channel) {
   el.title = channel.name;
 }
 
+/* サムネイルは 480×360（hqdefault）を使う。検索結果の画像は 1280×720 で、一覧に数百枚並ぶと
+   スマホでは画像の展開とメモリで重くなる。4:3 の上下の黒帯は 16:9 の枠で切り取られる */
+function _fmgThumbSrc(result) {
+  const id = ytid(result.url);
+  return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : result.thumbnail;
+}
+
 async function enrichFmgYoutubeLinks(body, rowSelector) {
   const rows = [...body.querySelectorAll(rowSelector)];
 
@@ -613,7 +620,8 @@ async function enrichFmgYoutubeLinks(body, rowSelector) {
       ph.className = 'fmg-ph done';
       img.replaceWith(ph);
     };
-    img.src = result.thumbnail;
+    img.decoding = 'async';
+    img.src = _fmgThumbSrc(result);
     thumbSlot.replaceWith(img);
   };
 

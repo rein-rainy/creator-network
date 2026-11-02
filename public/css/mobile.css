@@ -158,6 +158,12 @@
   .rw-grid { gap: 20px 12px; }
   #rw-loading.rw-loading-more { padding: 8px 16px 24px; }
 
+  /* 全画面のシートを開いている間は、後ろのグラフ（大量の foreignObject）を描かない。
+     ほぼ隠れているのに、シートのスクロールのたびに重ねて合成されて重くなる */
+  body:has(.fm2-overlay.visible) #canvas,
+  body:has(.fm2-overlay.visible) #view-dock,
+  body:has(.fm2-overlay.visible) #mobile-bar { visibility: hidden; }
+
   /* つながり：ルートは縦に並べて、縦スクロールでたどる */
   #pf-body { overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
   .pf-track { flex-direction: column; width: 100%; padding: 20px 16px 24px; }
