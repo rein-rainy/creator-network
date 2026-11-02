@@ -252,11 +252,9 @@ button, input, textarea { font: inherit; color: inherit; }
 }
 
 /* ── canvas ── */
-#canvas {
-  position: fixed; top: var(--topbar-h); left: 0; width: 100vw; display: block;
-  height: calc(100vh - var(--topbar-h) - var(--bottombar-h, 0px));
-  height: calc(100dvh - var(--topbar-h) - var(--bottombar-h, 0px));
-}
+/* 高さは画面（position: fixed の基準）に対する % で決める。100vh / 100dvh は端末によって実際の画面の高さと
+   合わないことがある。SVG は height: auto だと height 属性の値になるので、上下の位置指定だけでは高さが決まらない */
+#canvas { position: fixed; top: var(--topbar-h); left: 0; width: 100%; height: calc(100% - var(--topbar-h)); display: block; }
 /* node cards live in <foreignObject>; let the highlight border paint outside its bounds */
 #canvas foreignObject { overflow: visible; }
 

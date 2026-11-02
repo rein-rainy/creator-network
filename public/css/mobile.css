@@ -92,8 +92,7 @@
   .mb-item.active .tb-count { background: var(--color-badge-new-background); color: var(--color-badge-new-text); }
 
   /* ── グラフまわり ── */
-  /* キャンバスは画面の下まで使い、タブバーはその上に浮かべる */
-  #canvas { height: calc(100vh - var(--topbar-h)); height: calc(100dvh - var(--topbar-h)); }
+  /* キャンバスは画面の下まで使い（styles.css の高さの指定のまま）、タブバーはその上に浮かべる */
   /* 凡例は下だとタブバーと重なるので、左上に置く */
   #view-dock { left: 12px; top: calc(var(--topbar-h) + 12px); bottom: auto; }
   .leg-label { display: none; }
@@ -125,9 +124,9 @@
   }
   /* 人物のシートの上にもタブバーを浮かべたままにする（人物を選んだまま 2次展開などを切り替えられるように）。
      シートの中身はタブバーに隠れないよう、下に余白を取る */
-  #info-panel.mode-side { max-height: 64dvh; }
+  #info-panel.mode-side { max-height: 64%; }
   body:has(#info-panel.mode-side.visible) #mobile-bar { z-index: 370; }
-  #info-panel.mode-modal { max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 16px); background: var(--bg); }
+  #info-panel.mode-modal { max-height: calc(100% - env(safe-area-inset-top, 0px) - 16px); background: var(--bg); }
   #info-panel.visible { animation: sheetUp .35s var(--ease-modal); }
   #info-panel.mode-modal.visible { transform: none; }
   #info-panel.mode-side .ph, #info-panel.mode-modal .ph { padding: 0 16px 12px; touch-action: pan-x; }
@@ -145,7 +144,7 @@
   .fm2-overlay { padding: 0; align-items: flex-end; }
   .fm2-modal, #recent-modal, #filmography-modal, #path-modal {
     width: 100%; max-width: none;
-    height: calc(100dvh - env(safe-area-inset-top, 0px) - 16px); max-height: none;
+    height: calc(100% - env(safe-area-inset-top, 0px) - 16px); max-height: none;   /* 画面全体に広がる .fm2-overlay に対する割合 */
     border-radius: var(--sheet-r) var(--sheet-r) 0 0;
     animation: sheetUp .35s var(--ease-modal);
   }
@@ -178,7 +177,7 @@
   /* ── タグの絞り込み・監督候補 → 下からのシート（後ろは #sheet-scrim で暗くする） ── */
   #tag-filter-dropdown, #dir-suggest-panel {
     top: auto !important; left: 0 !important; right: 0; bottom: 0;
-    width: 100%; min-width: 0; max-width: none; max-height: 70dvh;
+    width: 100%; min-width: 0; max-width: none; max-height: 70%;
     z-index: 400;
     border: none; border-top: 1px solid var(--border);
     border-radius: var(--sheet-r) var(--sheet-r) 0 0;
