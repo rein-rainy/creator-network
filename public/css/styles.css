@@ -110,83 +110,6 @@ button, input, textarea { font: inherit; color: inherit; }
   scrollbar-width: thin; scrollbar-color: var(--border) transparent;
 }
 
-/* ── スクロールの端の処理（場所ごとに使い分ける）──
-   メニュー（タグ・作品の候補・クリエイター追加）：スクロール領域をメニューの縁まで広げ、フェードしない。
-     項目は短く、一度に全体が見渡せる。端の項目を薄くすると読みにくく、ホバーもしづらい。
-     縁まで広げれば、項目は角丸の縁で自然に切れ、内側に余計な切れ目ができない。
-   パネル・モーダルの長い一覧：上下をフェード。見出しの下へ流れ込む中身と、角丸の縁を溶かし、続きがあることを伝える。
-   UI に挟まれた中間の領域（役職の選択肢）：上下をフェード。上の見出し・下のボタンとの境目を硬く切らない。
-   横に流れる人物カードの列：パネルの縁まで広げて左右をフェード。スクロールバーを出さない列で続きを示す唯一の手がかり。
-   作品のつながり：フェードしない。ルートは端から端まで読むもので、両端の作品が薄くなると困る。
-
-   フェードはイージングをかけた多段のグラデーション（線形だと濃淡の境目に帯が見える）。
-   幅はスクロール位置で変わり、端に着いた側は消える。--fade-rest は端でも残す幅：角丸に接する余白ぶん
-   （中身にはかからず、スクロールバーの先だけを角に溶かす）。
-   scroll-driven animation が無いブラウザ（Firefox）ではフェードなし。 */
-@property --fade-start { syntax: '<length>'; inherits: false; initial-value: 0px; }
-@property --fade-end   { syntax: '<length>'; inherits: false; initial-value: 0px; }
-@keyframes fadeStartIn { from { --fade-start: var(--fade-rest-start, 0px); } to { --fade-start: var(--fade-size); } }
-@keyframes fadeEndOut  { from { --fade-end: var(--fade-size); } to { --fade-end: var(--fade-rest-end, 0px); } }
-#pc2, .fm2-modal .fm2-body, #ds-list, .role-picker-tags, .person-list {
-  --fade-size: 40px; --fade-dir: to bottom;
-  --s: var(--fade-start); --e: var(--fade-end);
-  mask-image: linear-gradient(var(--fade-dir),
-    rgb(0 0 0 / 0)     0,
-    rgb(0 0 0 / .013)  calc(var(--s) * .081),
-    rgb(0 0 0 / .049)  calc(var(--s) * .155),
-    rgb(0 0 0 / .104)  calc(var(--s) * .225),
-    rgb(0 0 0 / .175)  calc(var(--s) * .29),
-    rgb(0 0 0 / .259)  calc(var(--s) * .353),
-    rgb(0 0 0 / .352)  calc(var(--s) * .412),
-    rgb(0 0 0 / .45)   calc(var(--s) * .471),
-    rgb(0 0 0 / .55)   calc(var(--s) * .529),
-    rgb(0 0 0 / .648)  calc(var(--s) * .588),
-    rgb(0 0 0 / .741)  calc(var(--s) * .647),
-    rgb(0 0 0 / .825)  calc(var(--s) * .71),
-    rgb(0 0 0 / .896)  calc(var(--s) * .775),
-    rgb(0 0 0 / .951)  calc(var(--s) * .845),
-    rgb(0 0 0 / .987)  calc(var(--s) * .919),
-    #000               var(--s),
-    #000               calc(100% - var(--e)),
-    rgb(0 0 0 / .987)  calc(100% - var(--e) * .919),
-    rgb(0 0 0 / .951)  calc(100% - var(--e) * .845),
-    rgb(0 0 0 / .896)  calc(100% - var(--e) * .775),
-    rgb(0 0 0 / .825)  calc(100% - var(--e) * .71),
-    rgb(0 0 0 / .741)  calc(100% - var(--e) * .647),
-    rgb(0 0 0 / .648)  calc(100% - var(--e) * .588),
-    rgb(0 0 0 / .55)   calc(100% - var(--e) * .529),
-    rgb(0 0 0 / .45)   calc(100% - var(--e) * .471),
-    rgb(0 0 0 / .352)  calc(100% - var(--e) * .412),
-    rgb(0 0 0 / .259)  calc(100% - var(--e) * .353),
-    rgb(0 0 0 / .175)  calc(100% - var(--e) * .29),
-    rgb(0 0 0 / .104)  calc(100% - var(--e) * .225),
-    rgb(0 0 0 / .049)  calc(100% - var(--e) * .155),
-    rgb(0 0 0 / .013)  calc(100% - var(--e) * .081),
-    rgb(0 0 0 / 0)     100%);
-}
-.person-list { --fade-dir: to right; --fade-size: var(--list-inset); }
-.role-picker-tags { --fade-size: 24px; }
-@supports (animation-timeline: scroll()) {
-  #pc2, .fm2-modal .fm2-body, #ds-list, .role-picker-tags {
-    animation: fadeStartIn linear both, fadeEndOut linear both;
-    animation-timeline: scroll(self block), scroll(self block);
-    animation-range: 0 var(--fade-size), calc(100% - var(--fade-size)) 100%;
-  }
-  .person-list {
-    animation: fadeStartIn linear both, fadeEndOut linear both;
-    animation-timeline: scroll(self inline), scroll(self inline);
-    animation-range: 0 var(--fade-size), calc(100% - var(--fade-size)) 100%;
-  }
-}
-/* 角丸の縁に接する側だけ、余白ぶんのフェードを端でも残す */
-#info-panel.mode-side #pc2, #ds-list { --fade-rest-end: 8px; }
-#info-panel.mode-modal #pc2, .fm2-modal .fm2-body { --fade-rest-end: 16px; --fade-size: 48px; }
-/* 折り返し表示はスクロールしないのでフェードしない（mask ははみ出した角のボタンも切ってしまう） */
-.person-list.wrap { mask-image: none; animation: none; }
-/* 最新作品のギャラリーはフェードしない（サムネイルを一覧で見比べる場所なので、端の段も薄くしない） */
-#rw-body { mask-image: none; animation: none; }
-
-
 /* ── topbar ── */
 #topbar {
   position: fixed; top: 0; left: 0; right: 0;
@@ -294,9 +217,13 @@ button, input, textarea { font: inherit; color: inherit; }
 .tb-count:empty { display: none; }
 /* オンの状態（タグで絞り込み中・2次展開）は BoardUI のナビ選択と同じアクセント */
 .btn.tb-btn.active, .btn.tb-btn.active:hover:not(:disabled), .btn.tb-btn.active:active:not(:disabled) {
-  border-color: transparent; color: var(--color-text-white);
+  color: var(--color-text-white);
+  /* 枠はなくす。透明な枠を残すと、inset のハイライトが枠の内側に描かれて上に青い 1px が残り、
+     グラデーションも枠の部分で繰り返して縁に帯が出る。なくした 1px は左右の余白で補い、幅を変えない。
+     影は nav-selected の上辺ハイライトだけ使う（外側 1px の accent-500 の輪は、暗い背景だと枠に見えるので付けない） */
+  border: none; padding-inline: 8px;
   background: linear-gradient(to bottom, var(--color-accent-500), var(--color-accent-600));
-  box-shadow: var(--shadow-nav-selected);
+  box-shadow: var(--shadow-xs), inset 0 1px 0 0 rgb(255 255 255 / 0.251);
 }
 .tb-btn.active .icon { color: var(--color-text-white); }
 .tb-btn.active .tb-count { background: rgb(255 255 255 / 0.2); color: var(--color-text-white); }
@@ -529,42 +456,98 @@ button, input, textarea { font: inherit; color: inherit; }
 .avatar-md { width: 36px; height: 36px; font: 600 18px/24px var(--sans); }
 .avatar-lg { width: 40px; height: 40px; font: 600 18px/24px var(--sans); }
 
-/* person card: the one way to show a person inside panels (BoardUI notification card surface) */
+/* 人物カード：パネルの中で人を出すときの形。BoardUI Button（secondary）の面・枠・影・押し込みをそのまま使い、
+   押せるものだと一目で分かるようにする。中身はアバター（32px）＋名前＋補足の2行。
+   カードは横一列に流す。列はセクションの余白を打ち消してパネルの縁まで広げ、カードが縁まで流れるようにする。
+   スクロールバーは出さないので、左右の端をフェードして続きがあることを示す */
+@property --fade-start { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@property --fade-end   { syntax: '<length>'; inherits: false; initial-value: 0px; }
+@keyframes fadeStartIn { from { --fade-start: 0px; } to { --fade-start: var(--fade-size); } }
+@keyframes fadeEndOut  { from { --fade-end: var(--fade-size); } to { --fade-end: 0px; } }
 .person-list {
   display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch;
-  /* 上は角のボタンの逃げ。左右はセクションの余白を打ち消してパネルの縁まで広げ、カードが縁まで流れるようにする */
   --list-inset: 32px;
-  padding: 8px var(--list-inset); margin: -8px calc(-1 * var(--list-inset)) 0;
+  padding: 2px var(--list-inset) 4px; margin: -2px calc(-1 * var(--list-inset)) -4px;   /* 上下は影と押し込みの逃げ */
   scroll-padding-inline: var(--list-inset);
+  /* イージングをかけた多段のフェード（線形だと濃淡の境目に帯が見える）。幅はスクロール位置で変わり、端に着いた側は消える */
+  --fade-size: var(--list-inset);
+  --s: var(--fade-start); --e: var(--fade-end);
+  mask-image: linear-gradient(to right,
+    rgb(0 0 0 / 0) 0,
+    rgb(0 0 0 / .013) calc(var(--s) * .081),
+    rgb(0 0 0 / .049) calc(var(--s) * .155),
+    rgb(0 0 0 / .104) calc(var(--s) * .225),
+    rgb(0 0 0 / .175) calc(var(--s) * .29),
+    rgb(0 0 0 / .259) calc(var(--s) * .353),
+    rgb(0 0 0 / .352) calc(var(--s) * .412),
+    rgb(0 0 0 / .45) calc(var(--s) * .471),
+    rgb(0 0 0 / .55) calc(var(--s) * .529),
+    rgb(0 0 0 / .648) calc(var(--s) * .588),
+    rgb(0 0 0 / .741) calc(var(--s) * .647),
+    rgb(0 0 0 / .825) calc(var(--s) * .71),
+    rgb(0 0 0 / .896) calc(var(--s) * .775),
+    rgb(0 0 0 / .951) calc(var(--s) * .845),
+    rgb(0 0 0 / .987) calc(var(--s) * .919),
+    #000 var(--s),
+    #000 calc(100% - var(--e)),
+    rgb(0 0 0 / .987) calc(100% - var(--e) * .919),
+    rgb(0 0 0 / .951) calc(100% - var(--e) * .845),
+    rgb(0 0 0 / .896) calc(100% - var(--e) * .775),
+    rgb(0 0 0 / .825) calc(100% - var(--e) * .71),
+    rgb(0 0 0 / .741) calc(100% - var(--e) * .647),
+    rgb(0 0 0 / .648) calc(100% - var(--e) * .588),
+    rgb(0 0 0 / .55) calc(100% - var(--e) * .529),
+    rgb(0 0 0 / .45) calc(100% - var(--e) * .471),
+    rgb(0 0 0 / .352) calc(100% - var(--e) * .412),
+    rgb(0 0 0 / .259) calc(100% - var(--e) * .353),
+    rgb(0 0 0 / .175) calc(100% - var(--e) * .29),
+    rgb(0 0 0 / .104) calc(100% - var(--e) * .225),
+    rgb(0 0 0 / .049) calc(100% - var(--e) * .155),
+    rgb(0 0 0 / .013) calc(100% - var(--e) * .081),
+    rgb(0 0 0 / 0) 100%);
 }
 #info-panel.mode-side .person-list { --list-inset: 16px; }
 @media (max-width: 600px) { .person-list { --list-inset: 16px; } }
 .person-list::-webkit-scrollbar { display: none; }
-.person-list.wrap { flex-wrap: wrap; overflow: visible; }
-.person-card-wrap { position: relative; display: inline-flex; flex-shrink: 0; }
-.person-card {
-  display: inline-flex; align-items: center; gap: 12px; max-width: 240px; flex-shrink: 0;
-  padding: 10px 12px 10px 10px; text-align: left; cursor: pointer;
-  background: var(--surface); border: none; border-radius: var(--radius-notification-card);
-  font-family: var(--sans); color: inherit;
-  transition: background-color .15s ease;
+/* scroll-driven animation が無いブラウザ（Firefox）ではフェードなし */
+@supports (animation-timeline: scroll()) {
+  .person-list {
+    animation: fadeStartIn linear both, fadeEndOut linear both;
+    animation-timeline: scroll(self inline), scroll(self inline);
+    animation-range: 0 var(--fade-size), calc(100% - var(--fade-size)) 100%;
+  }
 }
-.person-card:hover { background: var(--field-hover); }
-.person-card-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.person-card-wrap { position: relative; display: flex; flex-shrink: 0; max-width: 240px; }
+.person-card {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0;
+  padding: 8px 12px 8px 8px; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-2lg);
+  box-shadow: var(--shadow-xs);
+  font-family: var(--sans); color: inherit;
+  transition:
+    background-color var(--t-btn) ease, border-color var(--t-btn) ease,
+    transform 420ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+.person-card:hover  { background: var(--color-background-primary-hover); border-color: var(--border-hover); }
+.person-card:active { background: var(--color-background-primary-active); border-color: var(--border-active); transform: scale(.98); transition-duration: 150ms, 150ms, 220ms; }
+.person-card .avatar { width: 32px; height: 32px; font: 600 var(--text-headline) var(--sans); }
+.person-card-text { min-width: 0; display: flex; flex-direction: column; }
 .person-card-name, .person-card-role { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .person-card-name { font: 500 var(--text-body) var(--sans); color: var(--ink); }
 .person-card-role { font: 500 var(--text-caption-1) var(--sans); letter-spacing: var(--tracking-caption-1); color: var(--ink-2); }
+/* カードの右端のアクション（削除・追加）。ホバーで出す。編集できるときは文字がかぶらないよう右を空ける */
+body.can-edit .person-card-wrap .person-card { padding-right: 36px; }
 .card-corner-btn {
-  position: absolute; top: -8px; right: -8px; z-index: 2;
+  position: absolute; top: 50%; right: 8px; translate: 0 -50%; z-index: 2;
   width: 20px; height: 20px; padding: 0; border-radius: 50%;
-  border: 2px solid var(--bg); background: var(--field); color: var(--icon-2);
+  border: none; background: var(--field); color: var(--icon-2);
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   opacity: 0; pointer-events: none; transition: opacity .15s ease, background-color .15s ease, color .15s ease;
 }
 .person-card-wrap:hover .card-corner-btn, .card-corner-btn:focus-visible { opacity: 1; pointer-events: auto; }
 .card-corner-btn:hover { background: var(--field-hover); color: var(--ink); }
 .card-corner-btn.danger:hover { background: var(--color-background-tertiary-error); color: var(--red); }
-.card-corner-btn.is-added { opacity: 1; pointer-events: none; cursor: default; color: var(--color-status-lime-text); }
+.card-corner-btn.is-added { opacity: 1; pointer-events: none; cursor: default; background: none; color: var(--color-status-lime-text); }
 
 /* loading / empty / error */
 .spinner, .fm2-spinner {
@@ -656,7 +639,7 @@ button, input, textarea { font: inherit; color: inherit; }
 #info-panel.mode-side #ph-avatar { width: 32px; height: 32px; font: 600 var(--text-headline) var(--sans); }
 #info-panel.mode-side .panel-section { padding: 16px; }
 #info-panel.mode-side .panel-meta { padding: 12px 16px; }
-#info-panel.mode-side .person-card, #info-panel.mode-side .ds-person,
+#info-panel.mode-side .ds-person,
 #info-panel.mode-side .btn-block { border-radius: var(--section-r); }
 .ph {
   padding: 32px 32px 20px;
