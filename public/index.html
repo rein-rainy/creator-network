@@ -13,7 +13,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <link rel="stylesheet" href="/css/boardui-theme.css?v=2">
 <link rel="stylesheet" href="/css/styles.css?v=79">
-<link rel="stylesheet" href="/css/mobile.css?v=2">
+<link rel="stylesheet" href="/css/mobile.css?v=3">
 </head>
 <body>
 
@@ -189,12 +189,16 @@
 
 <!-- スマホ用のタブバー（画面の下に浮かぶ）。ボタンはトップバーの各ボタンを押すだけ（状態は mobile.js が写す） -->
 <nav id="mobile-bar" aria-label="メニュー">
-  <button type="button" class="mb-item" data-target="tag-filter-btn" aria-label="タグで絞り込み"><span data-icon="funnel" data-size="20"></span><span class="tb-count"></span></button>
-  <button type="button" class="mb-item" data-target="depth-tog" aria-label="2次展開" aria-pressed="false"><span data-icon="circle-nodes" data-size="20"></span></button>
-  <button type="button" class="mb-item" data-target="recent-btn" aria-label="最新作品"><span data-icon="calendar" data-size="20"></span></button>
-  <button type="button" class="mb-item" data-target="path-btn" aria-label="作品のつながり"><span data-icon="route" data-size="20"></span></button>
-  <button type="button" class="mb-item" data-target="dir-suggest-btn" aria-label="監督候補" hidden><span data-icon="video" data-size="20"></span><span class="tb-count"></span></button>
-  <button type="button" class="mb-item" data-target="notion-sync-btn" aria-label="Notion から更新"><span data-icon="rotate-cw" data-size="20"></span></button>
+  <div class="mb-group" role="group" aria-label="表示">
+    <button type="button" class="mb-item" data-target="tag-filter-btn" aria-label="タグで絞り込み"><span data-icon="funnel" data-size="20"></span><span class="tb-count"></span></button>
+    <button type="button" class="mb-item" data-target="depth-tog" aria-label="2次展開" aria-pressed="false"><span data-icon="circle-nodes" data-size="20"></span></button>
+  </div>
+  <div class="mb-group" role="group" aria-label="機能">
+    <button type="button" class="mb-item" data-target="recent-btn" aria-label="最新作品"><span data-icon="calendar" data-size="20"></span></button>
+    <button type="button" class="mb-item" data-target="path-btn" aria-label="作品のつながり"><span data-icon="route" data-size="20"></span></button>
+    <button type="button" class="mb-item" data-target="dir-suggest-btn" aria-label="監督候補" hidden><span data-icon="video" data-size="20"></span><span class="tb-count"></span></button>
+    <button type="button" class="mb-item" data-target="notion-sync-btn" aria-label="Notion から更新"><span data-icon="rotate-cw" data-size="20"></span></button>
+  </div>
 </nav>
 <div id="sheet-scrim"></div>
 

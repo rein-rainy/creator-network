@@ -53,14 +53,20 @@
   .topbar-search:has(#search-wrap.filled) #search-mode-seg { display: inline-flex; }
   #search-mode-seg .seg-item { width: 36px; height: 32px; }
 
-  /* ── 下のタブバー：浮いた面は BoardUI の Dropdown / 凡例ドックと同じ surface・枠・影 ──
+  /* ── 下のタブバー：表示の切り替え（タグ・2次展開）と機能（最新作品・つながり・監督候補・更新）を
+     別々の浮いた面にして横に並べる。面は BoardUI の Dropdown / 凡例ドックと同じ surface・枠・影。
      角丸は中のボタンと同心：ボタン 20（直径 40 の丸）＋ 余白 4 ＝ 24（--radius-3xl） */
   #mobile-bar {
     position: fixed; z-index: 300;
     left: 50%; bottom: var(--tabbar-gap); translate: -50% 0;
+    display: flex; align-items: center; gap: 8px;
+    pointer-events: none;   /* 面と面のすき間はグラフを触れるようにする */
+  }
+  .mb-group {
     display: flex; align-items: center; gap: 4px; padding: 4px;
     background: var(--surface); border: 1px solid var(--border);
     border-radius: var(--radius-3xl); box-shadow: var(--shadow-dropdown);
+    pointer-events: auto;
   }
   /* ボタン：BoardUI IconButton の面なし版を丸くしたもの。押している間・開いている間は tertiary の面。オンは PC のトップバーと同じ nav-selected のアクセント */
   .mb-item {
