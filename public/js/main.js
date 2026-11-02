@@ -80,12 +80,11 @@ document.getElementById('ctx-open').addEventListener('click', () => {
 ═══════════════════════════════════════════ */
 /* ── search-mode toggle ── */
 function updateSearchModeBtn() {
-  const isFilter = searchMode === 'filter';
-  const btn = document.getElementById('search-mode-btn');
-  document.getElementById('smb-icon-filter').style.display = isFilter ? '' : 'none';
-  document.getElementById('smb-icon-nav').style.display    = isFilter ? 'none' : '';
-  btn.classList.toggle('active', !isFilter);
-  btn.title = isFilter ? '検索モード: フィルター' : '検索モード: 移動';
+  document.querySelectorAll('#search-mode-seg .seg-item').forEach(b => {
+    const on = b.dataset.mode === searchMode;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-checked', on);
+  });
 }
 
 /** navigateモード: 一致ノードをハイライトし、その重心にズームで移動する */
@@ -180,9 +179,10 @@ function applyFilterLayout(wasFiltered) {
   restorePreSqTransform();
 }
 
-document.getElementById('search-mode-btn').addEventListener('click', () => {
+document.querySelectorAll('#search-mode-seg .seg-item').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.mode === searchMode) return;
   const was = isLayoutFiltered();
-  searchMode = searchMode === 'filter' ? 'navigate' : 'filter';
+  searchMode = b.dataset.mode;
   updateSearchModeBtn();
 
   // モード切替時に現在の検索クエリで再適用
@@ -190,7 +190,7 @@ document.getElementById('search-mode-btn').addEventListener('click', () => {
     applyFilterLayout(was);
     if (searchMode === 'navigate') navigateToMatches(sq);
   }
-});
+}));
 
 document.getElementById('search-box').addEventListener('input', e => {
   const prev = sq;
@@ -233,7 +233,9 @@ document.getElementById('info-overlay').addEventListener('click', closeInfoPanel
 
 document.getElementById('depth-tog').addEventListener('click', () => {
   depth2 = !depth2;
-  document.getElementById('depth-tog').classList.toggle('on', depth2);
+  const tog = document.getElementById('depth-tog');
+  tog.classList.toggle('active', depth2);
+  tog.setAttribute('aria-pressed', depth2);
   if (selId) applyHL(selId, 'click'); else if (hovId) applyHL(hovId, 'hover');
 });
 

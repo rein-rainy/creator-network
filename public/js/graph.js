@@ -228,7 +228,7 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   const dirs = nodes.filter(n => n.type === 'director').length;
   const arts = nodes.filter(n => n.type === 'artist').length;
   const wks  = nodes.filter(n => n.type === 'work').length;
-  document.getElementById('stats').innerHTML = `${dirs} creators<br>${arts} artists<br>${wks} works`;
+  renderStats(dirs, arts, wks);
 }
 
 /* ─── _forceCenterLargest: いちばん大きい塊の中心が (x, y) に来るよう、全ノードを平行移動する力 ───
@@ -556,7 +556,7 @@ function redraw(nodes, links) {
   const dirs = nodes.filter(n => n.type === 'director').length;
   const arts = nodes.filter(n => n.type === 'artist').length;
   const wks  = nodes.filter(n => n.type === 'work').length;
-  document.getElementById('stats').innerHTML = `${dirs} creators<br>${arts} artists<br>${wks} works`;
+  renderStats(dirs, arts, wks);
 
   if (selId)      applyHL(selId, 'click');
   else if (hovId) applyHL(hovId, 'hover');
@@ -633,4 +633,11 @@ function _renderNodeContent(grp, d) {
     textDiv.append('xhtml:div').attr('class', 'pnode-name').text(d.label);
     if (isDir) textDiv.append('xhtml:div').attr('class', 'pnode-role').text(d.role || 'Creator');
   }
+}
+
+/* 表示ドックの凡例に件数を出す */
+function renderStats(dirs, arts, wks) {
+  document.getElementById('stat-dir').textContent  = dirs;
+  document.getElementById('stat-art').textContent  = arts;
+  document.getElementById('stat-work').textContent = wks;
 }

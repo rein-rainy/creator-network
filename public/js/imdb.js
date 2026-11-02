@@ -784,7 +784,7 @@ async function openFilmographyModal(personName, avatarSrc, opts = {}) {
       const count = mergeFilmographyItems(_fmgGroups[type] || []).length;
       const btn = document.createElement('button');
       btn.className = 'fm2-tab' + (i === 0 ? ' active' : '');
-      btn.textContent = `${fmgTypeLabel(type)} (${count})`;
+      btn.innerHTML = `<span>${esc(fmgTypeLabel(type))}</span><span class="tab-count">${count}</span>`;
       btn.dataset.type = type;
       btn.addEventListener('click', () => {
         tabsEl.querySelectorAll('.fm2-tab').forEach(b => b.classList.remove('active'));

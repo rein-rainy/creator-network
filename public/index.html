@@ -7,7 +7,8 @@
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="apple-touch-icon" href="/logo.png">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-<link rel="stylesheet" href="/css/styles.css?v=47">
+<link rel="stylesheet" href="/css/boardui-theme.css?v=2">
+<link rel="stylesheet" href="/css/styles.css?v=67">
 </head>
 <body>
 
@@ -31,37 +32,41 @@
     </svg>
   </div>
   <div class="sep"></div>
-  <button class="icon-btn" id="search-mode-btn" title="検索モード切替：フィルター / 移動">
-    <span data-icon="list-filter" data-size="16" id="smb-icon-filter"></span>
-    <span data-icon="zoom-in" data-size="16" id="smb-icon-nav" style="display:none"></span>
-  </button>
-  <div id="search-wrap">
-    <input type="text" id="search-box" placeholder="検索" autocomplete="off">
-    <button type="button" class="icon-btn-xs" id="search-clear" title="検索をクリア"><span data-icon="x" data-size="14"></span></button>
-  </div>
-  <div id="tag-filter-wrap">
-    <button class="icon-btn" id="tag-filter-btn" title="タグで絞り込み">
-      <span data-icon="funnel" data-size="16"></span>
+  <div class="topbar-search">
+    <div id="search-wrap">
+      <input type="text" id="search-box" placeholder="クリエイター・作品を検索" autocomplete="off">
+      <button type="button" class="close-btn close-btn-xs" id="search-clear" title="検索をクリア"><span data-icon="x" data-size="14"></span></button>
+    </div>
+    <div class="seg" id="search-mode-seg" role="radiogroup" aria-label="検索モード">
+      <button type="button" class="seg-item active" data-mode="filter" role="radio" aria-checked="true" title="一致する作品とその関係者だけを表示">
+        <span data-icon="list-filter" data-size="14"></span>
+      </button>
+      <button type="button" class="seg-item" data-mode="navigate" role="radio" aria-checked="false" title="全体を表示したまま、一致する場所へ移動">
+        <span data-icon="zoom-in" data-size="14"></span>
+      </button>
+    </div>
+    <div id="tag-filter-wrap">
+      <button type="button" class="btn btn-secondary tb-btn" id="tag-filter-btn" title="タグで絞り込み">
+        <span data-icon="funnel" data-size="16"></span><span class="tb-count" id="tag-filter-count"></span>
+      </button>
+      <div id="tag-filter-dropdown"></div>
+    </div>
+    <button type="button" class="btn btn-secondary tb-btn" id="depth-tog" aria-pressed="false" title="2次展開：選んだ人物の関係者の、別の作品までたどって表示">
+      <span data-icon="circle-nodes" data-size="16"></span>
     </button>
-    <div id="tag-filter-dropdown"></div>
   </div>
   <div class="topbar-right">
-    <div class="sep"></div>
-    <label class="tog-wrap" id="depth-tog" title="関連人物の別作品も展開">
-      <div class="tog"></div><span>2次展開</span>
-    </label>
-    <div class="sep"></div>
-    <button class="icon-btn" id="dir-suggest-btn" title="IMDbで監督が見つかった未登録の作品" style="display:none">
-      <span data-icon="video" data-size="16"></span>
-      <span id="dir-suggest-count"></span>
+    <button type="button" class="btn btn-secondary tb-btn" id="dir-suggest-btn" title="IMDbで監督が見つかった未登録の作品" style="display:none">
+      <span data-icon="video" data-size="16"></span><span class="tb-count" id="dir-suggest-count"></span>
     </button>
-    <button class="icon-btn" id="recent-btn" title="登録クリエイターの最新作品（IMDb）">
+    <button type="button" class="btn btn-secondary tb-btn" id="recent-btn" title="登録クリエイターの最新作品（IMDb）">
       <span data-icon="calendar" data-size="16"></span>
     </button>
-    <button class="icon-btn" id="path-btn" title="作品と作品のつながりをたどる">
+    <button type="button" class="btn btn-secondary tb-btn" id="path-btn" title="作品と作品のつながりをたどる">
       <span data-icon="route" data-size="16"></span>
     </button>
-    <button id="notion-sync-btn" title="Notion から最新を取得して、全体を配置し直す"><span class="nsb-dot"></span><span>更新</span></button>
+    <div class="sep"></div>
+    <button type="button" id="notion-sync-btn" title="Notion から最新を取得して、全体を配置し直す"><span class="nsb-dot"></span><span>更新</span></button>
   </div>
 </div>
 
@@ -83,13 +88,13 @@
   <div id="recent-modal" class="fm2-modal">
     <div class="fm2-header">
       <div class="fm2-title-wrap">
-        <div class="fm2-name">最新作品 <span class="chip rw-range">MV</span></div>
+        <div class="fm2-name">最新作品 <span class="badge rw-range">MV</span></div>
         <div class="fm2-sub" id="rw-sub"></div>
       </div>
       <button class="icon-btn-sm" id="rw-refresh" title="IMDbから再取得">
-        <span data-icon="rotate-cw" data-size="14"></span>
+        <span data-icon="rotate-cw" data-size="16"></span>
       </button>
-      <button class="icon-btn-sm" id="rw-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
+      <button class="close-btn" id="rw-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
     </div>
     <div class="fm2-body" id="rw-body"></div>
   </div>
@@ -103,35 +108,35 @@
         <div class="fm2-sub" id="pf-sub"></div>
       </div>
       <button class="icon-btn-sm" id="pf-farthest" title="選んだ作品から一番遠い作品を表示" disabled>
-        <span data-icon="arrow-right-to-line" data-size="14"></span>
+        <span data-icon="arrow-right-to-line" data-size="16"></span>
       </button>
       <button class="icon-btn-sm" id="pf-random" title="ランダムに2作品を選ぶ">
-        <span data-icon="shuffle" data-size="14"></span>
+        <span data-icon="shuffle" data-size="16"></span>
       </button>
-      <button class="icon-btn-sm" id="pf-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
+      <button class="close-btn" id="pf-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
     </div>
     <div class="pf-pickers">
       <div class="pf-pick" id="pf-pick-a">
         <span class="pf-pick-label">A</span>
         <input type="text" class="pf-input" placeholder="作品Aを検索..." autocomplete="off">
-        <button type="button" class="icon-btn-xs pf-clear" title="作品Aの選択を外す"><span data-icon="x" data-size="14"></span></button>
+        <button type="button" class="close-btn close-btn-xs pf-clear" title="作品Aの選択を外す"><span data-icon="x" data-size="14"></span></button>
         <div class="pf-options"></div>
       </div>
       <button class="icon-btn-sm" id="pf-swap" title="AとBを入れ替え">
-        <span data-icon="arrow-left-right" data-size="14"></span>
+        <span data-icon="arrow-left-right" data-size="16"></span>
       </button>
       <div class="pf-pick" id="pf-pick-b">
         <span class="pf-pick-label">B</span>
         <input type="text" class="pf-input" placeholder="作品Bを検索..." autocomplete="off">
-        <button type="button" class="icon-btn-xs pf-clear" title="作品Bの選択を外す"><span data-icon="x" data-size="14"></span></button>
+        <button type="button" class="close-btn close-btn-xs pf-clear" title="作品Bの選択を外す"><span data-icon="x" data-size="14"></span></button>
         <div class="pf-options"></div>
       </div>
     </div>
     <div class="fm2-body" id="pf-body"></div>
     <div class="pf-route-nav" id="pf-route-nav" hidden>
-      <button class="icon-btn-sm" id="pf-prev" title="前のルート"><span data-icon="chevron-left" data-size="14"></span></button>
+      <button class="icon-btn-sm" id="pf-prev" title="前のルート"><span data-icon="chevron-left" data-size="16"></span></button>
       <span class="pf-route-count" id="pf-route-count"></span>
-      <button class="icon-btn-sm" id="pf-next" title="次のルート"><span data-icon="chevron-right" data-size="14"></span></button>
+      <button class="icon-btn-sm" id="pf-next" title="次のルート"><span data-icon="chevron-right" data-size="16"></span></button>
     </div>
   </div>
 </div>
@@ -145,9 +150,9 @@
         <div class="fm2-sub" id="fm2-sub"></div>
       </div>
       <button class="icon-btn-sm" id="fm2-google" title="Googleで検索">
-        <span data-icon="search" data-size="14"></span>
+        <span data-icon="search" data-size="16"></span>
       </button>
-      <button class="icon-btn-sm" id="fm2-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
+      <button class="close-btn" id="fm2-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
     </div>
     <div class="fm2-tabs" id="fm2-tabs"></div>
     <div class="fm2-body" id="fm2-body"></div>
@@ -168,12 +173,14 @@
 <input type="file" id="fi0" accept=".csv" style="display:none">
 <svg id="canvas"></svg>
 
-<div id="legend">
-  <div class="leg"><div class="ldot" style="background:var(--node-dir)"></div>Creator</div>
-  <div class="leg"><div class="ldot" style="background:var(--node-art)"></div>Artist</div>
+<!-- 表示ドック：凡例と件数 -->
+<div id="view-dock">
+  <div id="legend">
+    <div class="leg" title="クリエイター"><span class="ldot" style="background:var(--node-dir)"></span><span class="leg-label">Creator</span><span class="leg-n" id="stat-dir"></span></div>
+    <div class="leg" title="アーティスト"><span class="ldot" style="background:var(--node-art)"></span><span class="leg-label">Artist</span><span class="leg-n" id="stat-art"></span></div>
+    <div class="leg" title="作品"><span class="lcard"></span><span class="leg-label">Works</span><span class="leg-n" id="stat-work"></span></div>
+  </div>
 </div>
-
-<div id="stats"></div>
 
 <div id="info-overlay"></div>
 <div id="info-panel">
@@ -185,12 +192,12 @@
     </div>
     <div class="ph-actions">
       <button class="icon-btn-sm" id="pc-notion" title="Notionで開く" style="display:none">
-        <span data-icon="external-link" data-size="14"></span>
+        <span data-icon="external-link" data-size="16"></span>
       </button>
       <button class="icon-btn-sm" id="pc-search" title="このクリエイターを検索" style="display:none">
-        <span data-icon="search" data-size="14"></span>
+        <span data-icon="search" data-size="16"></span>
       </button>
-      <button class="icon-btn-sm" id="pc" title="閉じる"><span data-icon="x" data-size="14"></span></button>
+      <button class="close-btn" id="pc" title="閉じる"><span data-icon="x" data-size="14"></span></button>
     </div>
   </div>
   <div id="pc2"></div>
@@ -200,7 +207,7 @@
 <div id="edit-login-popover" class="picker-popover">
   <div class="picker-popover-header">
     <span class="picker-popover-label">編集モード</span>
-    <button class="icon-btn-xs" id="edit-login-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
+    <button class="close-btn" id="edit-login-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
   </div>
   <div class="picker-popover-body">
     <input type="text" class="cmeta-input" id="edit-password" placeholder="パスワード" autocomplete="off" autocapitalize="off" spellcheck="false" data-1p-ignore data-lpignore="true" data-bwignore>
@@ -209,23 +216,23 @@
   </div>
 </div>
 
-<script src="/js/core.js?v=25"></script>
+<script src="/js/core.js?v=28"></script>
 <script src="/js/edit-auth.js?v=6"></script>
 <script src="/js/filters.js?v=8"></script>
-<script src="/js/graph.js?v=25"></script>
-<script src="/js/panel.js?v=15"></script>
-<script src="/js/imdb.js?v=17"></script>
-<script src="/js/tag-filter.js?v=6"></script>
+<script src="/js/graph.js?v=26"></script>
+<script src="/js/panel.js?v=17"></script>
+<script src="/js/imdb.js?v=18"></script>
+<script src="/js/tag-filter.js?v=8"></script>
 <script src="/js/avatars.js?v=8"></script>
-<script src="/js/director-suggest.js?v=4"></script>
-<script src="/js/recent-works.js?v=24"></script>
-<script src="/js/path-finder.js?v=8"></script>
-<script src="/js/main.js?v=23"></script>
+<script src="/js/director-suggest.js?v=5"></script>
+<script src="/js/recent-works.js?v=25"></script>
+<script src="/js/path-finder.js?v=9"></script>
+<script src="/js/main.js?v=25"></script>
 <!-- ── Role Picker Popover ── -->
 <div id="role-picker-popover" class="picker-popover">
   <div class="picker-popover-header">
     <span class="picker-popover-label">役職を選択</span>
-    <button class="icon-btn-xs" id="role-popover-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
+    <button class="close-btn" id="role-popover-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
   </div>
   <div class="picker-popover-body">
     <div class="role-picker-tags" id="role-popover-tags"></div>
@@ -237,7 +244,7 @@
 <div id="sns-picker-popover" class="picker-popover">
   <div class="picker-popover-header">
     <span class="picker-popover-label">SNS リンク</span>
-    <button class="icon-btn-xs" id="sns-popover-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
+    <button class="close-btn" id="sns-popover-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
   </div>
   <div class="picker-popover-body">
     <div class="cmeta-sns-list" id="sns-popover-list"></div>
@@ -248,7 +255,7 @@
 <div id="alias-picker-popover" class="picker-popover">
   <div class="picker-popover-header">
     <span class="picker-popover-label">別名（検索用・1行に1つ）</span>
-    <button class="icon-btn-xs" id="alias-popover-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
+    <button class="close-btn" id="alias-popover-close" title="閉じる"><span data-icon="x" data-size="14"></span></button>
   </div>
   <div class="picker-popover-body">
     <textarea class="cmeta-input cmeta-alias-input" id="alias-popover-input" rows="4" placeholder="例: 別表記、ローマ字名"></textarea>

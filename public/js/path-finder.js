@@ -104,14 +104,14 @@ function _pathSetupPicker(slot) {
       : works.slice().sort((a, b) => a.label.localeCompare(b.label, 'ja'))
     ).slice(0, PATH_PICK_LIMIT);
     active = 0;
-    list.innerHTML = items.length ? items.map((w, i) => `
+    list.innerHTML = '<div class="menu-scroll">' + (items.length ? items.map((w, i) => `
       <button type="button" class="pf-option${i === 0 ? ' active' : ''}" data-i="${i}">
         ${w.th ? `<img class="pf-option-thumb" src="${esc(w.th)}" alt="" loading="lazy">` : `<span class="pf-option-thumb">${icon('film', 14)}</span>`}
         <span class="pf-option-text">
           <span class="pf-option-title">${esc(w.label)}</span>
           <span class="pf-option-sub">${esc(_pathWorkSub(w))}</span>
         </span>
-      </button>`).join('') : '<div class="pf-option-empty">一致する作品がありません</div>';
+      </button>`).join('') : '<div class="pf-option-empty">一致する作品がありません</div>') + '</div>';
     list.querySelectorAll('.pf-option').forEach(el => {
       el.addEventListener('mousedown', e => e.preventDefault()); // blur より先に選ぶ
       el.addEventListener('click', () => choose(items[Number(el.dataset.i)]));

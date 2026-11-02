@@ -448,7 +448,7 @@ function openRecentWorkPanel(entry, opts = {}) {
   const panel = document.getElementById('info-panel');
   panel.classList.add('mode-modal', 'visible');
   panel.classList.remove('mode-side');
-  panel.scrollTop = 0;
+  document.getElementById('pc2').scrollTop = 0;
   document.getElementById('info-overlay').classList.add('visible');
 
   // クリエイター

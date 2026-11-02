@@ -189,7 +189,7 @@ function showPanel(d) {
                 <span class="person-card-role">${esc(person.role || 'Creator')}</span>
               </span>
             </button>
-            <button class="card-corner-btn danger remove-creator-btn" data-person-id="${esc(person.id)}" data-person-name="${esc(person.label)}" title="${esc(person.label)}を削除">${icon('x', 10)}</button>
+            <button class="card-corner-btn close-btn close-btn-xs danger remove-creator-btn" data-person-id="${esc(person.id)}" data-person-name="${esc(person.label)}" title="${esc(person.label)}を削除">${icon('x', 10)}</button>
           </div>`;
         });
         html += `</div>`;
@@ -260,49 +260,6 @@ function showPanel(d) {
 
     html += `</div>`; // cmeta-section end
 
-    // --- Top co-workers ---
-    const counterType = d.type === 'director' ? 'artist' : 'director';
-    const counterLabel = d.type === 'director' ? '担当アーティスト TOP 3' : '担当クリエイター TOP 3';
-    const countMap = new Map();
-    works.forEach(w => {
-      AL.forEach(l => {
-        const s = lid(l.source), t = lid(l.target);
-        const isThisWork = s === w.id || t === w.id;
-        if (!isThisWork) return;
-        const peerId = s === w.id ? t : s;
-        const peer = AN.find(n => n.id === peerId && n.type === counterType);
-        if (!peer) return;
-        countMap.set(peer.id, { label: peer.label, count: (countMap.get(peer.id)?.count || 0) + 1 });
-      });
-    });
-    const allCoworkers = [...countMap.values()].sort((a, b) => b.count - a.count);
-    const top3 = allCoworkers.slice(0, 3);
-    if (top3.length > 0) {
-      const panelId = `cwlist_${Date.now()}`;
-      html += `<div class="ps-title">${esc(counterLabel)}</div>`;
-      html += `<div class="cw-list">`;
-      allCoworkers.forEach((p, i) => {
-        const barPct = Math.round((p.count / allCoworkers[0].count) * 100);
-        html += `
-          <div class="cw-row" data-panel="${panelId}"${i >= 3 ? ' hidden' : ''}>
-            <span class="cw-rank">${i + 1}</span>
-            <div class="cw-body">
-              <div class="cw-head">
-                <span class="cw-name">${esc(p.label)}</span>
-                <span class="cw-count">${p.count}回</span>
-              </div>
-              <div class="cw-bar"><div class="cw-bar-fill" style="width:${barPct}%"></div></div>
-            </div>
-          </div>`;
-      });
-      if (allCoworkers.length > 3) {
-        html += `<button class="btn btn-ghost btn-block" onclick="
-          document.querySelectorAll('.cw-row[data-panel=\\'${panelId}\\']').forEach(r => { r.hidden = false; });
-          this.remove();
-        ">もっと見る (${allCoworkers.length - 3}件)</button>`;
-      }
-      html += `</div>`;
-    }
     // --- Works list ---
     html += `<div class="ps-title">${esc(sl)}</div>`;
     works.forEach(w => {

@@ -112,7 +112,7 @@ function refreshDirSuggestUI() {
         <div class="hp-item-label">${esc(work.label)}</div>
         <div class="ds-item-sub">${esc(s.directors.map(d => d.name).join(' / '))}</div>
       </div>
-      <button class="icon-btn-xs ds-dismiss" title="この候補を無視">${icon('x', 14)}</button>`;
+      <button class="close-btn close-btn-xs ds-dismiss" title="この候補を無視">${icon('x', 14)}</button>`;
     row.addEventListener('click', () => {
       document.getElementById('dir-suggest-panel').classList.remove('visible');
       selId = work.id;
@@ -146,7 +146,7 @@ function renderDirSuggestSection(work) {
   let html = `<div class="panel-section ds-section">
     <div class="section-label">
       <span>IMDb 監督候補</span>
-      <button class="btn btn-ghost" id="ds-ignore">無視</button>
+      <button class="btn btn-secondary btn-xs" id="ds-ignore">無視</button>
     </div>
     <div class="ds-note"><a class="text-link" href="https://www.imdb.com/title/${esc(s.tt)}/" target="_blank" rel="noopener noreferrer">${esc(imdbLabel)}</a></div>
     <div class="ds-people">`;

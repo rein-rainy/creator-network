@@ -4,6 +4,7 @@
 function updateTagFilterBtn() {
   const btn = document.getElementById('tag-filter-btn');
   btn.classList.toggle('active', aFilters.size > 0);
+  document.getElementById('tag-filter-count').textContent = aFilters.size || '';
   // title でフィルター数をツールチップに表示
   btn.title = aFilters.size > 0 ? `タグで絞り込み中 (${aFilters.size}件)` : 'タグで絞り込み';
 }
@@ -14,6 +15,9 @@ function renderTagDropdown() {
   AN.filter(n => n.type === 'work').forEach(n => (n.cats || []).forEach(c => cats.add(c)));
   const sorted = [...cats].sort();
   dd.innerHTML = '';
+  const list = document.createElement('div');   // 角丸の内側でスクロールする領域
+  list.className = 'menu-scroll';
+  dd.appendChild(list);
 
   // 「すべてクリア」行
   if (aFilters.size > 0) {
@@ -28,10 +32,10 @@ function renderTagDropdown() {
       renderTagDropdown();
       applyFilterLayout(was);
     });
-    dd.appendChild(clear);
+    list.appendChild(clear);
     const sep = document.createElement('div');
     sep.className = 'tfd-sep';
-    dd.appendChild(sep);
+    list.appendChild(sep);
   }
 
   sorted.forEach(cat => {
@@ -46,7 +50,7 @@ function renderTagDropdown() {
       renderTagDropdown();
       applyFilterLayout(was);
     });
-    dd.appendChild(item);
+    list.appendChild(item);
   });
 }
 
@@ -78,5 +82,5 @@ _tfBtn.addEventListener('click', e => {
   _tfDd.classList.contains('open') ? closeTagDropdown() : openTagDropdown();
 });
 document.addEventListener('click', e => {
-  if (!_tfDd.contains(e.target) && e.target !== _tfBtn) closeTagDropdown();
+  if (!_tfDd.contains(e.target) && !_tfBtn.contains(e.target)) closeTagDropdown();
 });
