@@ -172,7 +172,16 @@
   .pf-edge-line { width: 2px; height: 100%; }
   .pf-route-nav { padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); }
   .pf-input { font: 400 var(--text-headline) var(--sans); }   /* 大きさは PC と同じ BoardUI Input (medium) */
-  .pf-pickers { gap: 8px; }
+  /* 作品 A・B は縦に詰めて並べ、入れ替えボタンは右側の 2 つの中間に置く（地図アプリの経路検索と同じ形）。
+     ボタンが A と B のあいだの 1 行を占めると、入力欄の流れが切れて場所も取る */
+  .pf-pickers {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "a swap" "b swap";
+    align-items: center; gap: 8px;
+  }
+  #pf-pick-a { grid-area: a; }
+  #pf-pick-b { grid-area: b; }
+  .pf-pickers #pf-swap { grid-area: swap; align-self: center; }
 
   /* ── タグの絞り込み・監督候補 → 下からのシート（後ろは #sheet-scrim で暗くする） ── */
   #tag-filter-dropdown, #dir-suggest-panel {
