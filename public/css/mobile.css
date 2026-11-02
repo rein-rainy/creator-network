@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════
    スマホ（600px 以下）のレイアウト
    - 上：ロゴと検索だけの 1 段のバー。入力中はロゴを隠して検索欄を広げ、文字があるときだけ検索モードを出す
-   - 下：機能ボタンを名前つきで並べたナビ（#mobile-bar）。親指の届く位置に置く。
+   - 下：機能ボタンをアイコンだけで並べ、画面の下に浮かべたタブバー（#mobile-bar）。親指の届く位置に置く。
      ボタンはトップバーの各ボタンを押すだけで、オン・件数・読み込み中の状態は mobile.js が写す
    - パネル・モーダル・メニューは画面の下から出るシート。上の取っ手や見出しを下に引くと閉じる
    - 部品は PC と同じ BoardUI（styles.css の .btn / .seg / .tb-count など）を使い、色・角丸・影・文字は
@@ -19,7 +19,10 @@
 @media (max-width: 600px) {
   :root {
     --topbar-h: calc(56px + env(safe-area-inset-top, 0px));
-    --bottombar-h: calc(60px + env(safe-area-inset-bottom, 0px));
+    /* タブバー：ボタン 40px ＋ 余白 4px の浮いた面。画面の下端からは 12px（ホームバーのある端末はその分も）離す */
+    --tabbar-gap: max(12px, env(safe-area-inset-bottom, 0px));
+    --tabbar-h: 50px;   /* 40 + 4 × 2 + 枠 1 × 2 */
+    --bottombar-h: calc(var(--tabbar-h) + var(--tabbar-gap));   /* 下に浮かぶものを避けるための高さ */
     --sheet-r: var(--radius-3xl);   /* BoardUI settings modal と同じ角丸 */
   }
 
@@ -50,50 +53,46 @@
   .topbar-search:has(#search-wrap.filled) #search-mode-seg { display: inline-flex; }
   #search-mode-seg .seg-item { width: 36px; height: 32px; }
 
-  /* ── 下のナビ ── */
+  /* ── 下のタブバー：浮いた面は BoardUI の Dropdown / 凡例ドックと同じ surface・枠・影 ──
+     角丸は中のボタンと同心：ボタン 20（直径 40 の丸）＋ 余白 4 ＝ 24（--radius-3xl） */
   #mobile-bar {
-    position: fixed; left: 0; right: 0; bottom: 0; z-index: 300;
-    height: var(--bottombar-h);
-    padding: 0 max(4px, env(safe-area-inset-right, 0px)) env(safe-area-inset-bottom, 0px) max(4px, env(safe-area-inset-left, 0px));
-    display: flex; align-items: stretch;
-    background: var(--bg); border-top: 1px solid var(--line);
+    position: fixed; z-index: 300;
+    left: 50%; bottom: var(--tabbar-gap); translate: -50% 0;
+    display: flex; align-items: center; gap: 4px; padding: 4px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-3xl); box-shadow: var(--shadow-dropdown);
   }
+  /* ボタン：BoardUI IconButton の面なし版を丸くしたもの。押している間・開いている間は tertiary の面。オンは PC のトップバーと同じ nav-selected のアクセント */
   .mb-item {
-    flex: 1 1 0; min-width: 0; padding: 6px 0 4px;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-    background: none; border: none; cursor: pointer; user-select: none;
+    position: relative; flex-shrink: 0; width: 40px; height: 40px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    border: none; border-radius: var(--radius-2-5xl); cursor: pointer; user-select: none;
     -webkit-tap-highlight-color: transparent;
-    color: var(--ink-2);
-    font: 500 var(--text-caption-2) var(--sans); letter-spacing: var(--tracking-caption-2);
+    background: transparent; color: var(--icon-2);
+    transition: background-color var(--t-btn) ease, color var(--t-btn) ease, transform 420ms cubic-bezier(0.4, 0, 0.2, 1);
   }
   .mb-item[hidden] { display: none; }
-  .mb-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  /* 選択中の印はアイコンの後ろの面。オンは PC のトップバーのボタンと同じ BoardUI nav-selected のアクセント */
-  .mb-icon {
-    position: relative; width: 48px; height: 30px; border-radius: var(--radius-2lg);
-    display: flex; align-items: center; justify-content: center;
-    transition: background-color .2s var(--ease), transform .2s var(--ease);
-  }
-  .mb-icon .icon { width: 20px; height: 20px; color: var(--icon-2); transition: color .2s var(--ease); }
-  .mb-item:active .mb-icon { background: var(--field); transform: scale(.98); }
-  .mb-item.open .mb-icon { background: var(--field); }
-  .mb-item.open, .mb-item.open .icon { color: var(--ink); }
-  .mb-item.active { color: var(--ink); }
-  .mb-item.active .mb-icon {
+  .mb-item .icon { width: 20px; height: 20px; }
+  .mb-item:active { background: var(--field-hover); transform: scale(.96); transition-duration: 150ms, 150ms, 220ms; }
+  .mb-item.open { background: var(--field); color: var(--ink); }
+  .mb-item.active {
+    color: var(--color-text-white);
     background: linear-gradient(to bottom, var(--color-accent-500), var(--color-accent-600));
     box-shadow: var(--shadow-xs), inset 0 1px 0 0 rgb(255 255 255 / 0.251);
   }
-  .mb-item.active .icon { color: var(--color-text-white); }
   .mb-item.loading .icon { animation: spin .9s linear infinite; }
-  /* 件数は PC と同じ BoardUI TabCount（.tb-count）をアイコンの右上に重ねる */
-  .mb-icon .tb-count { position: absolute; top: -5px; right: -2px; box-shadow: 0 0 0 2px var(--bg); }
+  /* 件数は PC と同じ BoardUI TabCount（.tb-count）をボタンの右上に重ねる */
+  .mb-item .tb-count { position: absolute; top: -4px; right: -4px; box-shadow: 0 0 0 2px var(--surface); }
   .mb-item.active .tb-count { background: var(--color-badge-new-background); color: var(--color-badge-new-text); }
 
   /* ── グラフまわり ── */
-  #view-dock { left: 12px; bottom: calc(var(--bottombar-h) + 12px); }
+  /* キャンバスは画面の下まで使い、タブバーはその上に浮かべる */
+  #canvas { height: calc(100vh - var(--topbar-h)); height: calc(100dvh - var(--topbar-h)); }
+  /* 凡例は下だとタブバーと重なるので、左上に置く */
+  #view-dock { left: 12px; top: calc(var(--topbar-h) + 12px); bottom: auto; }
   .leg-label { display: none; }
   #notion-toast {
-    bottom: calc(var(--bottombar-h) + 60px);
+    bottom: calc(var(--bottombar-h) + 12px);
     max-width: calc(100vw - 32px); white-space: normal; text-align: center;
   }
 
@@ -118,8 +117,10 @@
     transform: none; filter: none; opacity: 1;
     --outer-r: var(--sheet-r);
   }
-  /* 人物のシートは下のナビの上に置く（人物を選んだまま 2次展開などを切り替えられるように） */
-  #info-panel.mode-side { bottom: var(--bottombar-h); max-height: calc(64dvh - var(--bottombar-h)); }
+  /* 人物のシートの上にもタブバーを浮かべたままにする（人物を選んだまま 2次展開などを切り替えられるように）。
+     シートの中身はタブバーに隠れないよう、下に余白を取る */
+  #info-panel.mode-side { max-height: 64dvh; }
+  body:has(#info-panel.mode-side.visible) #mobile-bar { z-index: 370; }
   #info-panel.mode-modal { max-height: calc(100dvh - env(safe-area-inset-top, 0px) - 16px); background: var(--bg); }
   #info-panel.visible { animation: sheetUp .35s var(--ease-modal); }
   #info-panel.mode-modal.visible { transform: none; }
@@ -128,7 +129,7 @@
   #info-panel.mode-modal #ph-avatar { width: 36px; height: 36px; }
   #info-panel.mode-modal .ps-title { padding: 16px 16px 6px; }
   #info-panel.mode-modal .panel-meta { padding: 12px 16px; }
-  #info-panel.mode-side #pc2 { padding-bottom: 12px; }
+  #info-panel.mode-side #pc2 { padding-bottom: calc(var(--bottombar-h) + 12px); }
   #info-panel.mode-modal #pc2 { padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
   .prop-row { flex-direction: column; gap: 4px; }
   .prop-label { flex: none; line-height: 20px; }
