@@ -6,6 +6,7 @@ const MIME_TYPES = {
   '.js': 'application/javascript; charset=utf-8',
   '.ico': 'image/x-icon',
   '.png': 'image/png',
+  '.webmanifest': 'application/manifest+json',
   '.svg': 'image/svg+xml',
   '.html': 'text/html; charset=utf-8',
 };
