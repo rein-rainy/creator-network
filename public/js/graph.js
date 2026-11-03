@@ -13,8 +13,55 @@ function settleSimForces() {
   sim.force('charge').strength(-400).distanceMax(150);
   baseLinkStrength = 0.01;
   sim.force('link').strength(sim.force('link').strength());
+  sim.force('aff')?.strength(AFF_LINK.settled);
   sim.velocityDecay(0.7);
   sim.force('center', null);
+}
+
+/* ─── 所属のハブ ──────────────────────────────────────────────────────────────
+   同じ所属の人を近くに置くため、所属ごとに見えない「プロダクションのカード」をシミュにだけ入れ、
+   所属している人を全員そこへ線（これも見えない）でつなぐ。ハブは描画せず、配置の保存もしない。
+   人物カードと同じ大きさで反発・衝突するので、ハブの周りに所属の人が輪になって集まる。
+─────────────────────────────────────────────────────────────────────────────── */
+const AFF_LINK = { strong: 0.3, settled: 0.03 };
+const _affHubs = new Map(); // 所属名 → ハブ（作り直しても同じオブジェクトを使う）
+
+/** 表示中のノードから、所属ごとのハブとハブ→人物の見えない線を作る。ハブは所属の人の重心に置く */
+function _affHubsFor(nodes) {
+  const members = new Map();
+  nodes.forEach(n => {
+    if (n.type === 'work') return;
+    (n.affiliations || []).forEach(a => { if (!members.has(a)) members.set(a, []); members.get(a).push(n); });
+  });
+  const hubs = [], links = [];
+  members.forEach((ms, a) => {
+    if (ms.length < 2) return; // 1人だけなら寄せる相手がいない
+    let hub = _affHubs.get(a);
+    if (!hub) { hub = { id: `aff_${a}`, type: 'aff', label: a, works: [] }; _affHubs.set(a, hub); }
+    const placed = ms.filter(m => m.x != null);
+    if (placed.length) {
+      hub.x = placed.reduce((s, m) => s + m.x, 0) / placed.length;
+      hub.y = placed.reduce((s, m) => s + m.y, 0) / placed.length;
+    } else { delete hub.x; delete hub.y; }
+    hub.vx = 0; hub.vy = 0; hub.fx = null; hub.fy = null;
+    // 人数が多いほど輪を大きくして、カードが重ならずに並べるようにする
+    const dist = Math.max(170, ms.length * PNW / (2 * Math.PI) * 1.15);
+    hubs.push(hub);
+    ms.forEach(m => links.push({ source: hub, target: m, _dist: dist }));
+  });
+  return { hubs, links };
+}
+
+/** 保存した配置のときから所属が変わった（増えた）人。配置済みでも所属のハブへ寄せ直す */
+function _newAffMembers(nodes, affLinks) {
+  if (_preSqSnapshot) return new Set();
+  const { affs: saved } = _readLayout();
+  const moved = new Set();
+  affLinks.forEach(l => {
+    const n = l.target;
+    if (n.x != null && (!saved || !saved.has(`${l.source.label}|${_layoutKey(n)}`))) moved.add(n);
+  });
+  return moved;
 }
 
 /* キャンバスの表示サイズ（トップバーやスマホの下のナビを除いた領域）。配置の中心はここの中央 */
@@ -150,6 +197,8 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   const hasPlaced = nodes.some(n => n.x != null);
   // 配置済みのノード同士に新しいつながりができていれば、片方を引き寄せる対象にする
   const pulled = !freeLayout && hasPlaced ? _pullForNewLinks(links) : new Set();
+  // 所属が付いた（変わった）人も、所属のハブへ寄せ直す
+  if (!freeLayout && hasPlaced) _newAffMembers(nodes, _affHubsFor(nodes).links).forEach(n => pulled.add(n));
   // 配置済みのノードがあれば、位置のないもの（新しく増えたもの）だけを差分で配置する。
   // freeLayout（検索時など）は固定せず、シミュに自由に動かせる。
   const hasNew = !freeLayout && hasPlaced && _prepareNewNodes(nodes, links, pulled);
@@ -158,16 +207,20 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   // 通常の draw（初回・更新どちらも）も同様にリセットして、更新時に広がらないようにする。
   baseLinkStrength = 0.5;
 
+  // ハブは配置済みの人の位置が決まってから重心に置く
+  const aff = _affHubsFor(nodes);
+
   if (sim) sim.stop();
-  sim = d3.forceSimulation(nodes)
+  sim = d3.forceSimulation([...nodes, ...aff.hubs])
       .force('link',    d3.forceLink(links).id(d => d.id)
         .distance(l => l.ltype === 'dir' ? 280 : 300)
         .strength(() => baseLinkStrength))
+      .force('aff',     d3.forceLink(aff.links).distance(l => l._dist).strength(AFF_LINK.strong))
       .force('charge',  d3.forceManyBody().strength(-2500))
       // 既存ノードが固定されている差分配置では、中心へ寄せる力は新規ノードだけを動かしてしまうので掛けない
       // 検索中は、いちばん大きい塊が画面の中心に来るようにする。全ノードの平均で合わせると、
       // 遠くへ散った小さな塊に引っ張られて、肝心の大きな塊が画面の外にずれてしまう。
-      .force('center',  freeLayout ? _forceCenterLargest(nodes, links, W/2, H/2)
+      .force('center',  freeLayout ? _forceCenterLargest([...nodes, ...aff.hubs], [...links, ...aff.links], W/2, H/2)
                        : !hasPlaced ? d3.forceCenter(W/2, H/2) : null)
       .force('collide', d3.forceCollide(d => d.type === 'work' ? Math.sqrt((CW/2)**2 + (CH/2)**2) + 18 : Math.sqrt((PNW/2)**2 + (PNH/2)**2) + 12))
       .alphaDecay(.015)
@@ -312,6 +365,7 @@ function _relaxNewNodes() {
   // 遠くまで届く強い反発（-2500）だと、新規ノードが群れの外へ押し出されてしまうので近くの力だけにする
   baseLinkStrength = 0.5;
   sim.force('link').strength(sim.force('link').strength());
+  sim.force('aff')?.strength(AFF_LINK.strong);
   sim.force('charge').strength(-400).distanceMax(150);
   sim.force('center', null);
   sim.velocityDecay(0.4);
@@ -372,8 +426,8 @@ function _linkKey(l, byId) {
 function _readLayout() {
   try {
     const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}');
-    return { pos: saved.pos || {}, links: saved.links ? new Set(saved.links) : null };
-  } catch (e) { return { pos: {}, links: null }; }
+    return { pos: saved.pos || {}, links: saved.links ? new Set(saved.links) : null, affs: saved.affs ? new Set(saved.affs) : null };
+  } catch (e) { return { pos: {}, links: null, affs: null }; }
 }
 
 function loadSavedLayout() {
@@ -398,7 +452,9 @@ function saveLayout() {
     // つながりも保存し、次に配置済みのノード同士に新しいつながりができたかを判定する
     const byId = new Map(AN.map(n => [n.id, n]));
     const links = AL.map(l => _linkKey(l, byId)).filter(Boolean);
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ pos, links }));
+    // 所属も保存し、次に所属が付いた（変わった）人を判定する
+    const affs = AN.flatMap(n => n.type === 'work' ? [] : (n.affiliations || []).map(a => `${a}|${_layoutKey(n)}`));
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ pos, links, affs }));
   } catch (e) { /* 保存できなくても表示には影響しない */ }
 }
 
@@ -551,12 +607,16 @@ function redraw(nodes, links) {
   _fitNodeCards(_nSel);
 
   // 新しく加わったノード（監督の追加など）と、新しいつながりで引き寄せるノードは差分配置する
-  const hasNew = _prepareNewNodes(nodes, links, _pullForNewLinks(links));
+  const pulled = _pullForNewLinks(links);
+  _newAffMembers(nodes, _affHubsFor(nodes).links).forEach(n => pulled.add(n));
+  const hasNew = _prepareNewNodes(nodes, links, pulled);
+  const aff = _affHubsFor(nodes);
 
   // シミュのデータを差し替え（新規ノードがなければ alpha は触らない → 動かない）
   sim.stop();
-  sim.nodes(nodes);
+  sim.nodes([...nodes, ...aff.hubs]);
   sim.force('link').links(links);
+  sim.force('aff')?.links(aff.links);
   // link の source/target を ID→オブジェクトに解決（tick なし）
   if (sim.force('link').initialize) {
     sim.force('link').initialize(nodes, () => Math.random());
@@ -649,9 +709,13 @@ function _renderNodeContent(grp, d) {
     }
     const textDiv = card.append('xhtml:div').attr('class', 'pnode-text');
     textDiv.append('xhtml:div').attr('class', 'pnode-name').text(d.label);
-    if (isDir) textDiv.append('xhtml:div').attr('class', 'pnode-role').text(d.role || 'Creator');
-    // 所属バッジ（カードが広がりすぎないよう2つまで）。押すと同じ所属の人を強調する
-    if ((d.affiliations || []).length) textDiv.append('xhtml:div').attr('class', 'pnode-affs').html(affBadgesHtml(d.affiliations, 2));
+    // 役職の横に所属バッジ（カードが広がりすぎないよう2つまで）。押すと同じ所属の人を強調する
+    const hasAff = (d.affiliations || []).length > 0;
+    if (isDir || hasAff) {
+      const roleRow = textDiv.append('xhtml:div').attr('class', 'pnode-role-row');
+      if (isDir) roleRow.append('xhtml:span').attr('class', 'pnode-role').text(d.role || 'Creator');
+      if (hasAff) roleRow.append('xhtml:span').attr('class', 'pnode-affs').html(affBadgesHtml(d.affiliations, 2));
+    }
   }
 }
 
