@@ -53,6 +53,11 @@ function splitAliases(text) {
   return (text || '').split(/[\n,、]/).map(s => s.trim()).filter(Boolean);
 }
 
+/** Name of the affiliation property (所属 / Affiliation), or undefined if none. */
+function findAffiliationProp(props) {
+  return Object.keys(props).find(key => key === '所属' || /^affiliations?$/i.test(key));
+}
+
 /** Name of the SNS property (case-insensitive), defaulting to 'SNS'. */
 function findSnsProp(props) {
   return Object.keys(props).find(key => key.toLowerCase() === 'sns') || 'SNS';
@@ -104,7 +109,11 @@ async function fetchPersonDB(dbId, label) {
       const avatar = page.cover?.external?.url ?? page.cover?.file?.url ?? '';
       const avatarType = avatar ? page.cover.type : '';
 
-      persons.push({ Name: name, Role: role, SNS: sns, Aliases: aliases, Avatar: avatar, AvatarType: avatarType, notionPageId: page.id });
+      // 所属（マルチセレクトのタグ）。同じ所属の人をまとめて強調するのに使う
+      const affiliationProp = props[findAffiliationProp(props)];
+      const affiliations = affiliationProp?.type === 'multi_select' ? affiliationProp.multi_select.map(s => s.name) : [];
+
+      persons.push({ Name: name, Role: role, SNS: sns, Aliases: aliases, Affiliations: affiliations, Avatar: avatar, AvatarType: avatarType, notionPageId: page.id });
     }
 
     hasMore = response.body.has_more;
@@ -397,14 +406,24 @@ async function getWorkCategoryOptions() {
   return { options: options.map(option => ({ name: option.name, color: option.color })) };
 }
 
-/** タグ名 → Notion の色名（作品カテゴリと役職）。画面のタグを Notion と同じ色で塗るのに使う */
+/** タグ名 → Notion の色名（作品カテゴリ・役職・所属）。画面のタグを Notion と同じ色で塗るのに使う */
 async function getTagColors() {
-  const [categories, roles] = await Promise.all([
+  const [categories, roles, affiliations] = await Promise.all([
     getWorkCategoryOptions().catch(() => ({ options: [] })),
     getRoleOptions().catch(() => ({ options: [] })),
+    getAffiliationOptions().catch(() => ({ options: [] })),
   ]);
   const toMap = ({ options }) => Object.fromEntries(options.map(o => [o.name, o.color]));
-  return { categories: toMap(categories), roles: toMap(roles) };
+  return { categories: toMap(categories), roles: toMap(roles), affiliations: toMap(affiliations) };
+}
+
+/** クリエイター DB の「所属」マルチセレクトの選択肢 */
+async function getAffiliationOptions() {
+  const dbRes = await notionRequest('GET', `/v1/databases/${config.DB_CREATORS}`);
+  if (dbRes.status !== 200) throw new Error(`DB取得失敗: ${dbRes.status}`);
+  const prop = dbRes.body.properties[findAffiliationProp(dbRes.body.properties)];
+  const options = prop?.type === 'multi_select' ? prop.multi_select.options || [] : [];
+  return { options: options.map(option => ({ name: option.name, color: option.color })) };
 }
 
 /** 作品ページを作成する。同じ URL の作品があれば作らずにそれを返す */

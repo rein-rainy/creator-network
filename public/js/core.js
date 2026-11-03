@@ -88,7 +88,7 @@ else hydrateIcons();
 /* ── Notion のタグ色 ──
    /notion-data の tagColors（タグ名 → Notion の色名）を入れておき、
    タグは tagHtml() で <span class="tag" data-color="blue"> として描く。色は CSS 側で Notion と同じ値。 */
-let TAG_COLORS = { categories: {}, roles: {} };
+let TAG_COLORS = { categories: {}, roles: {}, affiliations: {} };
 const tagColor = (name, kind = 'categories') => TAG_COLORS[kind]?.[name] || 'default';
 const tagHtml = (name, kind = 'categories') =>
   `<span class="tag" data-color="${esc(tagColor(name, kind))}">${esc(name)}</span>`;
@@ -161,14 +161,45 @@ function loadCreatorMeta(rows) {
     const avatarType    = row['AvatarType'] || '';
     const notionPageId  = (row['notionPageId']   || '').trim();
     const aliases       = row['Aliases'] || [];
+    const affiliations  = row['Affiliations'] || [];
     const sns = snsRaw ? [snsFromUrl(snsRaw)].filter(Boolean) : [];
-    creatorMetaMap.set(name, { role, sns, aliases, avatar, avatarType, notionPageId });
+    creatorMetaMap.set(name, { role, sns, aliases, affiliations, avatar, avatarType, notionPageId });
   });
 }
 
 function getCreatorMeta(name) {
-  return creatorMetaMap.get(name) || { role: '', sns: [], aliases: [], avatar: '', avatarType: '', notionPageId: '' };
+  return creatorMetaMap.get(name) || { role: '', sns: [], aliases: [], affiliations: [], avatar: '', avatarType: '', notionPageId: '' };
 }
+
+/* ── 所属バッジ ──
+   人物カードに所属（Notion のマルチセレクト）をバッジで出し、押すと同じ所属の人を強調する。
+   強調中の所属は affHL に入れ、applyHL() が人物を選んでいないときに使う。 */
+let affHL = null;
+
+/** 所属バッジの HTML。カード自体がボタンのことがあるので、ボタンを入れ子にしないよう span にする */
+function affBadgesHtml(affiliations, max = Infinity) {
+  return (affiliations || []).slice(0, max).map(a =>
+    `<span class="tag aff-badge${affHL === a ? ' active' : ''}" role="button" tabindex="0" data-aff="${esc(a)}" data-color="${esc(tagColor(a, 'affiliations'))}" title="同じ所属（${esc(a)}）の人を強調">${esc(a)}</span>`
+  ).join('');
+}
+
+/** 所属の強調を切り替える（同じバッジをもう一度押すと解除） */
+function toggleAffHL(aff) {
+  affHL = affHL === aff ? null : aff;
+  selId = null; hovId = null;
+  applyHL(null, null);
+}
+
+// バッジはカード（グラフのノード・パネルの人物ボタン）の中にあるので、カードのクリックより先にキャプチャで拾って止める
+function onAffBadge(e) {
+  const badge = e.target.closest?.('.aff-badge');
+  if (!badge) return;
+  if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault(); e.stopPropagation();
+  toggleAffHL(badge.dataset.aff);
+}
+document.addEventListener('click', onAffBadge, true);
+document.addEventListener('keydown', onAffBadge, true);
 
 /** 検索語（小文字）がノードの名前か別名に含まれるか。別名は表示には使わず検索だけに使う */
 function nodeMatchesQuery(n, q) {
@@ -209,7 +240,7 @@ function buildGraph(rows) {
     relNames(row, 'Director / Creator').forEach(d => {
       const did = `d_${d}`;
       const meta = getCreatorMeta(d);
-      ensure(did, 'director', d, { role: meta.role, sns: meta.sns, aliases: meta.aliases || [], avatar: meta.avatar, avatarType: meta.avatarType, notionPageId: meta.notionPageId || '' });
+      ensure(did, 'director', d, { role: meta.role, sns: meta.sns, aliases: meta.aliases || [], affiliations: meta.affiliations || [], avatar: meta.avatar, avatarType: meta.avatarType, notionPageId: meta.notionPageId || '' });
       nm.get(did).works.push(wid);
       links.push({ source: did, target: wid, ltype: 'dir' });
     });
@@ -223,7 +254,7 @@ function buildGraph(rows) {
       const artistRow = artistRows.get(a);
       // artistPageId: Artist DB のページ ID。notionPageId にするとクリエイター向けの編集（名前・役割・SNS）の対象になってしまうので別名にする
       ensure(aid, 'artist', a, {
-        role: meta.role, sns: meta.sns, ytWorkUrl: artYtUrl,
+        role: meta.role, sns: meta.sns, affiliations: meta.affiliations || [], ytWorkUrl: artYtUrl,
         avatar: existingNode?.avatar || artistRow?.Avatar || '', avatarType: artistRow?.AvatarType || '',
         artistPageId: artistRow?.notionPageId || '',
       });

@@ -70,7 +70,7 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   svg.call(_zoomBehavior);
   svg.on('click', e => {
     if (e.target.tagName === 'svg' || e.target.tagName === 'SVG') {
-      selId = null; hovId = null; applyHL(null, null);
+      selId = null; hovId = null; affHL = null; applyHL(null, null);
       document.getElementById('info-panel').classList.remove('visible');
       document.getElementById('info-overlay').classList.remove('visible');
     }
@@ -650,6 +650,8 @@ function _renderNodeContent(grp, d) {
     const textDiv = card.append('xhtml:div').attr('class', 'pnode-text');
     textDiv.append('xhtml:div').attr('class', 'pnode-name').text(d.label);
     if (isDir) textDiv.append('xhtml:div').attr('class', 'pnode-role').text(d.role || 'Creator');
+    // 所属バッジ（カードが広がりすぎないよう2つまで）。押すと同じ所属の人を強調する
+    if ((d.affiliations || []).length) textDiv.append('xhtml:div').attr('class', 'pnode-affs').html(affBadgesHtml(d.affiliations, 2));
   }
 }
 

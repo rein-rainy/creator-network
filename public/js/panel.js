@@ -187,6 +187,7 @@ function showPanel(d) {
               <span class="person-card-text">
                 <span class="person-card-name">${esc(person.label)}</span>
                 <span class="person-card-role">${esc(person.role || 'Creator')}</span>
+                ${(person.affiliations || []).length ? `<span class="person-card-affs">${affBadgesHtml(person.affiliations)}</span>` : ''}
               </span>
             </button>
             <button class="card-corner-btn close-btn close-btn-xs danger remove-creator-btn" data-person-id="${esc(person.id)}" data-person-name="${esc(person.label)}" title="${esc(person.label)}を削除">${icon('x', 10)}</button>
@@ -227,6 +228,14 @@ function showPanel(d) {
         ${icon('pencil', 14)}
       </button>
     </div>`;
+
+    // 所属行（Notion で編集する。押すと同じ所属の人を強調）
+    if ((d.affiliations || []).length) {
+      html += `<div class="cmeta-row">
+        <span class="cmeta-label">所属</span>
+        <span class="cmeta-chips">${affBadgesHtml(d.affiliations)}</span>
+      </div>`;
+    }
 
     // SNS行
     html += `<div id="${esc(metaId)}_sns_view">
@@ -270,6 +279,7 @@ function showPanel(d) {
     });
   }
   document.getElementById('pc2').innerHTML = html;
+  refreshAffMarks();
   document.getElementById('info-panel').classList.add('visible');
   if (d.type === 'work') renderDirSuggestSection(d);
 

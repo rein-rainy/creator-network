@@ -65,8 +65,37 @@ function hlSet(nodeId) {
   return { ns, ls };
 }
 
+/** 所属が aff の人物（表示中）と、その人たちの作品・線 */
+function affHlSet(aff) {
+  const vids = visibleNodeIds();
+  const people = new Set(AN.filter(n => n.type !== 'work' && vids.has(n.id) && (n.affiliations || []).includes(aff)).map(n => n.id));
+  const ns = new Set(people), ls = new Set();
+  AL.forEach(l => {
+    const s = lid(l.source), t = lid(l.target);
+    if (!vids.has(s) || !vids.has(t)) return;
+    if (people.has(s) || people.has(t)) { ns.add(s); ns.add(t); ls.add(l); }
+  });
+  return { ns, ls, people };
+}
+
+/** パネルの人物カードとバッジに、所属の強調を反映する */
+function refreshAffMarks() {
+  document.querySelectorAll('.aff-badge').forEach(el => el.classList.toggle('active', !!affHL && el.dataset.aff === affHL));
+  document.querySelectorAll('.work-person-wrap').forEach(el => {
+    const match = !!affHL && (AN.find(n => n.id === el.dataset.personId)?.affiliations || []).includes(affHL);
+    el.classList.toggle('aff-match', match);
+    el.classList.toggle('aff-dim', !!affHL && !match);
+  });
+}
+
 function applyHL(activeId, mode) {
-  const hl = activeId ? hlSet(activeId) : null;
+  // 人物・作品をクリックで選んだら所属の強調はやめる。ホバー中は一時的に上書きし、離れたら所属の強調に戻る
+  if (activeId && mode === 'click') affHL = null;
+  const aff = !activeId && affHL ? affHlSet(affHL) : null;
+  const hl = activeId ? hlSet(activeId) : aff;
+  if (aff) mode = 'click';
+  refreshAffMarks();
+  document.querySelectorAll('.pnode-card').forEach(el => el.classList.toggle('aff-hl', !!aff && aff.people.has(el.dataset.id)));
 
   if (gDimRect) gDimRect.attr('fill-opacity', !hl ? 0 : mode === 'click' ? .88 : .75);
 
