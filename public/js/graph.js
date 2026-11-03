@@ -19,9 +19,10 @@ function settleSimForces() {
 }
 
 /* ─── 所属のハブ ──────────────────────────────────────────────────────────────
-   同じ所属の人を近くに置くため、所属ごとに見えない「プロダクションのカード」をシミュにだけ入れ、
-   所属している人を全員そこへ線（これも見えない）でつなぐ。ハブは描画せず、配置の保存もしない。
-   人物カードと同じ大きさで反発・衝突するので、ハブの周りに所属の人が輪になって集まる。
+   検索・タグで絞り込んで並べ直すときだけ、同じ所属の人を近くに置く。
+   所属ごとに見えない「プロダクションのカード」をシミュにだけ入れ、所属している人を全員そこへ線（これも見えない）でつなぐ。
+   ハブは描画せず、配置の保存もしない。人物カードと同じ大きさで反発・衝突するので、ハブの周りに所属の人が輪になって集まる。
+   通常の配置（絞り込みなし）では使わない。
 ─────────────────────────────────────────────────────────────────────────────── */
 const AFF_LINK = { strong: 0.3, settled: 0.03 };
 const _affHubs = new Map(); // 所属名 → ハブ（作り直しても同じオブジェクトを使う）
@@ -52,17 +53,6 @@ function _affHubsFor(nodes) {
   return { hubs, links };
 }
 
-/** 保存した配置のときから所属が変わった（増えた）人。配置済みでも所属のハブへ寄せ直す */
-function _newAffMembers(nodes, affLinks) {
-  if (_preSqSnapshot) return new Set();
-  const { affs: saved } = _readLayout();
-  const moved = new Set();
-  affLinks.forEach(l => {
-    const n = l.target;
-    if (n.x != null && (!saved || !saved.has(`${l.source.label}|${_layoutKey(n)}`))) moved.add(n);
-  });
-  return moved;
-}
 
 /* キャンバスの表示サイズ（トップバーやスマホの下のナビを除いた領域）。配置の中心はここの中央 */
 function canvasSize() {
@@ -197,8 +187,6 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   const hasPlaced = nodes.some(n => n.x != null);
   // 配置済みのノード同士に新しいつながりができていれば、片方を引き寄せる対象にする
   const pulled = !freeLayout && hasPlaced ? _pullForNewLinks(links) : new Set();
-  // 所属が付いた（変わった）人も、所属のハブへ寄せ直す
-  if (!freeLayout && hasPlaced) _newAffMembers(nodes, _affHubsFor(nodes).links).forEach(n => pulled.add(n));
   // 配置済みのノードがあれば、位置のないもの（新しく増えたもの）だけを差分で配置する。
   // freeLayout（検索時など）は固定せず、シミュに自由に動かせる。
   const hasNew = !freeLayout && hasPlaced && _prepareNewNodes(nodes, links, pulled);
@@ -207,8 +195,8 @@ function draw(nodes, links, { freeLayout = false } = {}) {
   // 通常の draw（初回・更新どちらも）も同様にリセットして、更新時に広がらないようにする。
   baseLinkStrength = 0.5;
 
-  // ハブは配置済みの人の位置が決まってから重心に置く
-  const aff = _affHubsFor(nodes);
+  // 所属のハブは絞り込み中（freeLayout）だけ入れる
+  const aff = freeLayout ? _affHubsFor(nodes) : { hubs: [], links: [] };
 
   if (sim) sim.stop();
   sim = d3.forceSimulation([...nodes, ...aff.hubs])
@@ -426,8 +414,8 @@ function _linkKey(l, byId) {
 function _readLayout() {
   try {
     const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) || '{}');
-    return { pos: saved.pos || {}, links: saved.links ? new Set(saved.links) : null, affs: saved.affs ? new Set(saved.affs) : null };
-  } catch (e) { return { pos: {}, links: null, affs: null }; }
+    return { pos: saved.pos || {}, links: saved.links ? new Set(saved.links) : null };
+  } catch (e) { return { pos: {}, links: null }; }
 }
 
 function loadSavedLayout() {
@@ -452,9 +440,7 @@ function saveLayout() {
     // つながりも保存し、次に配置済みのノード同士に新しいつながりができたかを判定する
     const byId = new Map(AN.map(n => [n.id, n]));
     const links = AL.map(l => _linkKey(l, byId)).filter(Boolean);
-    // 所属も保存し、次に所属が付いた（変わった）人を判定する
-    const affs = AN.flatMap(n => n.type === 'work' ? [] : (n.affiliations || []).map(a => `${a}|${_layoutKey(n)}`));
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ pos, links, affs }));
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ pos, links }));
   } catch (e) { /* 保存できなくても表示には影響しない */ }
 }
 
@@ -607,10 +593,9 @@ function redraw(nodes, links) {
   _fitNodeCards(_nSel);
 
   // 新しく加わったノード（監督の追加など）と、新しいつながりで引き寄せるノードは差分配置する
-  const pulled = _pullForNewLinks(links);
-  _newAffMembers(nodes, _affHubsFor(nodes).links).forEach(n => pulled.add(n));
-  const hasNew = _prepareNewNodes(nodes, links, pulled);
-  const aff = _affHubsFor(nodes);
+  const hasNew = _prepareNewNodes(nodes, links, _pullForNewLinks(links));
+  // 所属のハブは絞り込み中だけ入れる（絞り込みを解除したときの redraw ではハブを外す）
+  const aff = _preSqSnapshot ? _affHubsFor(nodes) : { hubs: [], links: [] };
 
   // シミュのデータを差し替え（新規ノードがなければ alpha は触らない → 動かない）
   sim.stop();

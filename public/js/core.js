@@ -179,7 +179,7 @@ let affHL = null;
 /** 所属バッジの HTML。カード自体がボタンのことがあるので、ボタンを入れ子にしないよう span にする */
 function affBadgesHtml(affiliations, max = Infinity) {
   return (affiliations || []).slice(0, max).map(a =>
-    `<span class="tag aff-badge${affHL === a ? ' active' : ''}" role="button" tabindex="0" data-aff="${esc(a)}" data-color="${esc(tagColor(a, 'affiliations'))}" title="同じ所属（${esc(a)}）の人を強調">${esc(a)}</span>`
+    `<span class="tag aff-badge" role="button" tabindex="0" data-aff="${esc(a)}" data-color="${esc(tagColor(a, 'affiliations'))}" title="同じ所属（${esc(a)}）の人を強調">${esc(a)}</span>`
   ).join('');
 }
 

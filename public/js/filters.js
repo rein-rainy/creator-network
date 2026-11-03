@@ -78,12 +78,10 @@ function affHlSet(aff) {
   return { ns, ls, people };
 }
 
-/** パネルの人物カードとバッジに、所属の強調を反映する */
+/** パネルの人物カードに、所属の強調を反映する（同じ所属でない人を薄くする） */
 function refreshAffMarks() {
-  document.querySelectorAll('.aff-badge').forEach(el => el.classList.toggle('active', !!affHL && el.dataset.aff === affHL));
   document.querySelectorAll('.work-person-wrap').forEach(el => {
     const match = !!affHL && (AN.find(n => n.id === el.dataset.personId)?.affiliations || []).includes(affHL);
-    el.classList.toggle('aff-match', match);
     el.classList.toggle('aff-dim', !!affHL && !match);
   });
 }
@@ -95,7 +93,6 @@ function applyHL(activeId, mode) {
   const hl = activeId ? hlSet(activeId) : aff;
   if (aff) mode = 'click';
   refreshAffMarks();
-  document.querySelectorAll('.pnode-card').forEach(el => el.classList.toggle('aff-hl', !!aff && aff.people.has(el.dataset.id)));
 
   if (gDimRect) gDimRect.attr('fill-opacity', !hl ? 0 : mode === 'click' ? .88 : .75);
 
