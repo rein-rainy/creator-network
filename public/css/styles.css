@@ -745,15 +745,16 @@ g.nd { transition: opacity .18s; }
 .aff-badge.active { box-shadow: 0 0 0 1.5px var(--ink); }
 .aff-badge:focus-visible { outline: 2px solid var(--node-dir); outline-offset: 1px; }
 /* グラフのカードは pointer-events: none なので、バッジだけ押せるようにする */
-/* 役職と所属バッジを1行に並べる。役職が長いときは役職のほうを省略する */
-.pnode-role-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.pnode-role-row .pnode-role { min-width: 0; }
+/* 名前と所属バッジを1行に並べる。名前が長いときは名前のほうを省略する */
+.pnode-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 2px; }
+.pnode-name-row .pnode-name { min-width: 0; margin-bottom: 0; }
 .pnode-affs { display: flex; gap: 3px; flex-shrink: 0; pointer-events: auto; }
 .pnode-affs .aff-badge { height: auto; font-size: 9px; line-height: 1.2; letter-spacing: 0; padding: 2px 5px; border-radius: calc(var(--radius-2lg) - 8px); }
 .pnode-card.aff-hl { outline: 2px solid var(--ink); outline-offset: 2px; }
-.person-card-role-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.person-card-role-row .person-card-role { min-width: 0; }
-.person-card-affs { display: flex; gap: 3px; flex-shrink: 0; }
+.person-card-name-row { display: flex; align-items: center; gap: 6px; min-width: 0; }
+/* カードの幅（最大 240px）が足りないときは名前を優先し、はみ出したバッジを隠す */
+.person-card-name-row .person-card-name { flex-shrink: 0; max-width: 100%; }
+.person-card-affs { display: flex; gap: 3px; min-width: 0; overflow: hidden; }
 .person-card-affs .aff-badge { height: 18px; padding: 0 5px; }
 .work-person-wrap { transition: opacity .2s ease; }
 .work-person-wrap.aff-dim { opacity: .35; }

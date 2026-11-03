@@ -708,14 +708,11 @@ function _renderNodeContent(grp, d) {
       avatarDiv.append('xhtml:span').attr('class', 'pnode-initial').text(initial);
     }
     const textDiv = card.append('xhtml:div').attr('class', 'pnode-text');
-    textDiv.append('xhtml:div').attr('class', 'pnode-name').text(d.label);
-    // 役職の横に所属バッジ（カードが広がりすぎないよう2つまで）。押すと同じ所属の人を強調する
-    const hasAff = (d.affiliations || []).length > 0;
-    if (isDir || hasAff) {
-      const roleRow = textDiv.append('xhtml:div').attr('class', 'pnode-role-row');
-      if (isDir) roleRow.append('xhtml:span').attr('class', 'pnode-role').text(d.role || 'Creator');
-      if (hasAff) roleRow.append('xhtml:span').attr('class', 'pnode-affs').html(affBadgesHtml(d.affiliations, 2));
-    }
+    // 名前の横に所属バッジ（カードが広がりすぎないよう2つまで）。押すと同じ所属の人を強調する
+    const nameRow = textDiv.append('xhtml:div').attr('class', 'pnode-name-row');
+    nameRow.append('xhtml:span').attr('class', 'pnode-name').text(d.label);
+    if ((d.affiliations || []).length) nameRow.append('xhtml:span').attr('class', 'pnode-affs').html(affBadgesHtml(d.affiliations, 2));
+    if (isDir) textDiv.append('xhtml:div').attr('class', 'pnode-role').text(d.role || 'Creator');
   }
 }
 

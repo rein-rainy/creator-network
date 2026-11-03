@@ -185,11 +185,11 @@ function showPanel(d) {
             <button class="person-card work-person-btn" data-person-id="${esc(person.id)}">
               <span class="avatar avatar-md">${initial}${img}</span>
               <span class="person-card-text">
-                <span class="person-card-name">${esc(person.label)}</span>
-                <span class="person-card-role-row">
-                  <span class="person-card-role">${esc(person.role || 'Creator')}</span>
+                <span class="person-card-name-row">
+                  <span class="person-card-name">${esc(person.label)}</span>
                   ${(person.affiliations || []).length ? `<span class="person-card-affs">${affBadgesHtml(person.affiliations)}</span>` : ''}
                 </span>
+                <span class="person-card-role">${esc(person.role || 'Creator')}</span>
               </span>
             </button>
             <button class="card-corner-btn close-btn close-btn-xs danger remove-creator-btn" data-person-id="${esc(person.id)}" data-person-name="${esc(person.label)}" title="${esc(person.label)}を削除">${icon('x', 10)}</button>
