@@ -42,8 +42,10 @@ function servePublicFile(req, res, publicDir) {
  * Returns true if the request matched (and a response was sent).
  */
 function serveIndex(req, res, publicDir) {
+  // クエリ付き（共有メニューからの /?url=... など）でも index.html を返す
+  const pathname = req.url.split('?')[0];
   const isIndexRequest = (req.method === 'GET' || req.method === 'HEAD')
-    && (req.url === '/' || req.url === '/index.html');
+    && (pathname === '/' || pathname === '/index.html');
   if (!isIndexRequest) return false;
 
   const htmlFile = path.join(publicDir, 'index.html');

@@ -17,8 +17,8 @@
 <meta name="apple-mobile-web-app-title" content="Creator Net">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <link rel="stylesheet" href="/css/boardui-theme.css?v=2">
-<link rel="stylesheet" href="/css/styles.css?v=88">
-<link rel="stylesheet" href="/css/mobile.css?v=6">
+<link rel="stylesheet" href="/css/styles.css?v=89">
+<link rel="stylesheet" href="/css/mobile.css?v=8">
 </head>
 <body>
 
@@ -66,6 +66,9 @@
     </button>
   </div>
   <div class="topbar-right">
+    <button type="button" class="btn btn-secondary tb-btn" id="add-work-btn" title="URL から作品を追加">
+      <span data-icon="plus" data-size="16"></span>
+    </button>
     <button type="button" class="btn btn-secondary tb-btn" id="dir-suggest-btn" title="IMDbで監督が見つかった未登録の作品" style="display:none">
       <span data-icon="video" data-size="16"></span><span class="tb-count" id="dir-suggest-count"></span>
     </button>
@@ -199,6 +202,7 @@
     <button type="button" class="mb-item" data-target="depth-tog" aria-label="2次展開" aria-pressed="false"><span data-icon="circle-nodes" data-size="20"></span></button>
   </div>
   <div class="mb-group" role="group" aria-label="機能">
+    <button type="button" class="mb-item" data-target="add-work-btn" data-edit-only aria-label="作品を追加" hidden><span data-icon="plus" data-size="20"></span></button>
     <button type="button" class="mb-item" data-target="recent-btn" aria-label="最新作品"><span data-icon="calendar" data-size="20"></span></button>
     <button type="button" class="mb-item" data-target="path-btn" aria-label="作品のつながり"><span data-icon="route" data-size="20"></span></button>
     <button type="button" class="mb-item" data-target="dir-suggest-btn" aria-label="監督候補" hidden><span data-icon="video" data-size="20"></span><span class="tb-count"></span></button>
@@ -251,10 +255,11 @@
 <script src="/js/tag-filter.js?v=8"></script>
 <script src="/js/avatars.js?v=8"></script>
 <script src="/js/director-suggest.js?v=6"></script>
-<script src="/js/recent-works.js?v=26"></script>
+<script src="/js/recent-works.js?v=27"></script>
 <script src="/js/path-finder.js?v=10"></script>
+<script src="/js/add-work.js?v=1"></script>
 <script src="/js/main.js?v=26"></script>
-<script src="/js/mobile.js?v=2"></script>
+<script src="/js/mobile.js?v=3"></script>
 <!-- ── Role Picker Popover ── -->
 <div id="role-picker-popover" class="picker-popover">
   <div class="picker-popover-header">

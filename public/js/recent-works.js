@@ -402,6 +402,88 @@ function _raiseInfoPanel(cls = 'above-gallery') {
   document.getElementById('info-overlay').classList.add(cls);
 }
 
+/**
+ * 作品を Notion に保存するフォームの中身（カテゴリ・クリエイター・アーティスト）。
+ * 最新作品のパネルと「作品を追加」で共通。creators / artists は直接書き換える。選んだカテゴリは selected（Set）
+ */
+function mountWorkSaveForm({ tagsEl, creatorsEl, artistsEl, tags = [], creators, artists }) {
+  // クリエイター
+  _editablePeople(creatorsEl, creators, {
+    addLabel: 'クリエイターを追加',
+    onAdd: anchor => {
+      const chosen = new Set(creators.map(p => p.notionPageId));
+      showPersonPicker(anchor, {
+        people: ALL_CREATORS.filter(c => !chosen.has(c.notionPageId)),
+        onPick: c => {
+          creators.push({ name: c.Name, notionPageId: c.notionPageId, avatar: c.Avatar || '', role: c.Role || '' });
+          _editablePeople.render(creatorsEl);
+        },
+      });
+    },
+  });
+
+  // アーティスト（既存から選ぶか、名前を入れて新規作成）
+  _editablePeople(artistsEl, artists, {
+    avatarClass: ' art',
+    addLabel: 'アーティストを追加',
+    onAdd: anchor => {
+      const chosen = new Set(artists.map(p => p.notionPageId));
+      showPersonPicker(anchor, {
+        people: ALL_ARTISTS.filter(a => !chosen.has(a.notionPageId)),
+        avatarClass: ' art',
+        onPick: artist => {
+          artists.push(_artistPerson(artist));
+          _editablePeople.render(artistsEl);
+        },
+        onCreate: async name => {
+          try {
+            const res = await _recentPost('/notion-create-artist', { name });
+            let artist = ALL_ARTISTS.find(a => a.notionPageId === res.artistPageId);
+            if (!artist) {
+              artist = { Name: name, Role: '', SNS: '', Avatar: '', notionPageId: res.artistPageId };
+              ALL_ARTISTS.push(artist);
+            }
+            if (!artists.some(p => p.notionPageId === artist.notionPageId)) artists.push(_artistPerson(artist));
+            if (artistsEl.isConnected) _editablePeople.render(artistsEl);
+            showToast(res.alreadyExists ? `既存のアーティスト「${name}」を使います` : `アーティスト「${name}」を作成しました`);
+          } catch (e) {
+            showToast(`✗ アーティストを作成できませんでした: ${e.message}`, 'err', 6000);
+          }
+        },
+      });
+    },
+  });
+
+  // カテゴリ（選んだタグ＋追加ボタン。追加はドロップダウンから）
+  const selected = new Set(tags);
+  let categoryOptions = [];
+  const renderTags = () => {
+    tagsEl.innerHTML = [...selected].map(name => `
+      <span class="tag" data-color="${esc(tagColor(name))}">${esc(name)}<button class="tag-remove" data-name="${esc(name)}" title="${esc(name)}を外す">${icon('x', 12)}</button></span>`).join('')
+      + `<button class="prop-add" title="カテゴリを追加">${icon('plus', 14)}</button>`;
+    tagsEl.querySelectorAll('.tag-remove').forEach(btn => btn.addEventListener('click', () => {
+      selected.delete(btn.dataset.name);
+      renderTags();
+    }));
+    const addBtn = tagsEl.querySelector('.prop-add');
+    addBtn.addEventListener('click', () => showPicker(addBtn, {
+      items: () => categoryOptions.filter(o => !selected.has(o.name)),
+      label: o => o.name,
+      itemHtml: o => `<span class="tag" data-color="${esc(o.color || 'default')}">${esc(o.name)}</span>`,
+      onPick: o => { selected.add(o.name); renderTags(); },
+      keepOpen: true,
+    }));
+  };
+  renderTags();
+  _loadWorkCategoryOptions().then(options => {
+    categoryOptions = options;
+    options.forEach(o => { TAG_COLORS.categories[o.name] = o.color; });
+    if (tagsEl.isConnected) renderTags();
+  }).catch(e => showToast(`✗ カテゴリを読み込めませんでした: ${e.message}`, 'err', 6000));
+
+  return { selected };
+}
+
 /** opts.aboveFilmography — IMDb のフィルモグラフィー画面から開くときはその上に出す */
 function openRecentWorkPanel(entry, opts = {}) {
   _raiseInfoPanel(opts.aboveFilmography ? 'above-filmography' : 'above-gallery');
@@ -451,55 +533,6 @@ function openRecentWorkPanel(entry, opts = {}) {
   document.getElementById('pc2').scrollTop = 0;
   document.getElementById('info-overlay').classList.add('visible');
 
-  // クリエイター
-  const creatorsEl = document.getElementById('rw-creators');
-  _editablePeople(creatorsEl, creators, {
-    addLabel: 'クリエイターを追加',
-    onAdd: anchor => {
-      const chosen = new Set(creators.map(p => p.notionPageId));
-      showPersonPicker(anchor, {
-        people: ALL_CREATORS.filter(c => !chosen.has(c.notionPageId)),
-        onPick: c => {
-          creators.push({ name: c.Name, notionPageId: c.notionPageId, avatar: c.Avatar || '', role: c.Role || '' });
-          _editablePeople.render(creatorsEl);
-        },
-      });
-    },
-  });
-
-  // アーティスト（既存から選ぶか、名前を入れて新規作成）
-  const artistsEl = document.getElementById('rw-artists');
-  _editablePeople(artistsEl, artists, {
-    avatarClass: ' art',
-    addLabel: 'アーティストを追加',
-    onAdd: anchor => {
-      const chosen = new Set(artists.map(p => p.notionPageId));
-      showPersonPicker(anchor, {
-        people: ALL_ARTISTS.filter(a => !chosen.has(a.notionPageId)),
-        avatarClass: ' art',
-        onPick: artist => {
-          artists.push(_artistPerson(artist));
-          _editablePeople.render(artistsEl);
-        },
-        onCreate: async name => {
-          try {
-            const res = await _recentPost('/notion-create-artist', { name });
-            let artist = ALL_ARTISTS.find(a => a.notionPageId === res.artistPageId);
-            if (!artist) {
-              artist = { Name: name, Role: '', SNS: '', Avatar: '', notionPageId: res.artistPageId };
-              ALL_ARTISTS.push(artist);
-            }
-            if (!artists.some(p => p.notionPageId === artist.notionPageId)) artists.push(_artistPerson(artist));
-            if (artistsEl.isConnected) _editablePeople.render(artistsEl);
-            showToast(res.alreadyExists ? `既存のアーティスト「${name}」を使います` : `アーティスト「${name}」を作成しました`);
-          } catch (e) {
-            showToast(`✗ アーティストを作成できませんでした: ${e.message}`, 'err', 6000);
-          }
-        },
-      });
-    },
-  });
-
   // プレイヤー（ページ内で再生）
   const playerEl = document.getElementById('rw-player');
   _recentYoutube(entry).then(yt => {
@@ -516,33 +549,12 @@ function openRecentWorkPanel(entry, opts = {}) {
   if (entry.tt) _imdbTtCache.set(entry.title, entry.tt);
   fetchImdbInfo(panelId, entry.title, null);
 
-  // カテゴリ（選んだタグ＋追加ボタン。追加はドロップダウンから）
-  const selected = new Set(entry.defaultTags || RECENT_DEFAULT_TAGS);
-  const tagsEl = document.getElementById('rw-save-tags');
-  let categoryOptions = [];
-  const renderTags = () => {
-    tagsEl.innerHTML = [...selected].map(name => `
-      <span class="tag" data-color="${esc(tagColor(name))}">${esc(name)}<button class="tag-remove" data-name="${esc(name)}" title="${esc(name)}を外す">${icon('x', 12)}</button></span>`).join('')
-      + `<button class="prop-add" title="カテゴリを追加">${icon('plus', 14)}</button>`;
-    tagsEl.querySelectorAll('.tag-remove').forEach(btn => btn.addEventListener('click', () => {
-      selected.delete(btn.dataset.name);
-      renderTags();
-    }));
-    const addBtn = tagsEl.querySelector('.prop-add');
-    addBtn.addEventListener('click', () => showPicker(addBtn, {
-      items: () => categoryOptions.filter(o => !selected.has(o.name)),
-      label: o => o.name,
-      itemHtml: o => `<span class="tag" data-color="${esc(o.color || 'default')}">${esc(o.name)}</span>`,
-      onPick: o => { selected.add(o.name); renderTags(); },
-      keepOpen: true,
-    }));
-  };
-  renderTags();
-  _loadWorkCategoryOptions().then(options => {
-    categoryOptions = options;
-    options.forEach(o => { TAG_COLORS.categories[o.name] = o.color; });
-    if (tagsEl.isConnected) renderTags();
-  }).catch(e => showToast(`✗ カテゴリを読み込めませんでした: ${e.message}`, 'err', 6000));
+  const { selected } = mountWorkSaveForm({
+    tagsEl: document.getElementById('rw-save-tags'),
+    creatorsEl: document.getElementById('rw-creators'),
+    artistsEl: document.getElementById('rw-artists'),
+    tags: entry.defaultTags || RECENT_DEFAULT_TAGS, creators, artists,
+  });
 
   const saveBtn = document.getElementById('rw-save-btn');
   saveBtn.addEventListener('click', async () => {
@@ -561,28 +573,20 @@ function openRecentWorkPanel(entry, opts = {}) {
   });
 }
 
-/** Notion に作品を作り、グラフのデータにも同じ形で加える */
-async function _saveRecentWork(entry, categories, creators, artists) {
-  const yt = await _recentYoutube(entry).catch(() => null);
-  const vid = ytid(yt?.url);
+/**
+ * Notion に作った作品を、グラフのデータ（AN / AL）にも同じ形で加える。描き直しは呼ぶ側で行う。
+ * 返り値：{ workNode, isNew }（すでにグラフにあった作品なら isNew は false）
+ */
+function addSavedWorkToGraph(workPageId, { title, url = '', categories = [], creators = [], artists = [] }) {
   const creatorPageIds = creators.map(p => p.notionPageId).filter(Boolean);
-  const res = await _recentPost('/notion-create-work', {
-    title: yt?.title || entry.title,
-    url: yt?.url || '',
-    coverUrl: vid ? `https://i.ytimg.com/vi/${vid}/hqdefault.jpg` : '',
-    categories,
-    creatorPageIds,
-    artistPageIds: artists.map(a => a.notionPageId),
-  });
-  if (res.alreadyExists) showToast('Notion の既存の作品を使います');
-
-  const wid = `w_${res.workPageId.replace(/-/g, '')}`;
+  const pageId = workPageId.replace(/-/g, '');
+  const wid = `w_${pageId}`;
   let workNode = AN.find(n => n.id === wid);
-  if (!workNode) {
-    const url = yt?.url || '';
+  const isNew = !workNode;
+  if (isNew) {
     workNode = {
-      id: wid, type: 'work', label: yt?.title || entry.title, url, th: thumbUrl(url), cats: categories,
-      notionPageId: res.workPageId.replace(/-/g, ''), works: [], _creatorRelIds: creatorPageIds,
+      id: wid, type: 'work', label: title, url, th: thumbUrl(url), cats: categories,
+      notionPageId: pageId, works: [], _creatorRelIds: creatorPageIds,
     };
     AN.push(workNode);
     creators.forEach(p => {
@@ -607,8 +611,29 @@ async function _saveRecentWork(entry, categories, creators, artists) {
       node.works.push(wid);
       AL.push({ source: aid, target: wid, ltype: 'art' });
     });
-    _recentGraphDirty = true;
   }
+  return { workNode, isNew };
+}
+
+/** Notion に作品を作り、グラフのデータにも同じ形で加える */
+async function _saveRecentWork(entry, categories, creators, artists) {
+  const yt = await _recentYoutube(entry).catch(() => null);
+  const vid = ytid(yt?.url);
+  const creatorPageIds = creators.map(p => p.notionPageId).filter(Boolean);
+  const res = await _recentPost('/notion-create-work', {
+    title: yt?.title || entry.title,
+    url: yt?.url || '',
+    coverUrl: vid ? `https://i.ytimg.com/vi/${vid}/hqdefault.jpg` : '',
+    categories,
+    creatorPageIds,
+    artistPageIds: artists.map(a => a.notionPageId),
+  });
+  if (res.alreadyExists) showToast('Notion の既存の作品を使います');
+
+  const { workNode, isNew } = addSavedWorkToGraph(res.workPageId, {
+    title: yt?.title || entry.title, url: yt?.url || '', categories, creators, artists,
+  });
+  if (isNew) _recentGraphDirty = true;
 
   entry.workNode = workNode;
   entry.registered = true;

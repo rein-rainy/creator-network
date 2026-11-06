@@ -35,7 +35,8 @@ const isMobileLayout = () => MOBILE_MQ.matches;
         || (item.dataset.target === 'dir-suggest-btn' && dsPanel.classList.contains('visible'));
       item.classList.toggle('open', open);
       if (target.hasAttribute('aria-pressed')) item.setAttribute('aria-pressed', target.getAttribute('aria-pressed'));
-      if (item.dataset.target === 'dir-suggest-btn') {
+      // 編集モードだけのボタン（監督候補・作品を追加）は、トップバー側が隠れていれば隠す
+      if (item.dataset.target === 'dir-suggest-btn' || item.hasAttribute('data-edit-only')) {
         item.hidden = target.style.display === 'none' || getComputedStyle(target).display === 'none';
       }
       const tc = target.querySelector('.tb-count');
@@ -46,6 +47,8 @@ const isMobileLayout = () => MOBILE_MQ.matches;
     new MutationObserver(sync).observe(target, obs);
     if (item.dataset.target === 'dir-suggest-btn') {
       new MutationObserver(sync).observe(dsPanel, { attributes: true, attributeFilter: ['class'] });
+    }
+    if (item.dataset.target === 'dir-suggest-btn' || item.hasAttribute('data-edit-only')) {
       new MutationObserver(sync).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     }
     sync();

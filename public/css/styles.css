@@ -924,6 +924,25 @@ g.nd { transition: opacity .18s; }
 .prop-row-sm .prop-value { min-height: 24px; }
 .prop-submit { height: 36px; margin-top: 24px; padding: 8px 12px; border-radius: var(--radius-2lg); }
 
+/* ── 作品を追加（URL から）。フォームの行は「Notion に保存」と共通（.prop-list） ── */
+.aw-thumb { background: #000; }
+.aw-thumb[hidden] { display: none; }
+.aw-url-row { display: flex; align-items: center; gap: 8px; }
+/* BoardUI Input (medium: 36px)。横の「貼り付け」（Button medium）と高さをそろえる */
+#aw-url { height: 36px; border-radius: var(--radius-2lg); }
+.aw-status {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 10px;
+  font: 400 var(--text-body-2) var(--sans); color: var(--ink-2);
+}
+.aw-status:empty { display: none; }
+.aw-status .spinner { width: 14px; height: 14px; }
+.aw-status.err { color: var(--color-text-error-primary); }
+.aw-status.warn { color: var(--ink); }
+#aw-form[hidden] { display: none; }
+#aw-title { width: 100%; }
+.aw-note { margin-top: 14px; font: 400 var(--text-caption-1) var(--sans); letter-spacing: var(--tracking-caption-1); color: var(--ink-2); }
+.aw-note:empty { display: none; }
+
 /* サムネイル左上のバッジ（BoardUI Badge の形） */
 .thumb-badge {
   position: absolute; top: 6px; left: 6px; z-index: 1;
@@ -1232,6 +1251,7 @@ body:not(.can-edit) .remove-creator-btn,
 body:not(.can-edit) .cmeta-edit-btn,
 body:not(.can-edit) .imdb-add-creator-btn,
 body:not(.can-edit) #dir-suggest-btn,
+body:not(.can-edit) #add-work-btn,
 body:not(.can-edit) .wc-suggest,
 body:not(.can-edit) .ds-section,
 body:not(.can-edit) #rw-save { display: none !important; }

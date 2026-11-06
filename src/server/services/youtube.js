@@ -13,18 +13,8 @@ function collaboratorChannels(author) {
   })).filter(c => c.name);
 }
 
-async function searchYoutubeVideos(titles = []) {
-  const uniqueTitles = [...new Set(titles.map(title => String(title || '').trim()).filter(Boolean))].slice(0, 100);
-  const startTime = Date.now();
-  const uncached = uniqueTitles.filter(title => !youtubeVideoCache.has(title));
-  const results = {};
-
-  uniqueTitles.forEach(title => {
-    if (youtubeVideoCache.has(title)) results[title] = youtubeVideoCache.get(title);
-  });
-
-  console.log(`[YouTube.js] 全体開始 titles=${uniqueTitles.length} (キャッシュ済み=${uniqueTitles.length - uncached.length} 未取得=${uncached.length})`);
-
+/** youtubei.js のクライアント（初回だけ作る。失敗したら次の呼び出しで作り直す） */
+async function getYoutubeClient() {
   if (!global._ytInitPromise) {
     global._ytInitPromise = (async () => {
       try {
@@ -41,9 +31,24 @@ async function searchYoutubeVideos(titles = []) {
       }
     })();
   }
-
   const yt = await global._ytInitPromise;
   if (!yt) global._ytInitPromise = null;
+  return yt;
+}
+
+async function searchYoutubeVideos(titles = []) {
+  const uniqueTitles = [...new Set(titles.map(title => String(title || '').trim()).filter(Boolean))].slice(0, 100);
+  const startTime = Date.now();
+  const uncached = uniqueTitles.filter(title => !youtubeVideoCache.has(title));
+  const results = {};
+
+  uniqueTitles.forEach(title => {
+    if (youtubeVideoCache.has(title)) results[title] = youtubeVideoCache.get(title);
+  });
+
+  console.log(`[YouTube.js] 全体開始 titles=${uniqueTitles.length} (キャッシュ済み=${uniqueTitles.length - uncached.length} 未取得=${uncached.length})`);
+
+  const yt = await getYoutubeClient();
   if (!yt) return { results, warning: 'YouTube API unavailable' };
 
   async function ytJsSearch(title) {
@@ -93,4 +98,4 @@ async function searchYoutubeVideos(titles = []) {
   return { results };
 }
 
-module.exports = { searchYoutubeVideos };
+module.exports = { searchYoutubeVideos, getYoutubeClient };
